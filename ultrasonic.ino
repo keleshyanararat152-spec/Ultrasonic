@@ -13,12 +13,16 @@ int lastButtonState = HIGH;
 
 long puls(int inp){
   
+  unsigned long startPoint = micros();
   
   while(digitalRead(inp) == LOW){
+    if((micros() - startPoint) > 1000000){
+       return -1;
+    }
   }
 
   unsigned long start = micros();
-  while((micros() - start) < 1000000){
+  while((micros() - startPoint) < 1000000){
     if( digitalRead(inp) == LOW){
      
       return micros() - start;
@@ -67,43 +71,39 @@ void loop() {
     digitalWrite(GREEN,LOW);
     digitalWrite(YELLOW,LOW);
 
+
+    // Serial.println(millis(),DEC);
+    if (distance == -1){
+      Serial.print("Device isn't found");
+    }else{
+      if(distance < 10 && distance >= 0){
+        digitalWrite(BLUE,HIGH);     
+      }else if( distance < 30){
+        digitalWrite(YELLOW,HIGH);
+    
+      }else if (distance < 400){
+        digitalWrite(GREEN,HIGH);
+      
+      }
+    if(distance < 5){
+        digitalWrite(BUZZER, HIGH); 
+        delay(10);               
+        digitalWrite(BUZZER, LOW);  
+        delay(10);
+    }
+    else if(distance < 10){
+        digitalWrite(BUZZER, HIGH); 
+        delay(25);               
+        digitalWrite(BUZZER, LOW);  
+        delay(25);
+    }
     Serial.print("time ");
     Serial.println(distance,DEC);
     Serial.print("distance is ");
     Serial.print(distance,DEC);
     Serial.println("cm");
      
-    // Serial.println(millis(),DEC);
-    if(distance < 10 && distance >= 0){
-      digitalWrite(BLUE,HIGH);
-      
-      // digitalWrite(BUZZER,HIGH);
-      
-    }else if( distance < 30){
-      digitalWrite(YELLOW,HIGH);
-      // digitalWrite(BUZZER, HIGH); 
-      // delay(150);               
-      // digitalWrite(BUZZER, LOW);  
-      // delay(150);  
-    }else if (distance < 400){
-      digitalWrite(GREEN,HIGH);
-      // digitalWrite(BUZZER, HIGH); 
-      // delay(350);               
-      // digitalWrite(BUZZER, LOW);  
-      // delay(350);  
     }
-   if(distance < 5){
-      digitalWrite(BUZZER, HIGH); 
-      delay(10);               
-      digitalWrite(BUZZER, LOW);  
-      delay(10);
-  }
-   else if(distance < 10){
-      digitalWrite(BUZZER, HIGH); 
-      delay(25);               
-      digitalWrite(BUZZER, LOW);  
-      delay(25);
-  }
   
   // else if(distance < 20){
   //     digitalWrite(BUZZER, HIGH); 
@@ -155,7 +155,6 @@ void loop() {
       delay(250);               
       digitalWrite(BUZZER, LOW);  
       delay(250);
-
   }
   }else{
     digitalWrite(SIGNAL,LOW);
