@@ -578,15 +578,15 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
           if (f === 2 || f === 3) uv.setXY(v, 0.03, 0.03);
           else uv.setXY(v, uv.getX(v) * Math.max(1, Math.round((f < 2 ? r.h : r.w) / 36)) / 4, uv.getY(v) * Math.max(1, Math.round(h / 34)) / 4);
         }
-        const m = new T.Mesh(geo, mats[r.c] || (mats[r.c] = lam(r.c, { map: winT }))); m.position.set(r.x + r.w / 2, h / 2, r.y + r.h / 2); m.castShadow = m.receiveShadow = true; scene.add(m);
-        const cx = r.x + r.w / 2, cz = r.y + r.h / 2, extra = (sx, sy, sz, mat, x, y, z) => { const e = new T.Mesh(unitG, mat); e.scale.set(sx, sy, sz); e.position.set(x, y, z); e.castShadow = e.receiveShadow = true; scene.add(e); };
+        const m = new T.Mesh(geo, mats[r.c] || (mats[r.c] = lam(r.c, { map: winT }))); m.position.set(r.x + r.w / 2, h / 2, r.y + r.h / 2); m.castShadow = m.receiveShadow = true; m.userData.rect = r; CITY.old.push(m); scene.add(m);
+        const cx = r.x + r.w / 2, cz = r.y + r.h / 2, extra = (sx, sy, sz, mat, x, y, z) => { const e = new T.Mesh(unitG, mat); e.scale.set(sx, sy, sz); e.position.set(x, y, z); e.castShadow = e.receiveShadow = true; e.userData.rect = r; CITY.old.push(e); scene.add(e); };
         extra(r.w + 3, 3.5, r.h + 3, trimM, cx, h + 0.5, cz); extra(r.w - 4, 1, r.h - 4, roofM, cx, h + 2.4, cz);       // cornice and roof deck
         extra(r.w + 1.5, 7, r.h + 1.5, trimM, cx, 3.5, cz);                                                           // plinth
         if (r.w > 80 && r.h > 80) extra(22 + r.d * 20, 12, 18, trimM, cx + (r.d - 0.5) * r.w * 0.4, h + 8, cz + (0.5 - r.d) * r.h * 0.4);   // stair head on the roof
       }
     }
     const tex = new T.CanvasTexture(gc); tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    const ground = new T.Mesh(new T.PlaneGeometry(WS, WS), lam('#c6c6c6', { map: tex })); ground.rotation.x = -Math.PI / 2; ground.position.set(WS / 2, 0, WS / 2); ground.receiveShadow = true; scene.add(ground);
+    const ground = new T.Mesh(new T.PlaneGeometry(WS, WS), lam('#c6c6c6', { map: tex })); ground.rotation.x = -Math.PI / 2; ground.position.set(WS / 2, 0, WS / 2); ground.receiveShadow = true; scene.add(ground); CITY.ground = ground;
 
     const spots = [], lamps = [], M4 = new T.Matrix4(), Q = new T.Quaternion(), V = new T.Vector3(), SC = new T.Vector3();
     for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
@@ -929,6 +929,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
   function buildClub() {
     let r = null; for (const [i, j] of [[4, 3], [3, 2], [2, 3], [3, 4], [4, 4], [2, 2], [4, 2]]) if (blocks[i][j].type === 'b') { r = blocks[i][j].rects[0]; break; }
+    club.rect = r;
     const dx = r.x + r.w / 2; club.door.x = dx; club.door.y = r.y - 10;
     const basic = (c) => new T.MeshBasicMaterial({ color: c }), put = (m, x, y, z) => { m.position.set(x, y, z); scene.add(m); return m; };
     put(new T.Mesh(new T.BoxGeometry(18, 26, 2), lam('#120d16')), dx, 13, r.y - 0.4);
@@ -937,7 +938,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const paint = () => { sx.fillStyle = '#170d1c'; sx.fillRect(0, 0, 512, 128); sx.font = '800 64px "Noto Sans Armenian", sans-serif'; sx.textAlign = 'center'; sx.textBaseline = 'middle'; sx.shadowColor = '#ff4fa3'; sx.shadowBlur = 22; sx.fillStyle = '#ffd3ea'; sx.fillText('ՆԵՈՆ ԱԿՈՒՄԲ', 256, 68); sx.fillText('ՆԵՈՆ ԱԿՈՒՄԲ', 256, 68); signT.needsUpdate = true; };
     paint(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(paint);
     const sign = put(new T.Mesh(new T.PlaneGeometry(68, 17), new T.MeshBasicMaterial({ map: signT })), dx, 40, r.y - 1.6); sign.rotation.y = Math.PI;
-    const ring = put(new T.Mesh(new T.RingGeometry(9, 12, 28), new T.MeshBasicMaterial({ color: '#ff4fa3', side: T.DoubleSide })), dx, 0.6, club.door.y); ring.rotation.x = -Math.PI / 2;
+    const ring = put(new T.Mesh(new T.RingGeometry(9, 12, 28), new T.MeshBasicMaterial({ color: '#ff4fa3', side: T.DoubleSide })), dx, 0.6, club.door.y); ring.rotation.x = -Math.PI / 2; club.ring = ring;
 
     // the room
     const wall = new T.Mesh(new T.BoxGeometry(320, 70, 240), lam('#2a1d33', { side: T.BackSide })); wall.castShadow = wall.receiveShadow = true; put(wall, CX, 35, CY);
@@ -1071,6 +1072,59 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     club.people.forEach((p) => { p.m = swap(p.m, p.role === 'guard' ? 'm03' : p.role === 'dj' ? 'm17' : p.role === 'tender' ? 'm08' : nextAvatar(p.m.userData.woman)); p.sc = 1.46; });
     for (const [k, m] of meshOf) if (m.userData.legs) { scene.remove(m); meshOf.delete(k); }
     scene.remove(playerMesh); playerMesh = playerModel(); scene.add(playerMesh); club.posed = false;
+  }
+
+  // ---------- ready-made city pieces: baked apartment facades, a tower model, and road materials (see CREDITS.md) ----------
+  // Loaded after start; until then, and if loading fails, the generated buildings and painted ground stay.
+  const CITY = { old: [], ground: null, up: false, SUN: { x: -0.6, y: 0.62, z: -0.45 } }, CURB = 2.6;
+  const groundY = (x, y) => CITY.up && x > 120 && y > 120 && x < WS && y < WS && x % CELL >= 120 && y % CELL >= 120 ? CURB : 0;   // pavements are raised
+  function loadCity() {
+    if (location.protocol === 'file:' || !T.GLTFLoader) return;
+    const names = ['facade1', 'facade2', 'roof', 'asphalt', 'paving', 'curb'], tx = {}, TL = new T.TextureLoader(); let left = names.length + 1, bad = false, tower = null;
+    const done = () => { if (!--left && !bad) upgradeCity(tx, tower); };
+    names.forEach((n) => TL.load('tex/' + n + '.jpg', (t) => { t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 8; tx[n] = t; done(); }, undefined, () => { bad = true; }));
+    fetch('models/tower.txt').then((r) => { if (!r.ok) throw new Error('tower'); return r.text(); }).then((txt) => {
+      const bin = atob(txt.trim()), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      new T.GLTFLoader().parse(buf.buffer, '', (g) => { g.scene.traverse((o) => { if (o.isMesh) tower = o; }); done(); }, () => { bad = true; });
+    }).catch(() => { bad = true; });
+  }
+  function upgradeCity(tx, tower) {
+    for (const m of CITY.old) if (m.userData.rect !== club.rect) scene.remove(m);
+    // apartment blocks: four walls each showing a window of the baked facade at true scale, merged into one mesh per facade
+    const FULL = 390, WIDE = 562, TINT = [[1, 1, 1], [1, 0.93, 0.86], [1, 0.86, 0.82], [0.9, 0.92, 0.96], [0.97, 0.9, 0.78]];
+    const walls = [{ p: [], u: [], c: [], n: [] }, { p: [], u: [], c: [], n: [] }], roofs = { p: [], u: [], c: [], n: [] }, towers = [];
+    const quad = (o, a, b, c, d, uv, col, nrm) => { for (const k of [0, 1, 2, 0, 2, 3]) { const v = [a, b, c, d][k]; o.p.push(v[0], v[1], v[2]); o.u.push(uv[k][0], uv[k][1]); o.c.push(col[0], col[1], col[2]); o.n.push(nrm[0], nrm[1], nrm[2]); } };
+    let n = 0;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) for (const r of blocks[i][j].rects) {
+      if (r === club.rect) continue; n++;
+      if (r.d > 0.84 && Math.abs(r.w - r.h) < 70) { towers.push(r); continue; }
+      const f = [1, 0.77, 0.62, 0.85][Math.floor(r.z) % 4], Hh = FULL * f, col = TINT[Math.floor(r.d * 97) % TINT.length], o = walls[n % 2];
+      const x0 = r.x, x1 = r.x + r.w, z0 = r.y, z1 = r.y + r.h, side = (ax, az, bx, bz, nrm, seed) => { const L = Math.hypot(bx - ax, bz - az), du = Math.min(1, L / WIDE), u0 = (1 - du) * ((r.d * 7 + seed * 0.37) % 1); quad(o, [ax, 0, az], [bx, 0, bz], [bx, Hh, bz], [ax, Hh, az], [[u0, 0], [u0 + du, 0], [u0 + du, f], [u0, f]], col, nrm); };
+      side(x0, z1, x1, z1, [0, 0, 1], 1); side(x1, z1, x1, z0, [1, 0, 0], 2); side(x1, z0, x0, z0, [0, 0, -1], 3); side(x0, z0, x0, z1, [-1, 0, 0], 4);
+      quad(roofs, [x0, Hh, z1], [x1, Hh, z1], [x1, Hh, z0], [x0, Hh, z0], [[0, 0], [1, 0], [1, 1], [0, 1]], col, [0, 1, 0]);
+    }
+    const mesh = (o, map) => { const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(o.p, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(o.u, 2)); g.setAttribute('color', new T.Float32BufferAttribute(o.c, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(o.n, 3)); const m = new T.Mesh(g, new T.MeshLambertMaterial({ map: map, vertexColors: true })); m.castShadow = m.receiveShadow = true; scene.add(m); };
+    mesh(walls[0], tx.facade1); mesh(walls[1], tx.facade2); mesh(roofs, tx.roof);
+    if (tower.material.map) tower.material.map.encoding = T.LinearEncoding;
+    const tw = new T.InstancedMesh(tower.geometry, new T.MeshLambertMaterial({ map: tower.material.map }), towers.length), M4 = new T.Matrix4(), Q = new T.Quaternion();
+    towers.forEach((r, k) => { M4.compose(new T.Vector3(r.x + r.w / 2, 0, r.y + r.h / 2), Q, new T.Vector3(r.w / 7.38, (620 + r.z * 12) / 20, r.h / 8.35)); tw.setMatrixAt(k, M4); }); tw.castShadow = tw.receiveShadow = true; scene.add(tw);
+
+    // streets: tiled asphalt, markings on a transparent layer, raised pavements with stone kerbs
+    tx.asphalt.repeat.set(WS / 96, WS / 96); CITY.ground.material = lam('#c9c9c9', { map: tx.asphalt });
+    const size = renderer.capabilities.maxTextureSize >= 4096 && !window.matchMedia('(pointer: coarse)').matches ? 4096 : 2048, mc = document.createElement('canvas'); mc.width = mc.height = size; const g = mc.getContext('2d'); g.scale(size / WS, size / WS);
+    g.strokeStyle = '#ecebe6'; g.lineWidth = 2.6; g.setLineDash([20, 24]); g.beginPath(); for (let k = 0; k <= N; k++) { g.moveTo(ic(k), 0); g.lineTo(ic(k), WS); g.moveTo(0, ic(k)); g.lineTo(WS, ic(k)); } g.stroke();
+    g.setLineDash([]); g.lineWidth = 2.2; g.beginPath(); for (let k = 0; k <= N; k++) for (const e of [7, 113]) { g.moveTo(k * CELL + e, 0); g.lineTo(k * CELL + e, WS); g.moveTo(0, k * CELL + e); g.lineTo(WS, k * CELL + e); } g.stroke();   // solid edge lines
+    for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) { const X = i * CELL, Y = j * CELL; g.clearRect(X - 30, Y - 30, 180, 180); g.fillStyle = '#ecebe6'; for (let s = 0; s < 6; s++) { const o = 8 + s * 19; g.fillRect(X - 24, Y + o, 18, 9); g.fillRect(X + 126, Y + o, 18, 9); g.fillRect(X + o, Y - 24, 9, 18); g.fillRect(X + o, Y + 126, 9, 18); } }
+    const mt = new T.CanvasTexture(mc); mt.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const marks = new T.Mesh(new T.PlaneGeometry(WS, WS), new T.MeshLambertMaterial({ map: mt, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })); marks.rotation.x = -Math.PI / 2; marks.position.set(WS / 2, 0.12, WS / 2); marks.receiveShadow = true; scene.add(marks);
+    tx.paving.repeat.set(7, 7); tx.curb.repeat.set(9, 0.12);
+    const slabG = new T.BoxGeometry(400, CURB, 400), kerb = lam('#d0d0d0', { map: tx.curb }), pave = lam('#cfcfcf', { map: tx.paving }), pale = lam('#e6dccb', { map: tx.paving }), lawnG = new T.PlaneGeometry(352, 352), lawn = lam(K.park);
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const b = blocks[i][j], top = b.type === 'plaza' ? pale : pave, slab = new T.Mesh(slabG, [kerb, kerb, top, top, kerb, kerb]); slab.position.set(i * CELL + 320, CURB / 2, j * CELL + 320); slab.receiveShadow = true; scene.add(slab);
+      if (b.type === 'park') { const l = new T.Mesh(lawnG, lawn); l.rotation.x = -Math.PI / 2; l.position.set(i * CELL + 320, CURB + 0.08, j * CELL + 320); l.receiveShadow = true; scene.add(l); }
+    }
+    if (club.ring) club.ring.position.y = CURB + 0.5;
+    CITY.SUN = { x: -0.36, y: 0.86, z: -0.3 }; CITY.up = true;      // tall blocks: a higher sun keeps the streets lit
   }
 
   function clubExtras() { // staff, guests, DJ booth, seats, smoke, lasers, and the rings where money is spent
@@ -1227,12 +1281,12 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const flash = Math.floor(time * 6) % 2;
     for (const c of cars) {
       let m = meshOf.get(c); if (!m) { m = carMesh(c); meshOf.set(c, m); scene.add(m); }
-      m.userData.s = stamp; m.position.set(c.x, 0, c.y); m.rotation.y = -c.a;
+      m.userData.s = stamp; m.position.set(c.x, groundY(c.x, c.y), c.y); m.rotation.y = -c.a;
       if (m.userData.l1) { m.userData.l1.material.color.set(c.chase ? (flash ? K.alert : K.cop) : '#9aa3ad'); m.userData.l2.material.color.set(c.chase ? (flash ? K.cop : K.alert) : '#9aa3ad'); }
     }
     for (const p of peds) {
       let m = meshOf.get(p); if (!m) { m = pedMesh(p); meshOf.set(p, m); scene.add(m); }
-      m.userData.s = stamp; m.position.set(p.x, p.down > 0 ? 3 : 0, p.y);
+      m.userData.s = stamp; m.position.set(p.x, (p.down > 0 ? 3 : 0) + groundY(p.x, p.y), p.y);
       m.rotation.set(0, -(p.free ? p.a : Math.floor(p.t / 378) * Math.PI / 2 + (p.dir < 0 ? Math.PI : 0)), p.down > 0 ? Math.PI / 2 : 0);
       m.visible = !inside && Math.abs(p.x - cam3.position.x) + Math.abs(p.y - cam3.position.z) < 1300;
       if (m.visible) walkPose(m.userData, p.down > 0 ? 0 : p.free ? time * 11 : p.t * 0.17, p.down > 0 ? 0 : 1);
@@ -1243,7 +1297,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     walkAmp += ((player.walk !== lastWalk ? 1 : 0) - walkAmp) * 0.25; lastWalk = player.walk;
     playerMesh.rotation.y = -player.a;
     if (inside && danceFx > 0) playerMesh.position.set(player.x, -dancePose(playerMesh, playerMesh.userData, time / (STEP * 4), 1, 1) * 1.35, player.y);   // a hit on the beat: dance
-    else { walkPose(playerMesh.userData, player.walk * 0.85, walkAmp); playerMesh.position.set(player.x, 0, player.y); }
+    else { walkPose(playerMesh.userData, player.walk * 0.85, walkAmp); playerMesh.position.set(player.x, inside ? 0 : groundY(player.x, player.y), player.y); }
     if (playerMesh.userData.photoHead) { // keep the photo head on the avatar's neck
       playerMesh.updateMatrixWorld(true); const hp = playerMesh.worldToLocal(playerMesh.userData.headBone.getWorldPosition(new T.Vector3()));
       playerMesh.userData.photoHead.position.set(hp.x + 0.25, hp.y + 1.25, hp.z);
@@ -1267,11 +1321,11 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       const fov = 60 + spd * 0.035; if (Math.abs(cam3.fov - fov) > 0.2) { cam3.fov = fov; cam3.updateProjectionMatrix(); }
     } else {
       const a = time * 0.07, cx = ic(3) + 260, cy = ic(3) + 260;
-      cam3.position.set(cx + Math.cos(a) * 820, 430, cy + Math.sin(a) * 820); cam3.lookAt(cx, 0, cy);
+      cam3.position.set(cx + Math.cos(a) * (CITY.up ? 1100 : 820), CITY.up ? 900 : 430, cy + Math.sin(a) * (CITY.up ? 1100 : 820)); cam3.lookAt(cx, CITY.up ? 150 : 0, cy);
     }
     const fx = play ? player.x : ic(3) + 260, fz = play ? player.y : ic(3) + 260;
-    sun.position.set(fx - 0.6 * 760, 0.62 * 760, fz - 0.45 * 760); sun.target.position.set(fx, 0, fz); sun.target.updateMatrixWorld();
-    sky.position.copy(cam3.position); sunDisc.position.set(cam3.position.x - 0.6 * 3600, cam3.position.y + 0.62 * 3600, cam3.position.z - 0.45 * 3600);
+    const SU = CITY.SUN; sun.position.set(fx + SU.x * 1000, SU.y * 1000, fz + SU.z * 1000); sun.target.position.set(fx, 0, fz); sun.target.updateMatrixWorld();
+    sky.position.copy(cam3.position); sunDisc.position.set(cam3.position.x + SU.x * 3600, cam3.position.y + SU.y * 3600, cam3.position.z + SU.z * 3600);
     renderer.render(scene, cam3);
 
     // overlay: compass arrow to the job, touch stick
@@ -1408,7 +1462,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   function boot() {
     try { init3d(); } catch (e) { renderer = null; }
     if (!renderer) { $('startBtn').disabled = true; $('startBtn').textContent = 'Այս սարքում 3D-ն չի աշխատում'; }
-    if (renderer) loadAvatars();
+    if (renderer) { loadAvatars(); loadCity(); }
     resize(); reset(); requestAnimationFrame(frame);
   }
   if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(boot); else boot();
