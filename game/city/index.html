@@ -1,0 +1,640 @@
+<meta charset="utf-8">
+<title>Վարդագույն քաղաք</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Armenian:wght@400;600;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: the city fills the screen seen from above; small dark instrument chips sit in
+   the corners (cash and stars left, minimap right, current job as one line under them). */
+:root {
+  color-scheme: dark;
+  --hills: #76866a;
+  --pavement: #b8b0a4;
+  --asphalt: #3b3e47;
+  --paint: #d9d4c7;
+  --park: #6c9659;
+  --tree: #3f6b3a;
+  --plaza: #cdbfae;
+  --water: #6fb5c9;
+  --ink: #14161d;
+  --fg: #f1ede6;
+  --muted: #a9a59c;
+  --panel: rgba(20, 22, 29, 0.82);
+  --line: rgba(241, 237, 230, 0.16);
+  --tuff: #d98f7a;
+  --gold: #ffcf4a;
+  --go: #58d68d;
+  --alert: #ff5a5f;
+  --cop: #4d8dff;
+  --font-text: "Noto Sans Armenian", "Segoe UI", system-ui, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { background: var(--hills); color: var(--fg); font-family: var(--font-text); overflow: hidden; overscroll-behavior: none; }
+.stage { position: relative; height: 100%; width: 100%; overflow: hidden; user-select: none; -webkit-user-select: none; }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+.hud {
+  position: absolute; inset: 0 0 auto 0; pointer-events: none;
+  display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: start;
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.stats { justify-self: start; display: flex; flex-direction: column; gap: 4px; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.cash { font-size: 18px; font-weight: 700; }
+.stars { letter-spacing: 3px; font-size: 15px; color: var(--muted); }
+.stars b { color: var(--gold); font-weight: 400; }
+.stars.hot b { color: var(--alert); }
+.speed { font-size: 12px; color: var(--muted); }
+.side { display: flex; gap: 8px; align-items: flex-start; }
+#map { width: 92px; height: 92px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); display: block; }
+.snd { pointer-events: auto; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font: 600 15px var(--font-data); cursor: pointer; }
+.snd.off { color: var(--muted); text-decoration: line-through; }
+.job { grid-column: 1 / -1; justify-self: center; max-width: 100%; font-size: 14px; font-weight: 600; text-align: center; min-width: 0; }
+.job .t { font-family: var(--font-data); font-variant-numeric: tabular-nums; margin-left: 8px; }
+.job .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; background: var(--gold); }
+.job.deliver .dot { background: var(--go); }
+.job.late .t { color: var(--alert); }
+
+.toast, .hint {
+  position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px;
+  font-weight: 600; font-size: 14px; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis;
+}
+.toast { top: 32%; font-size: 17px; font-weight: 800; transition: opacity 300ms; white-space: normal; text-align: center; width: max-content; }
+.toast.out { opacity: 0; }
+.hint { bottom: calc(22px + env(safe-area-inset-bottom, 0px)); }
+.hint kbd { font-family: var(--font-data); background: var(--fg); color: var(--ink); border-radius: 5px; padding: 1px 7px; margin-right: 6px; }
+
+.pad {
+  position: absolute; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  right: max(16px, env(safe-area-inset-right, 0px)); display: flex; gap: 12px; align-items: flex-end;
+}
+.pad button {
+  width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--line); background: var(--panel);
+  color: var(--fg); font: 700 13px var(--font-text); touch-action: none; cursor: pointer;
+}
+.pad button.act { width: 76px; height: 76px; border-color: var(--gold); }
+.touch .hint { bottom: calc(120px + env(safe-area-inset-bottom, 0px)); }
+
+.overlay {
+  position: absolute; inset: 0; display: grid; place-items: center; overflow-y: auto;
+  background: rgba(20, 22, 29, 0.45);
+  padding-block: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.card { width: min(480px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px; backdrop-filter: blur(8px); }
+h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; text-wrap: balance; }
+h1 span { color: var(--tuff); }
+.card p { margin: 0; font-size: 15px; line-height: 1.55; }
+.how { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; font-size: 14px; line-height: 1.45; color: var(--muted); }
+.how b { color: var(--fg); font-weight: 600; }
+.go { align-self: flex-start; border: 0; border-radius: 10px; padding: 12px 28px; background: var(--tuff); color: var(--ink); font: 800 16px var(--font-text); cursor: pointer; }
+.go:hover { filter: brightness(1.08); }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+</style>
+
+<div class="stage" id="stage">
+  <canvas id="view" aria-label="Քաղաք"></canvas>
+
+  <div class="hud">
+    <div class="chip stats">
+      <span class="cash" id="cash">0 ֏</span>
+      <span class="stars" id="stars">☆☆☆☆☆</span>
+      <span class="speed" id="speed">ոտքով</span>
+    </div>
+    <div class="side">
+      <button class="snd" id="snd" type="button" aria-label="Ձայն">♪</button>
+      <canvas id="map" width="184" height="184" aria-label="Քարտեզ"></canvas>
+    </div>
+    <div class="chip job" id="job" hidden><span class="dot"></span><span id="jobText"></span><span class="t" id="jobTime"></span></div>
+  </div>
+
+  <div class="toast out" id="toast"></div>
+  <div class="hint" id="hint" hidden></div>
+
+  <div class="pad" id="pad" hidden>
+    <button type="button" id="btnBrake">Արգելակ</button>
+    <button type="button" id="btnAct" class="act">Մեքենա</button>
+  </div>
+
+  <div class="overlay" id="menu">
+    <div class="card">
+      <h1><span>Վարդագույն</span> քաղաք</h1>
+      <p>Բաց քաղաք՝ վարդագույն տուֆից։ Նստիր ցանկացած մեքենա, պատվերներ հասցրու, փող աշխատիր ու մի բռնվիր ոստիկաններին։</p>
+      <ul class="how">
+        <li><b>Շարժվել՝</b> WASD կամ սլաքներ, հեռախոսով՝ մատով քաշիր էկրանի ձախ կեսում</li>
+        <li><b>Նստել կամ իջնել՝</b> E</li>
+        <li><b>Ձեռքի արգելակ՝</b> Space</li>
+        <li><b>Դեղին օղակում</b> վերցնում ես պատվերը, <b>կանաչում</b> հասցնում ես, քանի դեռ ժամանակը չի լրացել</li>
+        <li><b>Աստղեր՝</b> վթարներն ու ուրիշի մեքենան վերցնելը կանչում են ոստիկաններին։ Կորիր նրանց աչքից, ու աստղերը կմարեն</li>
+      </ul>
+      <button class="go" id="startBtn" type="button">Սկսել</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const cv = $('view'), ctx = cv.getContext('2d'), mapCv = $('map'), mctx = mapCv.getContext('2d');
+  const cssv = getComputedStyle(document.documentElement), K = {};
+  ['hills', 'pavement', 'asphalt', 'paint', 'park', 'tree', 'plaza', 'water', 'ink', 'fg', 'gold', 'go', 'alert', 'cop', 'tuff'].forEach((k) => { K[k] = cssv.getPropertyValue('--' + k).trim(); });
+  const TUFF = ['#d98f7a', '#c9755f', '#e0a989', '#b8695a', '#8d5a52', '#a8a39d', '#e6b39a', '#5b5560'];
+  const PAINTS = ['#e8e4dc', '#c0392b', '#2e6f9e', '#e0a321', '#2f3640', '#4f8a5b', '#8e6bb0', '#d96f32', '#9aa3ad'];
+
+  const CELL = 520, N = 7, WS = N * CELL + 120, LANE = 28;
+  const DV = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  const ic = (i) => i * CELL + 60;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const ad = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  const money = (n) => Math.round(n).toLocaleString('en-US').replace(/,/g, ' ') + ' ֏';
+
+  // ---------- map (fixed seed, so the city is the same every time) ----------
+  let seed = 20261116;
+  const srand = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const blocks = [];
+  for (let i = 0; i < N; i++) {
+    blocks.push([]);
+    for (let j = 0; j < N; j++) {
+      const ox = i * CELL + 142, oy = j * CELL + 142, b = { type: 'b', rects: [], trees: [] };
+      const r = srand();
+      if (i === 3 && j === 3) b.type = 'plaza';
+      else if (r < 0.14) { b.type = 'park'; for (let t = 0; t < 11; t++) b.trees.push({ x: ox + 20 + srand() * 316, y: oy + 20 + srand() * 316, r: 14 + srand() * 12 }); }
+      else {
+        const lay = srand(), cells = lay < 0.22 ? [[0, 0, 356, 356]] : lay < 0.42 ? [[0, 0, 170, 356], [186, 0, 170, 356]] : lay < 0.62 ? [[0, 0, 356, 170], [0, 186, 356, 170]] : [[0, 0, 170, 170], [186, 0, 170, 170], [0, 186, 170, 170], [186, 186, 170, 170]];
+        for (const c of cells) {
+          const sx = srand() * 18, sy = srand() * 18, ex = srand() * 18, ey = srand() * 18;
+          b.rects.push({ x: ox + c[0] + sx, y: oy + c[1] + sy, w: c[2] - sx - ex, h: c[3] - sy - ey, c: TUFF[Math.floor(srand() * TUFF.length)], z: 7 + srand() * 10, d: srand() });
+        }
+      }
+      blocks[i].push(b);
+    }
+  }
+
+  function pushOut(p, r) { // keep a circle out of the buildings of its own block
+    const i = Math.floor(p.x / CELL), j = Math.floor(p.y / CELL);
+    let hit = false;
+    if (i >= 0 && j >= 0 && i < N && j < N) for (const b of blocks[i][j].rects) {
+      const cx = clamp(p.x, b.x, b.x + b.w), cy = clamp(p.y, b.y, b.y + b.h), dx = p.x - cx, dy = p.y - cy, d2 = dx * dx + dy * dy;
+      if (d2 >= r * r) continue;
+      hit = true;
+      if (d2 > 0.0001) { const d = Math.sqrt(d2); p.x += dx / d * (r - d); p.y += dy / d * (r - d); }
+      else { const l = p.x - b.x, rr = b.x + b.w - p.x, t = p.y - b.y, bb = b.y + b.h - p.y, m = Math.min(l, rr, t, bb);
+        if (m === l) p.x = b.x - r; else if (m === rr) p.x = b.x + b.w + r; else if (m === t) p.y = b.y - r; else p.y = b.y + b.h + r; }
+    }
+    if (p.x < 8) { p.x = 8; hit = true; } if (p.y < 8) { p.y = 8; hit = true; }
+    if (p.x > WS - 8) { p.x = WS - 8; hit = true; } if (p.y > WS - 8) { p.y = WS - 8; hit = true; }
+    return hit;
+  }
+  function roadPoint() { // a random spot in the middle of a street
+    const k = Math.floor(rnd(0, N + 1)), m = Math.floor(rnd(0, N)), t = ic(m) + rnd(150, 370);
+    return Math.random() < 0.5 ? { x: t, y: ic(k) } : { x: ic(k), y: t };
+  }
+
+  // ---------- sound ----------
+  let actx = null, master = null, engine = null, engGain = null, siren = null, sirGain = null, soundOn = true;
+  function initAudio() {
+    if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+    try {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      master = actx.createGain(); master.gain.value = 1; master.connect(actx.destination);
+      const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+      engine = actx.createOscillator(); engine.type = 'sawtooth'; engGain = actx.createGain(); engGain.gain.value = 0;
+      engine.connect(lp).connect(engGain).connect(master); engine.start();
+      siren = actx.createOscillator(); siren.type = 'square'; sirGain = actx.createGain(); sirGain.gain.value = 0;
+      siren.connect(sirGain).connect(master); siren.start();
+    } catch (e) { actx = null; }
+  }
+  function tone(f0, f1, dur, type, vol, delay) {
+    if (!actx) return;
+    const t = actx.currentTime + (delay || 0), o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.02);
+  }
+  const sfx = {
+    crash: () => { tone(160, 40, 0.3, 'sawtooth', 0.2); tone(90, 30, 0.25, 'square', 0.12); },
+    coin: () => { tone(880, 880, 0.09, 'triangle', 0.14); tone(1320, 1320, 0.16, 'triangle', 0.14, 0.09); },
+    take: () => tone(520, 780, 0.12, 'triangle', 0.12),
+    door: () => tone(140, 90, 0.07, 'square', 0.08),
+    fail: () => tone(300, 120, 0.4, 'triangle', 0.14),
+  };
+
+  // ---------- state ----------
+  let mode = 'menu', W = 1, H = 1, dpr = 1, zoom = 1, time = 0;
+  const cam = { x: WS / 2, y: WS / 2 };
+  let cars = [], peds = [], player, cash = 0, heat = 0, evadeT = 0, bustT = 0, crashCd = 0, job = null, toastT = 0;
+  const keys = {}, joy = { id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
+  let padBrake = false;
+
+  function makeCar(x, y, a, kind) {
+    return { x: x, y: y, a: a, v: 0, kind: kind, color: kind === 'police' ? '#f4f4f0' : pick(PAINTS), max: kind === 'police' ? 300 : rnd(290, 350),
+      ai: null, driver: false, chase: false, cruise: rnd(95, 130), stuck: 0, ignore: 0, rev: 0, slow: 0 };
+  }
+  function nextLeg(c, I, J) {
+    let opts = [0, 1, 2, 3].filter((d) => { const x = I + DV[d][0], y = J + DV[d][1]; return x >= 0 && y >= 0 && x <= N && y <= N; });
+    if (c.ai.d >= 0 && opts.length > 1) opts = opts.filter((d) => d !== (c.ai.d + 2) % 4);
+    let d;
+    if (c.chase) { const t = target(); let best = 1e12; for (const o of opts) { const q = Math.hypot(ic(I + DV[o][0]) - t.x, ic(J + DV[o][1]) - t.y); if (q < best) { best = q; d = o; } } }
+    else d = pick(opts);
+    const r = DV[(d + 1) % 4];
+    c.ai.i = I; c.ai.j = J; c.ai.d = d; c.ai.stage = 1;
+    c.ai.wx = ic(I) + DV[d][0] * 85 + r[0] * LANE; c.ai.wy = ic(J) + DV[d][1] * 85 + r[1] * LANE;
+  }
+  function resync(c) { // head for the nearest crossroads, then follow the streets from there
+    const I = clamp(Math.round((c.x - 60) / CELL), 0, N), J = clamp(Math.round((c.y - 60) / CELL), 0, N);
+    c.ai = { i: I, j: J, d: -1, stage: 2, wx: ic(I), wy: ic(J), direct: false };
+  }
+  function spawnTraffic(kind) {
+    const c = makeCar(0, 0, 0, kind); c.driver = true; c.ai = { d: -1 };
+    nextLeg(c, Math.floor(rnd(0, N + 1)), Math.floor(rnd(0, N + 1)));
+    c.x = c.ai.wx; c.y = c.ai.wy; c.a = c.ai.d * Math.PI / 2; c.ai.direct = false;
+    return c;
+  }
+  const target = () => (player.car ? player.car : player);
+
+  function reset() {
+    cars = []; peds = []; cash = 0; heat = 0; evadeT = 0; bustT = 0; job = null;
+    player = { x: ic(3) + 96, y: ic(3) + 76, a: 0, car: null, walk: 0 };
+    cars.push(makeCar(ic(3) + 210, ic(3) + 50, 0, 'civ'));
+    for (let n = 0; n < 16; n++) { // parked along the curb
+      const d = Math.floor(rnd(0, 4)), I = Math.floor(rnd(0, N + 1)), J = Math.floor(rnd(0, N + 1));
+      if (I + DV[d][0] < 0 || J + DV[d][1] < 0 || I + DV[d][0] > N || J + DV[d][1] > N) continue;
+      const r = DV[(d + 1) % 4], t = rnd(150, 370);
+      cars.push(makeCar(ic(I) + DV[d][0] * t + r[0] * 50, ic(J) + DV[d][1] * t + r[1] * 50, d * Math.PI / 2, 'civ'));
+    }
+    for (let n = 0; n < 26; n++) cars.push(spawnTraffic('civ'));
+    cars.push(spawnTraffic('police'));
+    for (let n = 0; n < 34; n++) peds.push({ i: Math.floor(rnd(0, N)), j: Math.floor(rnd(0, N)), t: rnd(0, 1512), dir: Math.random() < 0.5 ? 1 : -1, sp: rnd(32, 50), c: pick(PAINTS), down: 0, x: 0, y: 0 });
+    newOffer();
+  }
+  function newOffer() { job = { stage: 'pickup', p: roadPoint(), label: pick(['լավաշ', 'ծաղիկներ', 'ծանրոց', 'խորոված', 'ուղևոր', 'դեղորայք', 'ծիրան']) }; }
+
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.remove('out'); toastT = 2.2; }
+  function addHeat(n) { heat = Math.min(5, heat + n); evadeT = 0; }
+
+  // ---------- driving ----------
+  function carStep(c, thr, steer, hand, dt) {
+    if (thr > 0) c.v += (c.v < 0 ? 420 : 250) * thr * dt;
+    else if (thr < 0) c.v += (c.v > 5 ? 430 : 170) * thr * dt;
+    else c.v -= c.v * 0.7 * dt;
+    if (hand) c.v -= c.v * 2.4 * dt;
+    c.v = clamp(c.v, -90, c.max);
+    c.a += steer * (hand ? 3.5 : 2.5) * clamp(c.v / 90, -1, 1) * dt;
+    const fx = Math.cos(c.a), fy = Math.sin(c.a);
+    c.x += fx * c.v * dt; c.y += fy * c.v * dt;
+    let hit = false;
+    for (const s of [11, -11]) {
+      const p = { x: c.x + fx * s, y: c.y + fy * s }, x0 = p.x, y0 = p.y;
+      if (pushOut(p, 12)) { hit = true; c.x += p.x - x0; c.y += p.y - y0; }
+    }
+    if (hit) { if (c === player.car && Math.abs(c.v) > 150 && crashCd <= 0) { sfx.crash(); crashCd = 0.5; } c.v *= Math.pow(0.02, dt); }
+    return hit;
+  }
+  function aiDrive(c, dt) {
+    const t = target(), dP = Math.hypot(t.x - c.x, t.y - c.y);
+    let tx = c.ai.wx, ty = c.ai.wy, direct = false;
+    if (c.chase && dP < 280) { tx = t.x; ty = t.y; direct = true; }
+    else if (c.ai.direct) resync(c), tx = c.ai.wx, ty = c.ai.wy;
+    c.ai.direct = direct;
+    if (!direct && Math.hypot(tx - c.x, ty - c.y) < 34) {
+      const a = c.ai, d = DV[a.d < 0 ? 0 : a.d];
+      if (a.stage === 2) nextLeg(c, a.i, a.j);
+      else if (a.stage === 1) { const r = DV[(a.d + 1) % 4]; a.stage = 0; a.wx = ic(a.i + d[0]) - d[0] * 85 + r[0] * LANE; a.wy = ic(a.j + d[1]) - d[1] * 85 + r[1] * LANE; }
+      else nextLeg(c, a.i + d[0], a.j + d[1]);
+      tx = c.ai.wx; ty = c.ai.wy;
+    }
+    const diff = ad(Math.atan2(ty - c.y, tx - c.x) - c.a);
+    let steer = clamp(diff * 2.2, -1, 1), tv = c.chase ? 285 : c.cruise;
+    if (Math.abs(diff) > 0.6) tv = Math.min(tv, 75);
+    if (!c.chase && c.ai.stage === 1) tv = Math.min(tv, 85);
+    const fx = Math.cos(c.a), fy = Math.sin(c.a);
+    if (!c.chase) {
+      let blocked = false;
+      const ahead = (o) => { const rx = o.x - c.x, ry = o.y - c.y, f = rx * fx + ry * fy; return f > 8 && f < 60 && Math.abs(rx * fy - ry * fx) < 17; };
+      for (const o of cars) if (o !== c && ahead(o)) { blocked = true; break; }
+      if (!blocked && !player.car && ahead(player)) blocked = true;
+      c.ignore -= dt;
+      if (blocked && c.ignore <= 0) { tv = 0; c.stuck += dt; if (c.stuck > 4) { c.ignore = 1.5; c.stuck = 0; } } else if (!blocked) c.stuck = 0;
+    }
+    let thr = 0;
+    if (c.rev > 0) { c.rev -= dt; thr = -1; steer = -steer; }
+    else if (tv === 0) { if (c.v > 5) thr = -1; else c.v = 0; }
+    else if (c.v < tv) thr = c.chase ? 1 : 0.6; else if (c.v > tv + 15) thr = -0.6;
+    const hit = carStep(c, thr, steer, false, dt);
+    if (c.chase || hit) { c.slow = Math.abs(c.v) < 12 ? c.slow + dt : 0; if (c.slow > 1.2) { c.rev = 0.9; c.slow = 0; } }
+  }
+
+  function enterExit() {
+    if (mode !== 'play') return;
+    if (player.car) {
+      const c = player.car; if (Math.abs(c.v) > 45) return;
+      const p = { x: c.x + Math.sin(c.a) * 22, y: c.y - Math.cos(c.a) * 22 }; pushOut(p, 7);
+      player.x = p.x; player.y = p.y; player.car = null; c.v = 0; sfx.door(); return;
+    }
+    let best = null, bd = 48;
+    for (const c of cars) { const d = Math.hypot(c.x - player.x, c.y - player.y); if (d < bd && c.kind !== 'police') { bd = d; best = c; } }
+    if (!best) return;
+    if (best.driver) { addHeat(1); toast('Ուրիշի մեքենան վերցրիր'); peds.push({ free: true, x: best.x, y: best.y, a: rnd(0, 6.28), sp: 70, c: pick(PAINTS), down: 0, life: 6 }); }
+    best.driver = false; best.ai = null; player.car = best; sfx.door();
+  }
+
+  function busted() {
+    const fine = Math.round(cash * 0.2 / 100) * 100;
+    cash -= fine; heat = 0; bustT = 0;
+    if (player.car) { player.car.v = 0; player.car = null; }
+    player.x = ic(3) + 96; player.y = ic(3) + 76;
+    for (const c of cars) if (c.kind === 'police') c.chase = false;
+    if (job && job.stage === 'deliver') newOffer();
+    sfx.fail(); toast(fine ? 'Բռնվեցիր, տուգանք ' + money(fine) : 'Բռնվեցիր');
+  }
+
+  function update(dt) {
+    time += dt; crashCd -= dt;
+    if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').classList.add('out'); }
+    const playing = mode === 'play';
+
+    // input
+    let ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), iy = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+    const jm = Math.hypot(joy.dx, joy.dy);
+    if (playing && player.car) {
+      const c = player.car; let thr = -iy, steer = ix;
+      if (jm > 0.22) { const diff = ad(Math.atan2(joy.dy, joy.dx) - c.a); steer = clamp(diff * 2, -1, 1); thr = Math.min(1, jm * 1.2); }
+      carStep(c, thr, steer, keys.hand || padBrake, dt);
+      player.x = c.x; player.y = c.y;
+    } else if (playing) {
+      if (jm > 0.22) { ix = joy.dx; iy = joy.dy; }
+      const m = Math.hypot(ix, iy);
+      if (m > 0.1) { const s = 150 / Math.max(1, m); player.x += ix * s * dt; player.y += iy * s * dt; player.a = Math.atan2(iy, ix); player.walk += dt * 10; pushOut(player, 7); }
+    }
+
+    // traffic and police
+    for (const c of cars) { if (c.ai) aiDrive(c, dt); else if (c !== player.car) c.v -= c.v * 3 * dt, carStep(c, 0, 0, false, dt); }
+    for (let a = 0; a < cars.length; a++) for (let b = a + 1; b < cars.length; b++) {
+      const p = cars[a], q = cars[b], dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);
+      if (d >= 31 || d < 0.01) continue;
+      const push = (31 - d) / 2, nx = dx / d, ny = dy / d;
+      p.x -= nx * push; p.y -= ny * push; q.x += nx * push; q.y += ny * push;
+      const rel = Math.hypot(Math.cos(p.a) * p.v - Math.cos(q.a) * q.v, Math.sin(p.a) * p.v - Math.sin(q.a) * q.v);
+      if (playing && (p === player.car || q === player.car) && rel > 95 && crashCd <= 0) {
+        const other = p === player.car ? q : p; crashCd = 0.8; sfx.crash();
+        if (!(other.kind === 'police' && other.chase)) addHeat(other.kind === 'police' ? 1.5 : 0.6);
+      }
+      p.v *= 0.55; q.v *= 0.55;
+    }
+
+    // people on the pavements
+    for (let n = peds.length - 1; n >= 0; n--) {
+      const p = peds[n];
+      if (p.down > 0) p.down -= dt;
+      else if (p.free) { p.x += Math.cos(p.a) * p.sp * dt; p.y += Math.sin(p.a) * p.sp * dt; pushOut(p, 5); p.life -= dt; if (p.life <= 0) { peds.splice(n, 1); continue; } }
+      else {
+        p.t = (p.t + p.dir * p.sp * dt + 1512) % 1512;
+        const ox = p.i * CELL + 131, oy = p.j * CELL + 131, s = Math.floor(p.t / 378), u = p.t - s * 378;
+        p.x = ox + (s === 0 ? u : s === 1 ? 378 : s === 2 ? 378 - u : 0); p.y = oy + (s === 0 ? 0 : s === 1 ? u : s === 2 ? 378 : 378 - u);
+      }
+      if (p.down <= 0) for (const c of cars) if (Math.abs(c.v) > 50 && Math.abs(c.x - p.x) < 18 && Math.abs(c.y - p.y) < 18) {
+        p.down = 2.5; if (c === player.car) { addHeat(0.8); toast('Զգույշ, մարդիկ կան'); } break;
+      }
+    }
+    if (!playing) return;
+
+    // stars
+    const tg = target(), spd = player.car ? Math.abs(player.car.v) : 0;
+    let near = false, close = false, chasing = 0;
+    for (const c of cars) if (c.kind === 'police') {
+      if (heat > 0 && !c.chase) { c.chase = true; resync(c); }
+      if (heat <= 0 && c.chase) { c.chase = false; if (c.ai.direct) resync(c); }
+      if (c.chase) { chasing++; const d = Math.hypot(c.x - tg.x, c.y - tg.y); if (d < 480) near = true; if (d < (player.car ? 75 : 46) && spd < 30) close = true; }
+    }
+    if (heat > 0) {
+      if (chasing < Math.min(4, Math.ceil(heat))) for (let t = 0; t < 20; t++) {
+        const I = Math.floor(rnd(0, N + 1)), J = Math.floor(rnd(0, N + 1)), d = Math.hypot(ic(I) - tg.x, ic(J) - tg.y);
+        if (d > 650 && d < 1500) { const c = makeCar(ic(I), ic(J), Math.atan2(tg.y - ic(J), tg.x - ic(I)), 'police'); c.driver = true; c.chase = true; resync(c); cars.push(c); break; }
+      }
+      if (near) evadeT = 0; else { evadeT += dt; if (evadeT > 6) { evadeT = 0; heat = Math.max(0, Math.ceil(heat) - 1); if (heat === 0) toast('Աստղերը մարեցին'); } }
+      bustT = close ? bustT + dt : Math.max(0, bustT - dt);
+      if (bustT > 1.5) busted();
+    }
+    if (heat === 0) { // let extra patrol cars leave once nobody is looking
+      let cops = 0; for (let n = cars.length - 1; n >= 0; n--) { const c = cars[n]; if (c.kind !== 'police') continue; cops++; if (cops > 2 && Math.hypot(c.x - tg.x, c.y - tg.y) > 900) cars.splice(n, 1); }
+    }
+
+    // jobs
+    if (job) {
+      const d = Math.hypot(job.p.x - tg.x, job.p.y - tg.y);
+      if (job.stage === 'pickup' && d < 38) {
+        let to; do { to = roadPoint(); } while (Math.hypot(to.x - job.p.x, to.y - job.p.y) < 900);
+        const len = Math.abs(to.x - job.p.x) + Math.abs(to.y - job.p.y);
+        job.stage = 'deliver'; job.p = to; job.time = len / 150 + 12; job.pay = Math.round((len * 1.6 + 600) / 100) * 100;
+        sfx.take(); toast('Վերցված է, շտապիր');
+      } else if (job.stage === 'deliver') {
+        job.time -= dt;
+        if (d < 38) { const tip = Math.round(job.time * 20 / 100) * 100; cash += job.pay + tip; sfx.coin(); toast('Հասցված է  +' + money(job.pay + tip)); newOffer(); }
+        else if (job.time <= 0) { sfx.fail(); toast('Ուշացար, պատվերը չեղարկվեց'); newOffer(); }
+      }
+    }
+
+    // engine and siren
+    if (actx) {
+      const now = actx.currentTime;
+      master.gain.setTargetAtTime(soundOn ? 1 : 0, now, 0.05);
+      engGain.gain.setTargetAtTime(player.car ? 0.035 + spd / 330 * 0.05 : 0, now, 0.08);
+      engine.frequency.setTargetAtTime(52 + spd * 0.42, now, 0.06);
+      sirGain.gain.setTargetAtTime(heat > 0 && near ? 0.02 : 0, now, 0.1);
+      siren.frequency.setValueAtTime(Math.floor(time / 0.38) % 2 ? 660 : 880, now);
+    }
+  }
+
+  // ---------- drawing ----------
+  function resize() {
+    const r = cv.getBoundingClientRect(); W = Math.max(1, r.width); H = Math.max(1, r.height);
+    dpr = Math.min(2, window.devicePixelRatio || 1); cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  }
+  window.addEventListener('resize', resize);
+
+  function drawCar(c) {
+    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.a);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(-17, -7, 38, 20);
+    ctx.fillStyle = c.color; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(-19, -10, 38, 20, 5); else ctx.rect(-19, -10, 38, 20); ctx.fill();
+    ctx.fillStyle = 'rgba(20,22,29,0.75)'; ctx.fillRect(3, -8, 8, 16); ctx.fillRect(-14, -8, 5, 16);
+    ctx.fillStyle = '#fff3c4'; ctx.fillRect(17, -9, 2, 5); ctx.fillRect(17, 4, 2, 5);
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(-19, -9, 2, 5); ctx.fillRect(-19, 4, 2, 5);
+    if (c.kind === 'police') {
+      ctx.fillStyle = K.cop; ctx.fillRect(-9, -10, 5, 20);
+      const f = c.chase && Math.floor(time * 6) % 2;
+      ctx.fillStyle = c.chase ? (f ? K.alert : K.cop) : '#9aa3ad'; ctx.fillRect(-3, -7, 4, 7);
+      ctx.fillStyle = c.chase ? (f ? K.cop : K.alert) : '#9aa3ad'; ctx.fillRect(-3, 0, 4, 7);
+    }
+    ctx.restore();
+  }
+  function person(x, y, color, down, me) {
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.arc(x + 2, y + 2, me ? 7 : 5, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = color; ctx.beginPath();
+    if (down) ctx.ellipse(x, y, 9, 4, 0.6, 0, 6.2832); else ctx.arc(x, y, me ? 7 : 5, 0, 6.2832);
+    ctx.fill();
+    if (me) { ctx.strokeStyle = K.fg; ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.fillStyle = '#f0c9a4'; ctx.beginPath(); ctx.arc(x, y, me ? 3.6 : 2.6, 0, 6.2832); ctx.fill();
+  }
+
+  function draw() {
+    const f = mode === 'menu' ? cars[cars.length - 3] : target();
+    cam.x += (f.x - cam.x) * 0.12; cam.y += (f.y - cam.y) * 0.12;
+    const spd = player.car ? Math.abs(player.car.v) : 0;
+    const zt = clamp(Math.min(W, H) / 560, 0.62, 1.35) * (1 - 0.24 * spd / 340);
+    zoom += (zt - zoom) * 0.05;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = K.hills; ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * (W / 2 - cam.x * zoom), dpr * (H / 2 - cam.y * zoom));
+    const vx0 = cam.x - W / 2 / zoom, vy0 = cam.y - H / 2 / zoom, vx1 = cam.x + W / 2 / zoom, vy1 = cam.y + H / 2 / zoom;
+    const x0 = Math.max(0, vx0), y0 = Math.max(0, vy0), x1 = Math.min(WS, vx1), y1 = Math.min(WS, vy1);
+    const c0 = clamp(Math.floor(vx0 / CELL), 0, N), c1 = clamp(Math.floor(vx1 / CELL), 0, N), r0 = clamp(Math.floor(vy0 / CELL), 0, N), r1 = clamp(Math.floor(vy1 / CELL), 0, N);
+    if (x1 > x0 && y1 > y0) {
+      ctx.fillStyle = K.pavement; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+      ctx.fillStyle = K.asphalt;
+      for (let k = c0; k <= c1; k++) ctx.fillRect(k * CELL, y0, 120, y1 - y0);
+      for (let k = r0; k <= r1; k++) ctx.fillRect(x0, k * CELL, x1 - x0, 120);
+      ctx.strokeStyle = K.paint; ctx.lineWidth = 2; ctx.setLineDash([18, 22]); ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      for (let k = c0; k <= c1; k++) { ctx.moveTo(ic(k), y0 - (y0 % 40)); ctx.lineTo(ic(k), y1); }
+      for (let k = r0; k <= r1; k++) { ctx.moveTo(x0 - (x0 % 40), ic(k)); ctx.lineTo(x1, ic(k)); }
+      ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+      for (let i = c0; i <= c1; i++) for (let j = r0; j <= r1; j++) { // crossroads with zebra stripes
+        const X = i * CELL, Y = j * CELL;
+        ctx.fillStyle = K.asphalt; ctx.fillRect(X - 26, Y, 172, 120); ctx.fillRect(X, Y - 26, 120, 172);
+        ctx.fillStyle = K.paint; ctx.globalAlpha = 0.75;
+        for (let s = 0; s < 6; s++) { const o = 8 + s * 19; ctx.fillRect(X - 22, Y + o, 16, 9); ctx.fillRect(X + 126, Y + o, 16, 9); ctx.fillRect(X + o, Y - 22, 9, 16); ctx.fillRect(X + o, Y + 126, 9, 16); }
+        ctx.globalAlpha = 1;
+      }
+    }
+    const trees = [];
+    for (let i = c0; i <= Math.min(c1, N - 1); i++) for (let j = r0; j <= Math.min(r1, N - 1); j++) {
+      const b = blocks[i][j], ox = i * CELL + 142, oy = j * CELL + 142;
+      if (b.type === 'park') { ctx.fillStyle = K.park; ctx.fillRect(ox, oy, 356, 356); ctx.strokeStyle = K.plaza; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(ox, oy + 178); ctx.quadraticCurveTo(ox + 178, oy + 90, ox + 356, oy + 200); ctx.stroke(); for (const t of b.trees) trees.push(t); }
+      else if (b.type === 'plaza') {
+        ctx.fillStyle = K.plaza; ctx.fillRect(ox, oy, 356, 356);
+        ctx.strokeStyle = K.tuff; ctx.lineWidth = 3; for (const rr of [150, 110]) { ctx.beginPath(); ctx.arc(ox + 178, oy + 178, rr, 0, 6.2832); ctx.stroke(); }
+        ctx.fillStyle = K.water; ctx.beginPath(); ctx.arc(ox + 178, oy + 178, 54, 0, 6.2832); ctx.fill();
+        ctx.strokeStyle = K.fg; ctx.globalAlpha = 0.6; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ox + 178, oy + 178, 14 + (time * 14) % 36, 0, 6.2832); ctx.stroke(); ctx.globalAlpha = 1;
+      } else for (const r of b.rects) {
+        ctx.fillStyle = 'rgba(20,22,29,0.28)'; ctx.fillRect(r.x + r.z, r.y + r.z, r.w, r.h);
+        ctx.fillStyle = r.c; ctx.fillRect(r.x, r.y, r.w, r.h);
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 3; ctx.strokeRect(r.x + 7, r.y + 7, r.w - 14, r.h - 14);
+        ctx.fillStyle = 'rgba(20,22,29,0.18)';
+        if (r.d < 0.5 && r.w > 90 && r.h > 90) ctx.fillRect(r.x + r.w * 0.35, r.y + r.h * 0.35, r.w * 0.3, r.h * 0.3); else ctx.fillRect(r.x + 16, r.y + 16, 22, 14);
+      }
+    }
+
+    if (job && mode === 'play') {
+      const col = job.stage === 'pickup' ? K.gold : K.go, pulse = 34 + Math.sin(time * 5) * 4;
+      ctx.fillStyle = col; ctx.globalAlpha = 0.22; ctx.beginPath(); ctx.arc(job.p.x, job.p.y, pulse, 0, 6.2832); ctx.fill();
+      ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.stroke();
+    }
+    for (const p of peds) if (p.x > vx0 - 20 && p.x < vx1 + 20 && p.y > vy0 - 20 && p.y < vy1 + 20) person(p.x, p.y, p.c, p.down > 0, false);
+    if (!player.car && mode === 'play') person(player.x, player.y, K.ink, false, true);
+    for (const c of cars) if (c.x > vx0 - 40 && c.x < vx1 + 40 && c.y > vy0 - 40 && c.y < vy1 + 40) drawCar(c);
+    if (player.car) { ctx.strokeStyle = K.fg; ctx.lineWidth = 2; ctx.globalAlpha = 0.8; ctx.beginPath(); ctx.arc(player.car.x, player.car.y, 27, 0, 6.2832); ctx.stroke(); ctx.globalAlpha = 1; }
+    for (const t of trees) { ctx.fillStyle = 'rgba(20,22,29,0.2)'; ctx.beginPath(); ctx.arc(t.x + 5, t.y + 5, t.r, 0, 6.2832); ctx.fill(); ctx.fillStyle = K.tree; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, 6.2832); ctx.fill(); ctx.fillStyle = K.park; ctx.beginPath(); ctx.arc(t.x - t.r * 0.25, t.y - t.r * 0.25, t.r * 0.45, 0, 6.2832); ctx.fill(); }
+
+    // screen space: arrow to the job, joystick
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (job && mode === 'play') {
+      const sx = (job.p.x - cam.x) * zoom + W / 2, sy = (job.p.y - cam.y) * zoom + H / 2, m = 46;
+      if (sx < m || sx > W - m || sy < m + 70 || sy > H - m) {
+        const a = Math.atan2(sy - H / 2, sx - W / 2), px = clamp(sx, m, W - m), py = clamp(sy, m + 70, H - m);
+        ctx.save(); ctx.translate(px, py); ctx.rotate(a); ctx.fillStyle = job.stage === 'pickup' ? K.gold : K.go; ctx.strokeStyle = K.ink; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-10, -11); ctx.lineTo(-4, 0); ctx.lineTo(-10, 11); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+      }
+    }
+    if (joy.id !== null) {
+      ctx.strokeStyle = K.fg; ctx.globalAlpha = 0.35; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(joy.ox, joy.oy, 52, 0, 6.2832); ctx.stroke();
+      ctx.fillStyle = K.fg; ctx.globalAlpha = 0.55; ctx.beginPath(); ctx.arc(joy.ox + joy.dx * 52, joy.oy + joy.dy * 52, 22, 0, 6.2832); ctx.fill(); ctx.globalAlpha = 1;
+    }
+
+    // minimap
+    const M = 184, s = M / WS; mctx.clearRect(0, 0, M, M);
+    mctx.strokeStyle = 'rgba(241,237,230,0.3)'; mctx.lineWidth = 3; mctx.beginPath();
+    for (let k = 0; k <= N; k++) { mctx.moveTo(ic(k) * s, 0); mctx.lineTo(ic(k) * s, M); mctx.moveTo(0, ic(k) * s); mctx.lineTo(M, ic(k) * s); } mctx.stroke();
+    const dot = (x, y, c, r) => { mctx.fillStyle = c; mctx.beginPath(); mctx.arc(x * s, y * s, r, 0, 6.2832); mctx.fill(); };
+    if (mode === 'play') {
+      if (job) dot(job.p.x, job.p.y, job.stage === 'pickup' ? K.gold : K.go, 8);
+      for (const c of cars) if (c.kind === 'police' && c.chase) dot(c.x, c.y, Math.floor(time * 6) % 2 ? K.alert : K.cop, 6);
+      const t = target(); dot(t.x, t.y, K.fg, 7);
+    }
+  }
+
+  // ---------- HUD ----------
+  const cache = {};
+  const put = (id, v) => { if (cache[id] !== v) { cache[id] = v; $(id).textContent = v; } };
+  function hud() {
+    const play = mode === 'play';
+    put('cash', money(cash));
+    const n = Math.ceil(heat), key = 's' + n;
+    if (cache.stars !== key) { cache.stars = key; $('stars').innerHTML = '<b>' + '★'.repeat(n) + '</b>' + '☆'.repeat(5 - n); $('stars').classList.toggle('hot', n > 0); }
+    put('speed', player.car ? Math.round(Math.abs(player.car.v) * 0.42) + ' կմ/ժ' : 'ոտքով');
+    const showJob = play && !!job;
+    if (cache.jobShow !== showJob) { cache.jobShow = showJob; $('job').hidden = !showJob; }
+    if (showJob) {
+      const del = job.stage === 'deliver';
+      if (cache.del !== del) { cache.del = del; $('job').classList.toggle('deliver', del); }
+      put('jobText', del ? 'Հասցրու՝ ' + job.label + ' · ' + money(job.pay) : 'Վերցրու պատվերը՝ ' + job.label);
+      const tl = del ? Math.max(0, Math.ceil(job.time)) : -1;
+      put('jobTime', del ? Math.floor(tl / 60) + ':' + String(tl % 60).padStart(2, '0') : '');
+      const late = del && tl <= 8; if (cache.late !== late) { cache.late = late; $('job').classList.toggle('late', late); }
+    }
+    let hint = '';
+    if (play && !touch) {
+      if (player.car) { if (Math.abs(player.car.v) < 45) hint = 'իջնել'; }
+      else for (const c of cars) if (c.kind !== 'police' && Math.hypot(c.x - player.x, c.y - player.y) < 48) { hint = 'նստել մեքենան'; break; }
+    }
+    if (cache.hint !== hint) { cache.hint = hint; $('hint').hidden = !hint; $('hint').innerHTML = hint ? '<kbd>E</kbd>' + hint : ''; }
+  }
+
+  // ---------- input ----------
+  const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'hand' };
+  window.addEventListener('keydown', (e) => {
+    if (mode !== 'play') return;
+    if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
+    if ((e.code === 'KeyE' || e.code === 'KeyF') && !e.repeat) enterExit();
+  });
+  window.addEventListener('keyup', (e) => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false; });
+  window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+  let touch = false;
+  function useTouch() { if (touch) return; touch = true; $('stage').classList.add('touch'); if (mode === 'play') $('pad').hidden = false; }
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    useTouch(); e.preventDefault();
+    if (mode !== 'play' || joy.id !== null) return;
+    const r = cv.getBoundingClientRect(); joy.id = e.pointerId; joy.ox = e.clientX - r.left; joy.oy = e.clientY - r.top; joy.dx = joy.dy = 0;
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== joy.id) return;
+    const r = cv.getBoundingClientRect(); let dx = (e.clientX - r.left - joy.ox) / 52, dy = (e.clientY - r.top - joy.oy) / 52; const m = Math.hypot(dx, dy);
+    if (m > 1) { dx /= m; dy /= m; } joy.dx = dx; joy.dy = dy;
+  });
+  const joyEnd = (e) => { if (e.pointerId === joy.id) { joy.id = null; joy.dx = joy.dy = 0; } };
+  cv.addEventListener('pointerup', joyEnd); cv.addEventListener('pointercancel', joyEnd);
+  $('btnAct').addEventListener('click', enterExit);
+  const bb = $('btnBrake');
+  bb.addEventListener('pointerdown', (e) => { padBrake = true; e.preventDefault(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((n) => bb.addEventListener(n, () => { padBrake = false; }));
+  $('snd').addEventListener('click', () => { soundOn = !soundOn; $('snd').classList.toggle('off', !soundOn); });
+  $('startBtn').addEventListener('click', (e) => {
+    initAudio(); reset(); mode = 'play'; $('menu').hidden = true;
+    if (touch) $('pad').hidden = false;
+    cam.x = player.x; cam.y = player.y; $('startBtn').blur(); toast('Նստիր մեքենան ու գնա դեղին օղակի մոտ');
+  });
+  window.addEventListener('touchstart', useTouch, { passive: true, once: true });
+
+  let last = 0;
+  function frame(t) { const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t; update(dt); draw(); hud(); requestAnimationFrame(frame); }
+  function boot() { resize(); reset(); const f = cars[cars.length - 3]; cam.x = f.x; cam.y = f.y; requestAnimationFrame(frame); }
+  if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(boot); else boot();
+})();
+</script>
