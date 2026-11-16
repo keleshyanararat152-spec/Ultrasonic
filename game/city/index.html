@@ -44,7 +44,9 @@ body { background: var(--sky); color: var(--fg); font-family: var(--font-text); 
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
-.stats { justify-self: start; display: flex; flex-direction: column; gap: 4px; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.stats .me { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; border: 2px solid var(--tuff); flex: none; }
+.stats .col { display: flex; flex-direction: column; gap: 4px; }
+.stats { justify-self: start; display: flex; align-items: center; gap: 10px; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
 .cash { font-size: 18px; font-weight: 700; }
 .stars { letter-spacing: 3px; font-size: 15px; color: var(--muted); }
 .stars b { color: var(--gold); font-weight: 400; }
@@ -105,9 +107,11 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
   <div class="hud">
     <div class="chip stats">
-      <span class="cash" id="cash">0 ֏</span>
-      <span class="stars" id="stars">☆☆☆☆☆</span>
-      <span class="speed" id="speed">ոտքով</span>
+      <div class="col">
+        <span class="cash" id="cash">0 ֏</span>
+        <span class="stars" id="stars">☆☆☆☆☆</span>
+        <span class="speed" id="speed">ոտքով</span>
+      </div>
     </div>
     <div class="side">
       <button class="snd" id="snd" type="button" aria-label="Ձայն">♪</button>
@@ -374,7 +378,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       player.x = c.x; player.y = c.y;
     } else if (playing) {
       if (jm > 0.22) { ix = joy.dx; iy = joy.dy; }
-      player.a += ix * 2.8 * dt;
+      player.a += ix * 2.8 * dt; idleT = Math.abs(ix) > 0.1 || Math.abs(iy) > 0.1 ? 0 : idleT + dt;
       if (Math.abs(iy) > 0.1) { const s = -iy * (iy < 0 ? 150 : 80); player.x += Math.cos(player.a) * s * dt; player.y += Math.sin(player.a) * s * dt; player.walk += dt * 10; pushOut(player, 7); }
     }
 
@@ -458,7 +462,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
   // ---------- 3D view ----------
   const T = window.THREE, SKY = '#f0d2b6';
-  let renderer = null, scene, cam3, marker, playerMesh, camA = 0, lastDt = 0.016, stamp = 0;
+  let renderer = null, scene, cam3, marker, playerMesh, camA = 0, camO = 0, idleT = 0, lastDt = 0.016, stamp = 0;
   const meshOf = new Map(), ov = $('ov'), octx = ov.getContext('2d');
   const lam = (c, extra) => new T.MeshLambertMaterial(Object.assign({ color: c }, extra || {}));
   const box = (w, h, d, mat, x, y, z) => { const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); return m; };
@@ -521,10 +525,47 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
     marker = new T.Mesh(new T.CylinderGeometry(34, 34, 420, 24, 1, true), new T.MeshBasicMaterial({ color: K.gold, transparent: true, opacity: 0.3, side: T.DoubleSide, depthWrite: false, fog: false }));
     marker.visible = false; scene.add(marker);
-    playerMesh = personMesh('#ffcf4a', 1.25); scene.add(playerMesh);
+    playerMesh = playerModel(); scene.add(playerMesh);
   }
 
   const G = {};
+  function playerModel() { // the walker: grey T-shirt, jeans and a sculpted head (forward is +x)
+    const g = new T.Group(), add = (to, m, x, y, z) => { m.position.set(x, y, z); to.add(m); return m; };
+    const skin = lam('#e2b196'), tee = lam('#9a9c9f'), jeans = lam('#2c3140'), hair = lam('#231d1b'), shoe = lam('#e9e6df');
+    const ball = (r, mat, sx, sy, sz) => { const m = new T.Mesh(new T.SphereGeometry(r, 20, 14), mat); m.scale.set(sx || 1, sy || 1, sz || 1); return m; };
+    for (const z of [-2.1, 2.1]) {
+      add(g, new T.Mesh(new T.BoxGeometry(3.6, 7.5, 3.4), jeans), 0, 4.6, z); add(g, new T.Mesh(new T.BoxGeometry(5, 1.5, 3.4), shoe), 0.7, 0.75, z);
+      add(g, new T.Mesh(new T.BoxGeometry(3.2, 4, 2.6), tee), 0, 14.6, z * 2.75); add(g, new T.Mesh(new T.BoxGeometry(2.6, 5.5, 2.2), skin), 0, 10.2, z * 2.75);
+    }
+    add(g, new T.Mesh(new T.BoxGeometry(4.8, 9, 8.8), tee), 0, 12.6, 0);
+    add(g, new T.Mesh(new T.CylinderGeometry(1.7, 1.9, 2.4, 10), skin), 0, 17.8, 0);
+
+    const h = new T.Group(); h.position.y = 22.4; g.add(h);
+    add(h, ball(3.9, skin, 0.96, 1.12, 0.9), 0, 0.4, 0);            // skull
+    add(h, ball(3.1, skin, 0.98, 0.95, 0.9), 0.5, -1.9, 0);         // jaw and chin
+    for (const z of [-1, 1]) {
+      add(h, ball(0.95, skin, 0.55, 1, 0.5), -0.2, -0.1, z * 3.55); // ears
+      add(h, ball(0.62, lam('#f6f1ea'), 0.6, 0.62, 1.05), 3.2, 0.55, z * 1.45);   // eye
+      add(h, ball(0.34, lam('#5a3a22'), 0.6, 1, 1), 3.5, 0.52, z * 1.45);         // brown iris
+      add(h, ball(0.17, lam('#0d0b0a'), 0.6, 1, 1), 3.62, 0.52, z * 1.45);        // pupil
+      add(h, ball(0.75, skin, 0.5, 0.42, 1.25), 3.3, 1.02, z * 1.45);             // upper lid
+      const brow = add(h, new T.Mesh(new T.BoxGeometry(0.75, 0.5, 2.1), hair), 3.4, 1.62, z * 1.5); brow.rotation.x = z * 0.14; brow.rotation.y = -z * 0.2; // thick straight brows
+      add(h, ball(0.3, skin, 1, 0.8, 1), 3.55, -1.2, z * 0.42);    // nostrils
+    }
+    const bridge = add(h, ball(1, skin, 0.55, 1.5, 0.48), 3.42, 0.05, 0); bridge.rotation.z = -0.25;
+    add(h, ball(0.58, skin, 1.05, 0.85, 1), 3.9, -0.95, 0);        // nose tip
+    add(h, ball(0.9, lam('#b9716b'), 0.45, 0.26, 1.2), 3.18, -2.3, 0);  // upper lip
+    add(h, ball(0.9, lam('#c98279'), 0.48, 0.3, 1), 3.12, -2.62, 0);   // lower lip
+    add(h, ball(1.1, skin, 0.8, 0.7, 1.4), 2.25, -3.7, 0);         // chin
+    // hair: a cap tilted back off the forehead, sides, and a fringe swept to one side
+    const cap = add(h, new T.Mesh(new T.SphereGeometry(4.2, 24, 12, 0, 6.2832, 0, 1.45), hair), -0.2, 0.75, 0); cap.scale.set(1, 1.12, 0.96); cap.rotation.z = 0.6;
+    const fringe = add(h, ball(2.5, hair, 1.05, 0.55, 1.5), 1.9, 3.75, 0.25); fringe.rotation.x = 0.16; fringe.rotation.z = -0.18;
+    add(h, ball(1.6, hair, 1, 0.55, 1), 2.7, 3.2, -1.9);
+    for (const z of [-1, 1]) add(h, ball(1.5, hair, 1.3, 1.05, 0.4), -0.2, 2.1, z * 3.4);
+    g.userData.head = h;
+    g.scale.setScalar(1.25); return g;
+  }
+
   function carMesh(c) {
     if (!G.body) {
       G.body = new T.BoxGeometry(38, 8, 20); G.cabin = new T.BoxGeometry(17, 7, 17); G.wheel = new T.BoxGeometry(8, 7, 3); G.lamp = new T.BoxGeometry(1.5, 3, 5); G.bar = new T.BoxGeometry(4, 2.5, 6);
@@ -581,10 +622,13 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (play) {
       const t = target(), spd = player.car ? Math.abs(player.car.v) : 0;
       camA += ad((player.car ? player.car.a : player.a) - camA) * Math.min(1, lastDt * 3.6);
-      const far = W < H ? 1.45 : 1, dist = (player.car ? 80 + spd * 0.07 : 66) * far, p = { x: t.x - Math.cos(camA) * dist, y: t.y - Math.sin(camA) * dist };
+      // standing still on foot: the camera walks round to the front so you can see the face
+      const look = !player.car && idleT > 1.5;
+      if (look) camO += lastDt * 0.7; else camO += ad(-camO) * Math.min(1, lastDt * 6);
+      const ang = camA + camO, far = W < H ? 1.45 : 1, dist = (player.car ? 80 + spd * 0.07 : look ? 50 : 66) * far, p = { x: t.x - Math.cos(ang) * dist, y: t.y - Math.sin(ang) * dist };
       pushOut(p, 9);
-      cam3.position.set(p.x, (player.car ? 36 : 32) * far, p.y);
-      cam3.lookAt(t.x + Math.cos(camA) * 45, 9, t.y + Math.sin(camA) * 45);
+      cam3.position.set(p.x, (player.car ? 36 : look ? 30 : 32) * far, p.y);
+      if (Math.abs(ad(camO)) > 0.05) cam3.lookAt(t.x, 20, t.y); else cam3.lookAt(t.x + Math.cos(camA) * 45, 9, t.y + Math.sin(camA) * 45);
       const fov = 60 + spd * 0.035; if (Math.abs(cam3.fov - fov) > 0.2) { cam3.fov = fov; cam3.updateProjectionMatrix(); }
     } else {
       const a = time * 0.07, cx = ic(3) + 260, cy = ic(3) + 260;
@@ -595,7 +639,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     // overlay: compass arrow to the job, touch stick
     octx.setTransform(dpr, 0, 0, dpr, 0, 0); octx.clearRect(0, 0, W, H);
     if (play && job) {
-      const t = target(), dx = job.p.x - t.x, dy = job.p.y - t.y, rel = ad(Math.atan2(dy, dx) - camA), col = job.stage === 'pickup' ? K.gold : K.go;
+      const t = target(), dx = job.p.x - t.x, dy = job.p.y - t.y, rel = ad(Math.atan2(dy, dx) - camA - camO), col = job.stage === 'pickup' ? K.gold : K.go;
       const ax = W / 2, ay = Math.max(150, H * 0.22);
       octx.save(); octx.translate(ax, ay); octx.rotate(rel);
       octx.fillStyle = col; octx.strokeStyle = K.ink; octx.lineWidth = 2; octx.beginPath(); octx.moveTo(0, -20); octx.lineTo(13, 12); octx.lineTo(0, 5); octx.lineTo(-13, 12); octx.closePath(); octx.fill(); octx.stroke(); octx.restore();
@@ -615,7 +659,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (play) {
       if (job) dot(job.p.x, job.p.y, job.stage === 'pickup' ? K.gold : K.go, 8);
       for (const c of cars) if (c.kind === 'police' && c.chase) dot(c.x, c.y, flash ? K.alert : K.cop, 6);
-      const t = target(); mctx.save(); mctx.translate(t.x * s, t.y * s); mctx.rotate(camA); mctx.fillStyle = K.fg; mctx.beginPath(); mctx.moveTo(12, 0); mctx.lineTo(-8, -8); mctx.lineTo(-8, 8); mctx.closePath(); mctx.fill(); mctx.restore();
+      const t = target(); mctx.save(); mctx.translate(t.x * s, t.y * s); mctx.rotate(player.car ? player.car.a : player.a); mctx.fillStyle = K.fg; mctx.beginPath(); mctx.moveTo(12, 0); mctx.lineTo(-8, -8); mctx.lineTo(-8, 8); mctx.closePath(); mctx.fill(); mctx.restore();
     }
   }
 
@@ -678,7 +722,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   $('startBtn').addEventListener('click', (e) => {
     initAudio(); reset(); mode = 'play'; $('menu').hidden = true;
     if (touch) $('pad').hidden = false;
-    camA = player.a; $('startBtn').blur(); toast('Նստիր մեքենան ու գնա դեղին օղակի մոտ');
+    camA = player.a; camO = 0; idleT = 0; $('startBtn').blur(); toast('Նստիր մեքենան ու գնա դեղին օղակի մոտ');
   });
   window.addEventListener('touchstart', useTouch, { passive: true, once: true });
 
