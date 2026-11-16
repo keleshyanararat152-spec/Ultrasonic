@@ -52,7 +52,7 @@ body { background: var(--sky); color: var(--fg); font-family: var(--font-text); 
 .stars b { color: var(--gold); font-weight: 400; }
 .stars.hot b { color: var(--alert); }
 .speed { font-size: 12px; color: var(--muted); }
-.side { display: flex; gap: 8px; align-items: flex-start; }
+.side { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; }
 #map { width: 92px; height: 92px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); display: block; }
 .snd { pointer-events: auto; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font: 600 15px var(--font-data); cursor: pointer; }
 .snd.face { width: auto; padding: 0 10px; font: 600 13px var(--font-text); }
@@ -116,6 +116,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       </div>
     </div>
     <div class="side">
+      <button class="snd" id="pauseBtn" type="button" aria-label="Դադար">Ⅱ</button>
       <button class="snd face" id="faceBtn" type="button">Դեմք</button>
       <button class="snd" id="snd" type="button" aria-label="Ձայն">♪</button>
       <canvas id="map" width="184" height="184" aria-label="Քարտեզ"></canvas>
@@ -131,6 +132,14 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     <button type="button" id="btnAct" class="act">Մեքենա</button>
   </div>
 
+  <div class="overlay" id="pause" hidden>
+    <div class="card">
+      <h1><span>Դադար</span></h1>
+      <p>Խաղը կանգնած է։ Փողդ, աստղերն ու պատվերը մնում են տեղում։</p>
+      <button class="go" id="resumeBtn" type="button">Շարունակել</button>
+    </div>
+  </div>
+
   <div class="overlay" id="menu">
     <div class="card">
       <h1><span>Վարդագույն</span> քաղաք</h1>
@@ -140,6 +149,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
         <li><b>Նստել կամ իջնել՝</b> E</li>
         <li><b>Ձեռքի արգելակ՝</b> Space</li>
         <li><b>Դեմքը առջևից տեսնել՝</b> C կամ «Դեմք» կոճակը</li>
+        <li><b>Դադար՝</b> P, Esc կամ Ⅱ կոճակը</li>
         <li><b>Դեղին օղակում</b> վերցնում ես պատվերը, <b>կանաչում</b> հասցնում ես, քանի դեռ ժամանակը չի լրացել</li>
         <li><b>Աստղեր՝</b> վթարներն ու ուրիշի մեքենան վերցնելը կանչում են ոստիկաններին։ Կորիր նրանց աչքից, ու աստղերը կմարեն</li>
       </ul>
@@ -466,17 +476,28 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
   // ---------- 3D view ----------
   const T = window.THREE, SKY = '#f0d2b6';
-  let renderer = null, scene, cam3, marker, playerMesh, camA = 0, camO = 0, idleT = 0, faceCam = false, lastDt = 0.016, stamp = 0;
+  let renderer = null, scene, cam3, marker, playerMesh, sun, sky, sunDisc, paused = false, camA = 0, camO = 0, idleT = 0, faceCam = false, lastDt = 0.016, stamp = 0;
   const meshOf = new Map(), ov = $('ov'), octx = ov.getContext('2d');
   const lam = (c, extra) => new T.MeshLambertMaterial(Object.assign({ color: c }, extra || {}));
   const box = (w, h, d, mat, x, y, z) => { const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); return m; };
 
   function init3d() {
     renderer = new T.WebGLRenderer({ canvas: cv, antialias: true });
+    const lite = window.matchMedia('(pointer: coarse)').matches;
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
     scene = new T.Scene(); scene.background = new T.Color(SKY); scene.fog = new T.Fog(SKY, 500, 2600);
-    cam3 = new T.PerspectiveCamera(60, 1, 2, 5000); cam3.add(new T.PointLight(0xfff4e8, 0.45, 160)); scene.add(cam3);
-    scene.add(new T.HemisphereLight(0xfff1e0, 0x8a7f78, 0.72));
-    const sun = new T.DirectionalLight(0xffe0bd, 0.7); sun.position.set(-0.55, 1, -0.3); scene.add(sun);
+    cam3 = new T.PerspectiveCamera(60, 1, 2, 5000); cam3.add(new T.PointLight(0xfff4e8, 0.22, 160)); scene.add(cam3);
+    scene.add(new T.HemisphereLight(0xdfe9ff, 0x9a8474, 0.62));
+    sun = new T.DirectionalLight(0xffdcb0, 0.9); sun.castShadow = true; scene.add(sun); scene.add(sun.target);
+    sun.shadow.mapSize.set(lite ? 1024 : 2048, lite ? 1024 : 2048); sun.shadow.bias = -0.0012; sun.shadow.normalBias = 1.2;
+    const sc = sun.shadow.camera; sc.left = -430; sc.right = 430; sc.top = 430; sc.bottom = -430; sc.near = 10; sc.far = 1800; sc.updateProjectionMatrix();
+    // sky: blue overhead fading to the warm haze the fog uses, plus a low sun
+    const skC = document.createElement('canvas'); skC.width = 4; skC.height = 256; const sg = skC.getContext('2d'), grad = sg.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#5f9bd1'); grad.addColorStop(0.3, '#a9cbe6'); grad.addColorStop(0.47, SKY); grad.addColorStop(1, SKY); sg.fillStyle = grad; sg.fillRect(0, 0, 4, 256);
+    sky = new T.Mesh(new T.SphereGeometry(4200, 24, 16), new T.MeshBasicMaterial({ map: new T.CanvasTexture(skC), side: T.BackSide, fog: false, depthWrite: false })); scene.add(sky);
+    const sdC = document.createElement('canvas'); sdC.width = sdC.height = 128; const dg = sdC.getContext('2d'), rg = dg.createRadialGradient(64, 64, 4, 64, 64, 64);
+    rg.addColorStop(0, 'rgba(255,250,235,1)'); rg.addColorStop(0.18, 'rgba(255,236,190,0.95)'); rg.addColorStop(0.4, 'rgba(255,214,150,0.25)'); rg.addColorStop(1, 'rgba(255,214,150,0)'); dg.fillStyle = rg; dg.fillRect(0, 0, 128, 128);
+    sunDisc = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(sdC), fog: false, depthWrite: false, transparent: true })); sunDisc.scale.set(900, 900, 1); scene.add(sunDisc);
     const base = new T.Mesh(new T.PlaneGeometry(14000, 14000), lam(K.hills)); base.rotation.x = -Math.PI / 2; base.position.set(WS / 2, -1, WS / 2); scene.add(base);
 
     // streets, zebra stripes, parks and the square are painted once onto the ground
@@ -494,10 +515,22 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       for (let s = 0; s < 6; s++) { const o = 8 + s * 19; g.fillRect(X - 22, Y + o, 16, 9); g.fillRect(X + 126, Y + o, 16, 9); g.fillRect(X + o, Y - 22, 9, 16); g.fillRect(X + o, Y + 126, 9, 16); }
       g.globalAlpha = 1;
     }
+    for (let n = 0; n < 26000; n++) { g.fillStyle = n % 2 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)'; g.fillRect(Math.random() * WS, Math.random() * WS, 2 + Math.random() * 3, 2 + Math.random() * 3); }
     const trunkG = new T.CylinderGeometry(2.5, 3.2, 18, 6), crownG = new T.IcosahedronGeometry(1, 0), trunkM = lam('#6b4a35'), crownM = lam(K.tree, { flatShading: true });
-    const winC = document.createElement('canvas'); winC.width = winC.height = 64; const wg = winC.getContext('2d');
-    wg.fillStyle = '#fff'; wg.fillRect(0, 0, 64, 64); wg.fillStyle = '#4a525e'; wg.fillRect(18, 14, 28, 36); wg.fillStyle = '#7f8b99'; wg.fillRect(18, 14, 28, 8);
-    const winT = new T.CanvasTexture(winC); winT.wrapS = winT.wrapT = T.RepeatWrapping;
+    const winC = document.createElement('canvas'); winC.width = winC.height = 256; const wg = winC.getContext('2d');
+    wg.fillStyle = '#fff'; wg.fillRect(0, 0, 256, 256);
+    for (let n = 0; n < 900; n++) { wg.fillStyle = 'rgba(0,0,0,' + (0.02 + srand() * 0.05) + ')'; wg.fillRect(srand() * 256, srand() * 256, 6 + srand() * 14, 2); }   // stone courses
+    for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) {
+      const X = a * 64, Y = b * 64, r = srand();
+      wg.fillStyle = '#e9e2d6'; wg.fillRect(X + 15, Y + 11, 34, 42);                                    // frame
+      const gl = wg.createLinearGradient(0, Y + 14, 0, Y + 50); gl.addColorStop(0, r < 0.18 ? '#f2d08a' : '#6f8296'); gl.addColorStop(1, r < 0.18 ? '#d9a95c' : '#2c3644');
+      wg.fillStyle = gl; wg.fillRect(X + 18, Y + 14, 28, 36);
+      if (r > 0.7) { wg.fillStyle = 'rgba(235,228,214,0.55)'; wg.fillRect(X + 18, Y + 14, 28, 9 + srand() * 14); }   // blind
+      wg.fillStyle = '#e9e2d6'; wg.fillRect(X + 31, Y + 14, 2, 36); wg.fillRect(X + 18, Y + 30, 28, 2);
+      wg.fillStyle = 'rgba(0,0,0,0.28)'; wg.fillRect(X + 13, Y + 53, 38, 3);                          // sill shadow
+    }
+    const winT = new T.CanvasTexture(winC); winT.wrapS = winT.wrapT = T.RepeatWrapping; winT.anisotropy = 4;
+    const trimM = lam('#6d5b55'), roofM = lam('#8f8a86'), unitG = new T.BoxGeometry(1, 1, 1);
     const mats = {};
     for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
       const b = blocks[i][j], ox = i * CELL + 142, oy = j * CELL + 142;
@@ -505,8 +538,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       if (b.type === 'park') {
         g.fillStyle = K.park; g.fillRect(ox, oy, 356, 356); g.strokeStyle = K.plaza; g.lineWidth = 10; g.beginPath(); g.moveTo(ox, oy + 178); g.quadraticCurveTo(ox + 178, oy + 90, ox + 356, oy + 200); g.stroke();
         for (const t of b.trees) {
-          const tr = new T.Mesh(trunkG, trunkM); tr.position.set(t.x, 9, t.y); scene.add(tr);
-          const cr = new T.Mesh(crownG, crownM); cr.scale.set(t.r, t.r * 1.15, t.r); cr.position.set(t.x, 18 + t.r * 0.8, t.y); cr.rotation.y = t.x; scene.add(cr);
+          const tr = new T.Mesh(trunkG, trunkM); tr.position.set(t.x, 9, t.y); tr.castShadow = true; scene.add(tr);
+          const cr = new T.Mesh(crownG, crownM); cr.scale.set(t.r, t.r * 1.15, t.r); cr.position.set(t.x, 18 + t.r * 0.8, t.y); cr.rotation.y = t.x; cr.castShadow = true; scene.add(cr);
         }
       } else if (b.type === 'plaza') {
         g.fillStyle = K.plaza; g.fillRect(ox, oy, 356, 356); g.strokeStyle = K.tuff; g.lineWidth = 3;
@@ -519,13 +552,30 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
         for (let v = 0; v < 24; v++) {
           const f = Math.floor(v / 4);
           if (f === 2 || f === 3) uv.setXY(v, 0.03, 0.03);
-          else uv.setXY(v, uv.getX(v) * Math.max(1, Math.round((f < 2 ? r.h : r.w) / 36)), uv.getY(v) * Math.max(1, Math.round(h / 34)));
+          else uv.setXY(v, uv.getX(v) * Math.max(1, Math.round((f < 2 ? r.h : r.w) / 36)) / 4, uv.getY(v) * Math.max(1, Math.round(h / 34)) / 4);
         }
-        const m = new T.Mesh(geo, mats[r.c] || (mats[r.c] = lam(r.c, { map: winT }))); m.position.set(r.x + r.w / 2, h / 2, r.y + r.h / 2); scene.add(m);
+        const m = new T.Mesh(geo, mats[r.c] || (mats[r.c] = lam(r.c, { map: winT }))); m.position.set(r.x + r.w / 2, h / 2, r.y + r.h / 2); m.castShadow = m.receiveShadow = true; scene.add(m);
+        const cx = r.x + r.w / 2, cz = r.y + r.h / 2, extra = (sx, sy, sz, mat, x, y, z) => { const e = new T.Mesh(unitG, mat); e.scale.set(sx, sy, sz); e.position.set(x, y, z); e.castShadow = e.receiveShadow = true; scene.add(e); };
+        extra(r.w + 3, 3.5, r.h + 3, trimM, cx, h + 0.5, cz); extra(r.w - 4, 1, r.h - 4, roofM, cx, h + 2.4, cz);       // cornice and roof deck
+        extra(r.w + 1.5, 7, r.h + 1.5, trimM, cx, 3.5, cz);                                                           // plinth
+        if (r.w > 80 && r.h > 80) extra(22 + r.d * 20, 12, 18, trimM, cx + (r.d - 0.5) * r.w * 0.4, h + 8, cz + (0.5 - r.d) * r.h * 0.4);   // stair head on the roof
       }
     }
     const tex = new T.CanvasTexture(gc); tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    const ground = new T.Mesh(new T.PlaneGeometry(WS, WS), new T.MeshBasicMaterial({ map: tex })); ground.rotation.x = -Math.PI / 2; ground.position.set(WS / 2, 0, WS / 2); scene.add(ground);
+    const ground = new T.Mesh(new T.PlaneGeometry(WS, WS), lam('#c6c6c6', { map: tex })); ground.rotation.x = -Math.PI / 2; ground.position.set(WS / 2, 0, WS / 2); ground.receiveShadow = true; scene.add(ground);
+
+    const spots = [], lamps = [], M4 = new T.Matrix4(), Q = new T.Quaternion(), V = new T.Vector3(), SC = new T.Vector3();
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const bx = i * CELL + 120, by = j * CELL + 120;
+      for (const t of [100, 200, 300]) { spots.push([bx + t, by + 6], [bx + t, by + 394], [bx + 6, by + t], [bx + 394, by + t]); }
+      lamps.push([bx + 7, by + 7], [bx + 393, by + 7], [bx + 7, by + 393], [bx + 393, by + 393]);
+    }
+    const inst = (geo, mat, list, fn) => { const m = new T.InstancedMesh(geo, mat, list.length); list.forEach((p, n) => { fn(p, n); M4.compose(V, Q, SC); m.setMatrixAt(n, M4); }); m.castShadow = true; scene.add(m); return m; };
+    const sizes = spots.map(() => 9 + srand() * 4);
+    inst(new T.CylinderGeometry(1.3, 2, 44, 6), trunkM, spots, (p) => { V.set(p[0], 22, p[1]); SC.set(1, 1, 1); });
+    inst(new T.IcosahedronGeometry(1, 1), lam('#4f7d45', { flatShading: true }), spots, (p, n) => { V.set(p[0], 42 + sizes[n], p[1]); SC.set(sizes[n] * 1.25, sizes[n], sizes[n] * 1.25); });
+    inst(new T.CylinderGeometry(0.7, 1, 46, 6), lam('#2f3238'), lamps, (p) => { V.set(p[0], 23, p[1]); SC.set(1, 1, 1); });
+    inst(new T.SphereGeometry(2.4, 10, 8), new T.MeshBasicMaterial({ color: '#fff1c9' }), lamps, (p) => { V.set(p[0], 47, p[1]); SC.set(1, 1, 1); }).castShadow = false;
 
     marker = new T.Mesh(new T.CylinderGeometry(34, 34, 420, 24, 1, true), new T.MeshBasicMaterial({ color: K.gold, transparent: true, opacity: 0.3, side: T.DoubleSide, depthWrite: false, fog: false }));
     marker.visible = false; scene.add(marker);
@@ -591,30 +641,36 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const torso = add(cyl(4.6, 4.1, 9.2, tee), 0, 12.9, 0); torso.scale.set(0.58, 1, 1);
     add(cyl(2.1, 2.3, 2.6, skin), 0, 18, 0);
     const head = sculptHead(); head.scale.setScalar(0.8); head.position.y = 22.9; g.add(head);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     g.scale.setScalar(1.25); return g;
   }
 
   function carMesh(c) {
-    if (!G.body) {
-      G.body = new T.BoxGeometry(38, 8, 20); G.cabin = new T.BoxGeometry(17, 7, 17); G.wheel = new T.BoxGeometry(8, 7, 3); G.lamp = new T.BoxGeometry(1.5, 3, 5); G.bar = new T.BoxGeometry(4, 2.5, 6);
-      G.shadow = new T.PlaneGeometry(46, 26); G.dark = lam('#1c2028'); G.tyre = lam('#15161a'); G.head = new T.MeshBasicMaterial({ color: '#fff3c4' }); G.tail = new T.MeshBasicMaterial({ color: '#d0392b' });
-      G.shadowM = new T.MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0.25, depthWrite: false });
+    if (!G.hull) {
+      const prof = (pts, depth, bevel) => { const s = new T.Shape(); pts.forEach((p, n) => n ? s.lineTo(p[0], p[1]) : s.moveTo(p[0], p[1])); const e = new T.ExtrudeGeometry(s, { depth: depth, bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2 }); e.translate(0, 0, -depth / 2); return e; };
+      G.hull = prof([[-19, 3.5], [-19.4, 8.5], [-17, 10.6], [-9, 11.2], [12, 11.2], [18.2, 9.8], [19.4, 7], [19, 3.5]], 18.6, 1);   // side silhouette of the body
+      G.glass = prof([[-9.6, 11], [-5.2, 16.2], [6.6, 16.2], [12.6, 11]], 18, 0);                                              // cabin, all glass
+      G.roof = new T.BoxGeometry(12.6, 0.9, 18.6); G.pillar = new T.BoxGeometry(1.1, 5.4, 18.4);
+      G.wheel = new T.CylinderGeometry(4, 4, 3.2, 14); G.wheel.rotateX(Math.PI / 2); G.hub = new T.CylinderGeometry(2, 2, 3.5, 10); G.hub.rotateX(Math.PI / 2);
+      G.lamp = new T.BoxGeometry(1.2, 2.4, 4.6); G.bar = new T.BoxGeometry(4, 2.2, 6); G.bumper = new T.BoxGeometry(1.6, 2.2, 20.4);
+      G.glassM = new T.MeshLambertMaterial({ color: '#27323f', emissive: '#0b1016' }); G.tyre = lam('#15161a'); G.hubM = lam('#b9bcc2'); G.trim = lam('#2a2c31');
+      G.head = new T.MeshBasicMaterial({ color: '#fff3c4' }); G.tail = new T.MeshBasicMaterial({ color: '#d0392b' });
     }
-    const g = new T.Group(), add = (geo, mat, x, y, z) => { const m = new T.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
-    add(G.body, lam(c.color), 0, 8, 0); add(G.cabin, G.dark, -2, 15.5, 0);
-    for (const sx of [-12, 12]) for (const sz of [-10, 10]) add(G.wheel, G.tyre, sx, 3.5, sz);
-    for (const sz of [-6.5, 6.5]) { add(G.lamp, G.head, 19.2, 8.5, sz); add(G.lamp, G.tail, -19.2, 8.5, sz); }
-    const sh = add(G.shadow, G.shadowM, 0, 0.5, 0); sh.rotation.x = -Math.PI / 2;
+    const g = new T.Group(), paint = lam(c.color), add = (geo, mat, x, y, z) => { const m = new T.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
+    add(G.hull, paint, 0, 0, 0); add(G.glass, G.glassM, 0, 0, 0); add(G.roof, paint, 0.7, 16.5, 0); add(G.pillar, paint, 0.7, 13.6, 0);
+    add(G.bumper, G.trim, 19.6, 5, 0); add(G.bumper, G.trim, -19.6, 5, 0);
+    for (const sx of [-12, 12.5]) for (const sz of [-9.4, 9.4]) { add(G.wheel, G.tyre, sx, 4, sz); add(G.hub, G.hubM, sx, 4, sz); }
+    for (const sz of [-6.8, 6.8]) { add(G.lamp, G.head, 19.9, 8, sz).castShadow = false; add(G.lamp, G.tail, -19.9, 8.4, sz).castShadow = false; }
     if (c.kind === 'police') {
-      add(new T.BoxGeometry(6, 8.3, 20.3), lam(K.cop), -8, 8, 0);
-      g.userData.l1 = add(G.bar, new T.MeshBasicMaterial({ color: '#9aa3ad' }), -2, 20.3, -4); g.userData.l2 = add(G.bar, new T.MeshBasicMaterial({ color: '#9aa3ad' }), -2, 20.3, 4);
+      add(new T.BoxGeometry(7, 5.5, 20.9), lam(K.cop), -1, 7.6, 0);
+      g.userData.l1 = add(G.bar, new T.MeshBasicMaterial({ color: '#9aa3ad' }), 0.7, 18, -4); g.userData.l2 = add(G.bar, new T.MeshBasicMaterial({ color: '#9aa3ad' }), 0.7, 18, 4);
     }
     return g;
   }
   function personMesh(color, scale) {
     if (!G.torso) { G.torso = new T.BoxGeometry(4.5, 11, 6); G.headG = new T.SphereGeometry(3, 8, 6); G.skin = lam('#f0c9a4'); }
     const g = new T.Group(), b = new T.Mesh(G.torso, lam(color)), h = new T.Mesh(G.headG, G.skin);
-    b.position.y = 6.5; h.position.y = 15; g.add(b); g.add(h); g.scale.setScalar(scale || 1); return g;
+    b.position.y = 6.5; h.position.y = 15; b.castShadow = h.castShadow = true; g.add(b); g.add(h); g.scale.setScalar(scale || 1); return g;
   }
 
   function resize() {
@@ -663,6 +719,9 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       const a = time * 0.07, cx = ic(3) + 260, cy = ic(3) + 260;
       cam3.position.set(cx + Math.cos(a) * 820, 430, cy + Math.sin(a) * 820); cam3.lookAt(cx, 0, cy);
     }
+    const fx = play ? player.x : ic(3) + 260, fz = play ? player.y : ic(3) + 260;
+    sun.position.set(fx - 0.6 * 760, 0.62 * 760, fz - 0.45 * 760); sun.target.position.set(fx, 0, fz); sun.target.updateMatrixWorld();
+    sky.position.copy(cam3.position); sunDisc.position.set(cam3.position.x - 0.6 * 3600, cam3.position.y + 0.62 * 3600, cam3.position.z - 0.45 * 3600);
     renderer.render(scene, cam3);
 
     // overlay: compass arrow to the job, touch stick
@@ -723,6 +782,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'hand' };
   window.addEventListener('keydown', (e) => {
     if (mode !== 'play') return;
+    if ((e.code === 'KeyP' || e.code === 'Escape') && !e.repeat) { setPause(!paused); e.preventDefault(); return; }
+    if (paused) return;
     if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
     if ((e.code === 'KeyE' || e.code === 'KeyF') && !e.repeat) enterExit();
     if (e.code === 'KeyC' && !e.repeat) toggleFace();
@@ -734,7 +795,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   cv.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse') return;
     useTouch(); e.preventDefault();
-    if (mode !== 'play' || joy.id !== null) return;
+    if (mode !== 'play' || paused || joy.id !== null) return;
     const r = cv.getBoundingClientRect(); joy.id = e.pointerId; joy.ox = e.clientX - r.left; joy.oy = e.clientY - r.top; joy.dx = joy.dy = 0;
   });
   cv.addEventListener('pointermove', (e) => {
@@ -748,6 +809,16 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   const bb = $('btnBrake');
   bb.addEventListener('pointerdown', (e) => { padBrake = true; e.preventDefault(); });
   ['pointerup', 'pointercancel', 'pointerleave'].forEach((n) => bb.addEventListener(n, () => { padBrake = false; }));
+  function setPause(v) {
+    if (mode !== 'play' || paused === v) return;
+    paused = v; $('pause').hidden = !v; $('pauseBtn').textContent = v ? '▶' : 'Ⅱ';
+    for (const k in keys) keys[k] = false; joy.id = null; joy.dx = joy.dy = 0; padBrake = false;
+    if (actx) master.gain.setTargetAtTime(v || !soundOn ? 0 : 1, actx.currentTime, 0.03);
+    if (v) $('resumeBtn').focus(); else $('resumeBtn').blur();
+  }
+  $('pauseBtn').addEventListener('click', () => { setPause(!paused); $('pauseBtn').blur(); });
+  $('resumeBtn').addEventListener('click', () => setPause(false));
+  document.addEventListener('visibilitychange', () => { if (document.hidden) setPause(true); });
   function toggleFace() { faceCam = !faceCam; $('faceBtn').classList.toggle('on', faceCam); }
   $('faceBtn').addEventListener('click', () => { toggleFace(); $('faceBtn').blur(); });
   $('snd').addEventListener('click', () => { soundOn = !soundOn; $('snd').classList.toggle('off', !soundOn); });
@@ -759,7 +830,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   window.addEventListener('touchstart', useTouch, { passive: true, once: true });
 
   let last = 0;
-  function frame(t) { const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t; lastDt = dt; update(dt); draw(); hud(); requestAnimationFrame(frame); }
+  function frame(t) { const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t; lastDt = dt; if (!paused) update(dt); draw(); hud(); requestAnimationFrame(frame); }
   function boot() {
     try { init3d(); } catch (e) { renderer = null; }
     if (!renderer) { $('startBtn').disabled = true; $('startBtn').textContent = 'Այս սարքում 3D-ն չի աշխատում'; }
