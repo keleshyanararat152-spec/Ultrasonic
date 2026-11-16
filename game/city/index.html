@@ -167,6 +167,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
         <button class="go" id="startBtn" type="button">Սկսել քաղաքից</button>
         <button class="go" id="clubStartBtn" type="button" style="background:#fa4e9d;color:#170c16">Սկսել ակումբից</button>
       </div>
+      <p id="saveRow" hidden style="font-size:13px;color:var(--muted)"><span id="saveText"></span> <button id="wipeBtn" type="button" style="margin-left:8px;background:none;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:4px 10px;font:600 12px var(--font-text);cursor:pointer">Սկսել զրոյից</button></p>
     </div>
   </div>
 </div>
@@ -1528,6 +1529,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   function hud() {
     const play = mode === 'play';
     put('cash', money(cash));
+    if (play && (cash !== savedCash || vipTable !== savedTable) && time - saveT > 1) { saveT = time; writeSave(); }
     const n = Math.ceil(heat), key = 's' + n;
     if (cache.stars !== key) { cache.stars = key; $('stars').innerHTML = '<b>' + '★'.repeat(n) + '</b>' + '☆'.repeat(5 - n); $('stars').classList.toggle('hot', n > 0); }
     put('speed', inside ? (drinkT > 0 ? 'խմիչք ×2 · ' + Math.ceil(drinkT) + ' վ' : vip ? 'VIP սրահ' : 'ակումբում') : player.car ? Math.round(Math.abs(player.car.v) * 0.42) + ' կմ/ժ' : 'ոտքով');
@@ -1600,8 +1602,14 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   function toggleFace() { faceCam = !faceCam; $('faceBtn').classList.toggle('on', faceCam); }
   $('faceBtn').addEventListener('click', () => { toggleFace(); $('faceBtn').blur(); });
   $('snd').addEventListener('click', () => { soundOn = !soundOn; $('snd').classList.toggle('off', !soundOn); });
+  // ---------- saving: money and the rented VIP table stay in this browser between visits ----------
+  const SAVE_KEY = 'pinkCitySave'; let savedCash = -1, savedTable = false, saveT = 0;
+  function readSave() { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return d && typeof d.cash === 'number' ? d : null; } catch (e) { return null; } }
+  function writeSave() { savedCash = cash; savedTable = vipTable; try { localStorage.setItem(SAVE_KEY, JSON.stringify({ cash: Math.round(cash), vipTable: vipTable })); } catch (e) {} }
+  function showSave() { const d = readSave(), has = !!d && (d.cash > 0 || d.vipTable); $('saveRow').hidden = !has; if (has) $('saveText').textContent = 'Պահպանված է՝ ' + money(d.cash) + (d.vipTable ? ' · VIP սեղան' : ''); }
   function startGame(startAtClub) {
     initAudio(); reset(); inside = !!startAtClub; vip = false; clubArm = !startAtClub; combo = 0; drinkT = 0; vipTable = false; seqT = 0;
+    const sv = readSave(); if (sv) { cash = sv.cash; vipTable = !!sv.vipTable; } savedCash = cash; savedTable = vipTable;
     mode = 'play'; $('menu').hidden = true;
     if (touch) $('pad').hidden = false;
     if (startAtClub) {
@@ -1614,6 +1622,9 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   }
   $('startBtn').addEventListener('click', () => startGame(false));
   $('clubStartBtn').addEventListener('click', () => startGame(true));
+  $('wipeBtn').addEventListener('click', () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} showSave(); });
+  window.addEventListener('pagehide', () => { if (mode === 'play') writeSave(); });
+  showSave();
   window.addEventListener('touchstart', useTouch, { passive: true, once: true });
 
   let last = 0;
