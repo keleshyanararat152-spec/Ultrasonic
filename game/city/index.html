@@ -1022,17 +1022,22 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     for (const c of [0xff4fa3, 0x35d6e6, 0xffcf4a]) { const l = new T.PointLight(c, 0.65, 300); scene.add(l); club.lights.push(l); }
     clubExtras();
   }
-  // ---------- ready-made people: Microsoft Rocketbox avatars (MIT licence), loaded from models/*.glb ----------
+  // ---------- ready-made people: Microsoft Rocketbox avatars (MIT licence), loaded from models/*.txt ----------
   // The figures above stay as the fallback; once these load, everyone is swapped for a textured, skinned model driven by the same poses.
   const AV = { src: {}, men: ['m02', 'm04', 'm06', 'm07', 'm08', 'm10', 'm12', 'm16'], women: ['f01', 'f02', 'f05', 'f07', 'f08', 'f13', 'f15', 'f17'], extra: ['m03', 'm17'], ready: false, wi: 0, mi: 0, K: 22.3 / 1.8 };
   const AVM = new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), -Math.PI / 2), AVMi = AVM.clone().invert(), _aq = new T.Quaternion();
   function loadAvatars() {
     if (!T.GLTFLoader || !T.SkeletonUtils || location.protocol === 'file:') return;
     const all = AV.men.concat(AV.women, AV.extra), loader = new T.GLTFLoader(); let left = all.length, failed = false;
-    all.forEach((name) => loader.load('models/' + name + '.glb', (g) => {
+    const got = (name, g) => {
       g.scene.traverse((o) => { if (o.isMesh) { const m = o.material; if (m.map) m.map.encoding = T.LinearEncoding; o.material = new T.MeshLambertMaterial({ map: m.map, skinning: true, alphaTest: m.alphaTest || 0, side: m.side }); o.material.name = m.name; o.castShadow = true; } });
       AV.src[name] = g.scene; if (!--left && !failed) { AV.ready = true; swapPeople(); }
-    }, undefined, () => { failed = true; }));
+    };
+    // each model is a binary glTF stored as base64 text
+    all.forEach((name) => fetch('models/' + name + '.txt').then((r) => { if (!r.ok) throw new Error(name); return r.text(); }).then((txt) => {
+      const bin = atob(txt.trim()), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      loader.parse(buf.buffer, '', (g) => got(name, g), () => { failed = true; });
+    }).catch(() => { failed = true; }));
   }
   function avatarMesh(name) { // a clone with its own skeleton, turned to face +x and sized like the fallback figure
     const inner = T.SkeletonUtils.clone(AV.src[name]), g = new T.Group(), B = {}; inner.rotation.y = Math.PI / 2; inner.scale.setScalar(AV.K); g.add(inner);
