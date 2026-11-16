@@ -533,29 +533,30 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   }
 
   const G = {};
-  function sculptHead() { // one smooth mesh pushed into shape: broad cheeks and jaw, brow ridge, nose, lips; forward is +x
+  function sculptHead() { // one smooth mesh pushed into shape: long face, full cheeks, heavy jaw, brow ridge, nose, wide lips; forward is +x
     const g = (v, m, s) => Math.exp(-((v - m) * (v - m)) / (2 * s * s));
     const ss = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
     const h = new T.Group(), add = (m, x, y, z) => { m.position.set(x, y, z); h.add(m); return m; };
-    const skinM = lam('#e3b099'), hairM = lam('#1d1816');
-    const SK = [1, 0.8, 0.71], ROSY = [1, 0.68, 0.64], LIP = [0.82, 0.48, 0.47], SHADE = [0.8, 0.62, 0.56];
+    const skinM = lam('#f0bfa8'), hairM = lam('#1d1816');
+    const SK = [1, 0.8, 0.71], ROSY = [1, 0.67, 0.63], LIP = [0.86, 0.52, 0.5], SHADE = [0.8, 0.62, 0.56];
 
-    const geo = new T.SphereGeometry(1, 128, 96), pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
+    const geo = new T.SphereGeometry(1, 160, 120), pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
     for (let i = 0; i < pos.count; i++) {
       const dx = pos.getX(i), dy = pos.getY(i), dz = pos.getZ(i);
-      let x = dx * 3.7, y = dy * 4.6, z = dz * 3.5;
-      z *= 1 + 0.14 * Math.sin(Math.PI * clamp((-dy - 0.08) / 0.78, 0, 1));          // full cheeks, wide jaw
-      if (dy < -0.7) y = -3.22 + (y + 3.22) * 0.7;                                   // squared-off chin
+      let x = dx * 3.7, y = dy * 4.9, z = dz * 3.55;
+      z *= 1 + 0.17 * Math.sin(Math.PI * clamp((-dy - 0.05) / 0.8, 0, 1));           // full cheeks, heavy jaw
+      if (dy < -0.72) y = -3.53 + (y + 3.53) * 0.75;                                 // broad rounded chin
       const f = ss(0.1, 0.55, dx), az = Math.abs(z);
-      const sock = g(y, 0.55, 0.36) * g(az, 1.45, 0.62), ck = g(y, -0.8, 0.95) * g(az, 2.0, 0.9);
-      const ul = g(y, -2.2, 0.17) * g(z, 0, 0.8), ll = g(y, -2.66, 0.2) * g(z, 0, 0.66);
-      let b = 0.3 * g(y, 1.3, 0.34) * g(az, 1.3, 1.1) - 0.3 * sock + 0.25 * ck;        // brow ridge, eye sockets, cheeks
-      b += ss(-1.5, -1.05, y) * (1 - ss(0.9, 1.5, y)) * g(z, 0, 0.34) * (0.25 + 1.0 * clamp((1.2 - y) / 2.2, 0, 1)); // nose bridge
-      b += 0.38 * g(y, -0.9, 0.3) * g(z, 0, 0.55) + 0.3 * g(y, -1.0, 0.24) * g(az, 0.62, 0.26);                     // tip and nostrils
-      b += 0.2 * g(y, -2.4, 0.5) * g(z, 0, 1.3) + 0.3 * ul + 0.36 * ll - 0.24 * g(y, -2.43, 0.09) * g(z, 0, 0.95);  // mouth
-      b += 0.32 * g(y, -3.55, 0.45) * g(z, 0, 1.05);                                                                 // chin
+      const sock = g(y, 0.6, 0.36) * g(az, 1.5, 0.62), ck = g(y, -0.9, 1.0) * g(az, 2.05, 0.9);
+      const ul = g(y, -2.5, 0.17) * g(z, 0, 1.15), ll = g(y, -2.98, 0.21) * g(z, 0, 1.0);
+      let b = 0.32 * g(y, 1.3, 0.34) * g(az, 1.3, 1.1) - 0.3 * sock + 0.28 * ck;       // brow ridge, eye sockets, cheeks
+      b += ss(-1.75, -1.3, y) * (1 - ss(0.9, 1.5, y)) * g(z, 0, 0.36) * (0.25 + 1.05 * clamp((1.2 - y) / 2.5, 0, 1)); // long straight nose
+      b += 0.42 * g(y, -1.2, 0.32) * g(z, 0, 0.58) + 0.32 * g(y, -1.32, 0.24) * g(az, 0.7, 0.27);                    // rounded tip, nostrils
+      b += 0.22 * g(y, -2.75, 0.55) * g(z, 0, 1.5) + 0.3 * ul + 0.38 * ll - 0.27 * g(y, -2.74, 0.08) * g(z, 0, 1.3); // wide full mouth
+      b -= 0.1 * g(y, -2.74, 0.2) * g(az, 1.35, 0.2);                                                                // mouth corners
+      b += 0.34 * g(y, -3.95, 0.5) * g(z, 0, 1.15);                                                                  // chin
       pos.setXYZ(i, x * (1 - 0.06 * f) + b * f, y, z);
-      const lipW = ss(0.45, 0.8, (ul + ll) * 1.15) * f, beard = 0.1 * ss(-1.3, -2.3, y) * ss(-0.2, 0.3, dx) + 0.07 * g(y, -1.75, 0.2) * g(z, 0, 1) * f;
+      const lipW = ss(0.42, 0.75, (ul + ll) * 1.15) * f, beard = 0.09 * ss(-1.6, -2.7, y) * ss(-0.2, 0.3, dx) + 0.07 * g(y, -2.0, 0.2) * g(z, 0, 1.1) * f;
       for (let k = 0; k < 3; k++) {
         let c = SK[k]; c += (ROSY[k] - c) * 0.6 * ck * f; c += (SHADE[k] - c) * (0.3 * sock * f + beard); c += (LIP[k] - c) * lipW;
         col[i * 3 + k] = c;
@@ -564,16 +565,16 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     geo.setAttribute('color', new T.BufferAttribute(col, 3)); geo.computeVertexNormals();
     h.add(new T.Mesh(geo, new T.MeshLambertMaterial({ vertexColors: true })));
 
-    // thick dark hair: volume on top, a fringe down over the forehead swept to one side, short at the nape
-    const hg = new T.SphereGeometry(1, 96, 64), hp = hg.attributes.position, hc = new Float32Array(hp.count * 3);
+    // big dark hair: tall on top, wider than the face, a fringe swept across the forehead down to the brows
+    const hg = new T.SphereGeometry(1, 128, 80), hp = hg.attributes.position, hc = new Float32Array(hp.count * 3);
     for (let i = 0; i < hp.count; i++) {
-      const dx = hp.getX(i), dy = hp.getY(i), dz = hp.getZ(i), a = Math.atan2(dz, dx);
-      const line = (dx > 0 ? 0.08 + 0.52 * Math.pow(dx, 0.8) : 0.08 + 0.55 * dx) - 0.2 * dz * Math.max(0, dx);
-      const k = ss(line - 0.06, line + 0.1, dy), strand = Math.sin(a * 16 + dy * 5) * 0.035 + Math.sin(a * 41 + dy * 9) * 0.015;
-      const r = 1 + k * (0.11 + (0.1 + 0.1 * ss(0.1, 0.8, dx)) * Math.max(0, dy) + strand) - (1 - k) * 0.25;
+      const dx = hp.getX(i), dy = hp.getY(i), dz = hp.getZ(i), a = Math.atan2(dz, dx), front = ss(0.1, 0.8, dx);
+      const line = (dx > 0 ? 0.06 + 0.36 * Math.pow(dx, 0.8) : 0.06 + 0.55 * dx) + 0.12 * dz * Math.max(0, dx) - 0.12 * g(dx, 0.25, 0.2);
+      const k = ss(line - 0.06, line + 0.1, dy), strand = Math.sin(a * 9 + dy * 10 + dz * 5) * 0.04 + Math.sin(a * 23 + dy * 17) * 0.018;
+      const r = 1 + k * (0.14 + (0.16 + 0.1 * front) * Math.max(0, dy) + strand) - (1 - k) * 0.25;
       const fr = k * ss(0.3, 0.8, dx) * (1 - ss(line + 0.1, line + 0.5, dy));
-      hp.setXYZ(i, dx * 3.7 * r - 0.15 + 0.45 * fr, dy * 4.6 * r + 0.1 - 0.25 * fr, dz * 3.5 * r * 1.06);
-      const sh = 0.75 + strand * 7; hc[i * 3] = 0.15 * sh; hc[i * 3 + 1] = 0.12 * sh; hc[i * 3 + 2] = 0.11 * sh;
+      hp.setXYZ(i, dx * 3.7 * r - 0.15 + 0.5 * fr, dy * 4.9 * r + 0.1 - 0.25 * fr, dz * 3.55 * r * 1.12);
+      const sh = 0.8 + strand * 7; hc[i * 3] = 0.17 * sh; hc[i * 3 + 1] = 0.135 * sh; hc[i * 3 + 2] = 0.12 * sh;
     }
     hg.setAttribute('color', new T.BufferAttribute(hc, 3)); hg.computeVertexNormals();
     h.add(new T.Mesh(hg, new T.MeshLambertMaterial({ vertexColors: true })));
@@ -581,11 +582,11 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const ball = (r, mat, sx, sy, sz) => { const m = new T.Mesh(new T.SphereGeometry(r, 20, 14), mat); m.scale.set(sx, sy, sz); return m; };
     const white = lam('#f4efe8'), iris = lam('#5b3b22'), pupil = lam('#0c0a09');
     for (const s of [-1, 1]) {
-      add(ball(0.6, white, 1, 0.85, 1.15), 2.52, 0.55, s * 1.45); add(ball(0.33, iris, 0.5, 1, 1), 3.0, 0.55, s * 1.45); add(ball(0.15, pupil, 0.5, 1, 1), 3.1, 0.55, s * 1.45);
-      add(ball(0.7, skinM, 0.9, 0.42, 1.2), 2.68, 0.98, s * 1.45); add(ball(0.62, skinM, 0.8, 0.28, 1.1), 2.6, 0.13, s * 1.45);   // hooded upper lid, lower lid
-      const brow = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([new T.Vector3(3.62, 1.36, s * 0.5), new T.Vector3(3.48, 1.48, s * 1.2), new T.Vector3(3.12, 1.55, s * 1.9), new T.Vector3(2.55, 1.38, s * 2.5)]), 16, 0.24, 8), hairM);
+      add(ball(0.52, white, 1, 0.8, 1.2), 2.5, 0.6, s * 1.5); add(ball(0.3, iris, 0.5, 1, 1), 2.93, 0.56, s * 1.5); add(ball(0.14, pupil, 0.5, 1, 1), 3.02, 0.55, s * 1.5);
+      add(ball(0.7, skinM, 0.9, 0.45, 1.25), 2.66, 0.9, s * 1.5); add(ball(0.6, skinM, 0.8, 0.28, 1.15), 2.6, 0.22, s * 1.5);   // heavy upper lid, lower lid
+      const brow = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([new T.Vector3(3.64, 1.27, s * 0.48), new T.Vector3(3.5, 1.42, s * 1.2), new T.Vector3(3.14, 1.46, s * 1.95), new T.Vector3(2.55, 1.28, s * 2.6)]), 16, 0.28, 8), hairM);
       h.add(brow);
-      const ear = add(ball(1, skinM, 0.5, 1.05, 0.45), -0.3, 0.05, s * 3.6); ear.rotation.y = s * 0.3;
+      const ear = add(ball(1, skinM, 0.5, 1.05, 0.45), -0.3, 0.05, s * 3.7); ear.rotation.y = s * 0.3;
     }
     return h;
   }
