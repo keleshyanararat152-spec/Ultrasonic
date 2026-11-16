@@ -497,6 +497,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
   // ---------- 3D view ----------
   const T = window.THREE, SKY = '#f0d2b6';
+  let walkAmp = 0, lastWalk = 0;
   let renderer = null, scene, cam3, marker, playerMesh, sun, sky, sunDisc, paused = false, camA = 0, camO = 0, idleT = 0, faceCam = false, lastDt = 0.016, stamp = 0;
   const meshOf = new Map(), ov = $('ov'), octx = ov.getContext('2d');
   const lam = (c, extra) => new T.MeshLambertMaterial(Object.assign({ color: c }, extra || {}));
@@ -651,22 +652,11 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     for (const s of [-1, 1]) { const ear = add(ball(1, skinM, 0.5, 1.05, 0.45), -0.3, 0.05, s * 3.7); ear.rotation.y = s * 0.3; }
     return h;
   }
-  function playerModel() { // the walker: grey T-shirt, jeans, white trainers
-    const g = new T.Group(), add = (m, x, y, z) => { m.position.set(x, y, z); g.add(m); return m; };
-    const skin = lam('#d6a48f'), tee = lam('#9a9c9f'), jeans = lam('#2c3140'), shoe = lam('#e9e6df');
-    const cyl = (rt, rb, hh, mat) => new T.Mesh(new T.CylinderGeometry(rt, rb, hh, 12), mat);
-    for (const z of [-2.1, 2.1]) {
-      add(cyl(1.9, 1.5, 8, jeans), 0, 4.8, z); add(new T.Mesh(new T.BoxGeometry(5, 1.5, 3.2), shoe), 0.7, 0.75, z);
-      add(cyl(1.75, 1.6, 4.2, tee), 0, 14.7, z * 2.7); add(cyl(1.25, 1.05, 5.6, skin), 0, 10, z * 2.7);
-      const sh = add(new T.Mesh(new T.SphereGeometry(1.8, 12, 10), tee), 0, 16.6, z * 2.55); sh.scale.set(1, 0.8, 1);
-    }
-    const torso = add(cyl(4.6, 4.1, 9.2, tee), 0, 12.9, 0); torso.scale.set(0.58, 1, 1);
-    add(cyl(2.1, 2.3, 2.6, skin), 0, 18, 0);
-    const head = sculptHead(); head.scale.setScalar(0.8); head.position.y = 22.9; g.add(head);
-    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-    g.scale.setScalar(1.25); return g;
+  function playerModel() { // the walker: brown jacket with rolled sleeves over a white T-shirt, cargo trousers, boots, a watch
+    const g = humanMesh({ woman: false, noHead: true, skin: '#d6a48f', shirt: '#f2f0ea', jacket: '#8a5a36', rolled: true, pants: '#5a4f46', cargo: true, boots: true, shoe: '#7a4a2c', watch: true });
+    const head = sculptHead(); head.scale.setScalar(0.36); head.position.y = 1.95; head.traverse((o) => { if (o.isMesh) o.castShadow = true; }); g.userData.head.add(head);
+    g.scale.setScalar(1.35); return g;
   }
-
   // Car bodies are lofted from cross-sections along the length: [x, half width, bottom, top]. Forward is +x.
   const CARS = {
     sedan: { hull: [[-20, 7.2, 5, 8.4], [-19.4, 8.6, 3.8, 9.8], [-17, 9.2, 3.3, 10.5], [-10, 9.4, 3.2, 10.8], [0, 9.5, 3.2, 10.9], [8, 9.4, 3.2, 10.7], [15, 9.2, 3.3, 10], [18.6, 8.7, 3.6, 9.2], [19.8, 7.4, 4.6, 8]],
@@ -752,59 +742,152 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   const CX = -3000, CY = 1000, FEE = 0, VX = -3000, VY = 1700, club = { door: { x: 0, y: 0 }, dancers: [], troupe: [], tiles: [], lights: [], ball: null, people: [], decks: [], smoke: [], lasers: [], vipLasers: [], tableSet: null, posed: false };
   let inside = false, vip = false, beatT = 0, beatN = 0, clubArm = true;
   // ---------- people: one jointed figure used for dancers, guests, staff and pedestrians (forward is +x, feet at y = 0) ----------
-  const HG = { c: {}, m: {}, t: {} };
+  const HG = { c: {}, m: {}, t: {}, hair: {}, head: {} }, HK = 0.37;   // HK scales the sculpted head down to body size
+  const gs = (v, m, s) => Math.exp(-((v - m) * (v - m)) / (2 * s * s)), sstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const shade = (c, k) => '#' + new T.Color(c).multiplyScalar(k).getHexString();
+  function headGeo(W) { // a face pushed out of a sphere; vertex colours tint lips, cheeks and eye sockets on top of the skin colour
+    if (HG.head[W]) return HG.head[W];
+    const geo = new T.SphereGeometry(1, 56, 42), pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
+    const LIP = W ? [0.84, 0.56, 0.58] : [0.9, 0.7, 0.7];
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i), dy = pos.getY(i), dz = pos.getZ(i);
+      let x = dx * 3.7, y = dy * 4.9, z = dz * 3.55;
+      z *= 1 + (W ? 0.07 : 0.15) * Math.sin(Math.PI * clamp((-dy - 0.05) / 0.8, 0, 1));
+      if (dy < -0.72) y = -3.53 + (y + 3.53) * (W ? 0.86 : 0.76);
+      const f = sstep(0.1, 0.55, dx), az = Math.abs(z), sock = gs(y, 0.6, 0.36) * gs(az, 1.5, 0.62), ck = gs(y, -0.9, 1.0) * gs(az, 2.05, 0.9);
+      const ul = gs(y, -2.5, 0.17) * gs(z, 0, W ? 0.95 : 1.05), ll = gs(y, -2.98, 0.21) * gs(z, 0, W ? 0.85 : 0.92);
+      let b = (W ? 0.16 : 0.32) * gs(y, 1.3, 0.34) * gs(az, 1.3, 1.1) - 0.3 * sock + 0.22 * ck;
+      b += sstep(-1.75, -1.3, y) * (1 - sstep(0.9, 1.5, y)) * gs(z, 0, W ? 0.3 : 0.36) * (0.22 + (W ? 0.8 : 1.05) * clamp((1.2 - y) / 2.5, 0, 1));
+      b += (W ? 0.32 : 0.42) * gs(y, -1.2, 0.32) * gs(z, 0, 0.55) + (W ? 0.2 : 0.3) * gs(y, -1.32, 0.24) * gs(az, 0.66, 0.26);
+      b += 0.2 * gs(y, -2.75, 0.55) * gs(z, 0, 1.4) + (W ? 0.34 : 0.28) * ul + (W ? 0.42 : 0.36) * ll - 0.26 * gs(y, -2.74, 0.08) * gs(z, 0, 1.2);
+      b += (W ? 0.24 : 0.34) * gs(y, -3.95, 0.5) * gs(z, 0, W ? 0.9 : 1.15);
+      pos.setXYZ(i, (x * (1 - 0.06 * f) + b * f) * HK, y * HK, z * HK);
+      const lipW = sstep(0.42, 0.75, (ul + ll) * 1.15) * f, stub = W ? 0 : 0.1 * sstep(-1.5, -2.6, y) * sstep(-0.2, 0.3, dx);
+      for (let k = 0; k < 3; k++) { let c = 1; c += ([1, 0.86, 0.85][k] - c) * 0.55 * ck * f; c += ([0.86, 0.8, 0.8][k] - c) * (0.45 * sock * f + stub); c += (LIP[k] - c) * lipW; col[i * 3 + k] = c; }
+    }
+    geo.setAttribute('color', new T.BufferAttribute(col, 3)); geo.computeVertexNormals();
+    return HG.head[W] = geo;
+  }
+  function beardGeo() { // the lower face of the male head, lifted a little, with the lips left clear
+    if (HG.beard) return HG.beard;
+    const src = headGeo(false), p = src.attributes.position, idx = src.index.array, keep = [];
+    for (let i = 0; i < idx.length; i += 3) {
+      let ok = true;
+      for (let k = 0; k < 3; k++) { const v = idx[i + k], x = p.getX(v) / HK, y = p.getY(v) / HK, z = Math.abs(p.getZ(v) / HK); if (!(y < -1.55 && x > -0.4) || (z < 1.0 && y > -3.25 && y < -2.3)) ok = false; }
+      if (ok) keep.push(idx[i], idx[i + 1], idx[i + 2]);
+    }
+    const g = new T.BufferGeometry(); g.setAttribute('position', p.clone()); g.setAttribute('normal', src.attributes.normal.clone()); g.setIndex(keep); g.scale(1.035, 1.03, 1.04);
+    return HG.beard = g;
+  }
+  function hairGeo(kind) { // short all over, short sides with a tall front, or a fuller cap for long styles
+    if (HG.hair[kind]) return HG.hair[kind];
+    const geo = new T.SphereGeometry(1, 44, 30), p = geo.attributes.position, col = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const dx = p.getX(i), dy = p.getY(i), dz = p.getZ(i), a = Math.atan2(dz, dx);
+      let line, vol, top;
+      if (kind === 'short') { line = dx > 0 ? 0.14 + 0.42 * Math.pow(dx, 0.8) : 0.14 + 0.4 * dx; vol = 0.06; top = 0.06; }
+      else if (kind === 'quiff') { line = dx > 0 ? 0.12 + 0.46 * Math.pow(dx, 0.8) : 0.12 + 0.42 * dx; vol = 0.035; top = 0.26 * sstep(-0.3, 0.8, dx); }
+      else { line = (dx > 0 ? 0.04 + 0.44 * Math.pow(dx, 0.7) : 0.04 + 0.9 * dx) - 0.16 * gs(dx, 0.2, 0.25) + 0.08 * dz * Math.max(0, dx); vol = 0.1; top = 0.1; }
+      const k = sstep(line - 0.06, line + 0.1, dy), strand = Math.sin(a * 11 + dy * 9 + dz * 4) * 0.03 + Math.sin(a * 27 + dy * 15) * 0.014;
+      const r = 1 + k * (vol + top * Math.max(0, dy) + strand) - (1 - k) * 0.25;
+      p.setXYZ(i, (dx * 3.7 * r - 0.15) * HK, (dy * 4.9 * r + 0.1) * HK, dz * 3.55 * r * 1.05 * HK);
+      const sh = 0.9 + strand * 6; col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = sh;
+    }
+    geo.setAttribute('color', new T.BufferAttribute(col, 3)); geo.computeVertexNormals();
+    return HG.hair[kind] = geo;
+  }
+  function torsoGeo(W, grow, open) { // lofted bottom to top from [height, half width, back, front]; a jacket is the same shape a little larger with the front cut open
+    const key = (W ? 'w' : 'm') + grow + (open ? 'o' : '');
+    if (HG.t[key]) return HG.t[key];
+    let st = W ? [[-0.3, 2.0, -1.25, 1.25], [1.2, 1.85, -1.2, 1.25], [2.6, 1.6, -1.1, 1.15], [4.6, 1.95, -1.25, 1.45], [6.3, 2.3, -1.2, 1.2], [7.1, 1.3, -0.8, 0.8], [7.8, 0.75, -0.7, 0.7]]
+      : [[-0.3, 2.05, -1.3, 1.35], [1.5, 2.05, -1.35, 1.45], [3.6, 2.35, -1.45, 1.6], [5.6, 2.6, -1.45, 1.55], [6.6, 2.75, -1.3, 1.3], [7.3, 1.5, -0.85, 0.85], [7.9, 0.85, -0.75, 0.75]];
+    if (grow) st = st.slice(0, 6).map((s, n) => [n === 0 ? 0.5 : s[0], s[1] + grow, s[2] - grow, s[3] + grow]);
+    let g = loft(st, 3, 0, !grow); g.rotateZ(Math.PI / 2); g.rotateY(Math.PI);          // stand it up with the front on +x
+    if (open) { const p = g.attributes.position, idx = g.index.array, keep = []; for (let i = 0; i < idx.length; i += 3) { let cut = true; for (let k = 0; k < 3; k++) { const v = idx[i + k]; if (!(p.getX(v) > 0.2 && Math.abs(p.getZ(v)) < 0.85)) cut = false; } if (!cut) keep.push(idx[i], idx[i + 1], idx[i + 2]); } g.setIndex(keep); }
+    return HG.t[key] = g;
+  }
   function humanMesh(o) {
-    if (!HG.s) { HG.s = new T.SphereGeometry(1, 14, 10); HG.box = new T.BoxGeometry(1, 1, 1); HG.cap = new T.SphereGeometry(1, 14, 8, 0, 6.2832, 0, 1.75); }
-    const mat = (c) => HG.m[c] || (HG.m[c] = lam(c));
-    const cylG = (a, b, h) => { const k = a + '_' + b + '_' + h; return HG.c[k] || (HG.c[k] = new T.CylinderGeometry(a, b, h, 10)); };
-    const g = new T.Group(), arms = [], elbows = [], legs = [], W = !!o.woman, sw = W ? 2.75 : 3.35, hipW = W ? 1.35 : 1.25;
-    const add = (to, geo, m, x, y, z, sx, sy, sz) => { const e = new T.Mesh(geo, m); e.position.set(x, y, z); if (sx) e.scale.set(sx, sy, sz); e.castShadow = true; to.add(e); return e; };
-    const sph = (to, m, x, y, z, sx, sy, sz) => add(to, HG.s, m, x, y, z, sx, sy, sz), cyl = (to, m, a, b, h, x, y, z) => add(to, cylG(a, b, h), m, x, y, z);
-    const skin = mat(o.skin), shirt = mat(o.shirt), legM = mat(o.skirt ? o.skin : o.pants), lower = mat(o.skirt ? (o.skirtC || o.shirt) : o.pants), hair = mat(o.hair), shoe = mat(o.shoe || '#1b1a1f');
-    for (const s of [-1, 1]) { // hip joint -> thigh -> knee joint -> shin and shoe
+    if (!HG.s) { HG.s = new T.SphereGeometry(1, 14, 10); HG.box = new T.BoxGeometry(1, 1, 1); HG.collar = new T.TorusGeometry(1.12, 0.3, 6, 16, 4.4); HG.collar.rotateZ(-5.34); HG.collar.rotateX(Math.PI / 2); }
+    const mat = (c, glossy) => { const k = c + (glossy ? 'g' : ''); return HG.m[k] || (HG.m[k] = glossy ? new T.MeshPhongMaterial({ color: c, shininess: 38, specular: 0x2a2a2a, side: T.DoubleSide }) : lam(c, { side: T.DoubleSide })); };
+    const cylG = (a, b, h) => { const k = a + '_' + b + '_' + h; return HG.c[k] || (HG.c[k] = new T.CylinderGeometry(a, b, h, 12)); };
+    const g = new T.Group(), arms = [], elbows = [], legs = [], W = !!o.woman, lod = !!o.lod, sw = W ? 2.3 : 2.75, hipW = W ? 1.2 : 1.15;
+    const add = (to, geo, m, x, y, z, sx, sy, sz, cast) => { const e = new T.Mesh(geo, m); e.position.set(x, y, z); if (sx) e.scale.set(sx, sy, sz); e.castShadow = cast !== false; to.add(e); return e; };
+    const sph = (to, m, x, y, z, sx, sy, sz, cast) => add(to, HG.s, m, x, y, z, sx, sy, sz, cast), cyl = (to, m, a, b, h, x, y, z, cast) => add(to, cylG(a, b, h), m, x, y, z, 0, 0, 0, cast);
+    const skin = mat(o.skin), top = mat(o.shirt), jk = o.jacket ? mat(o.jacket, true) : null, jkDark = o.jacket ? mat(shade(o.jacket, 0.72), true) : null;
+    const lowC = o.skirt ? (o.skirtC || o.shirt) : o.pants, lower = mat(lowC), legM = o.skirt ? skin : lower, shoe = mat(o.shoe || '#1b1a1f', true), sole = mat('#151517');
+    for (const s of [-1, 1]) { // hip -> thigh -> knee -> shin -> shoe
       const leg = new T.Group(); leg.position.set(0, 10, s * hipW); g.add(leg); legs.push(leg);
-      cyl(leg, legM, W ? 1.15 : 1.2, 0.9, 4.9, 0, -2.45, 0);
+      cyl(leg, legM, W ? 1.12 : 1.1, 0.86, 4.9, 0, -2.45, 0);
+      if (o.cargo && !lod) add(leg, HG.box, mat(shade(lowC, 0.86)), 0, -3.0, s * 0.98, 1.5, 1.9, 0.5, false);
       const knee = new T.Group(); knee.position.y = -4.85; leg.add(knee); leg.userData.knee = knee;
-      sph(knee, legM, 0, 0, 0, 0.88, 0.85, 0.88); cyl(knee, legM, 0.85, 0.6, 4.4, 0, -2.2, 0); add(knee, HG.box, shoe, 0.7, -4.7, 0, 3.1, 0.95, 1.5);
+      sph(knee, legM, 0, 0, 0, 0.86, 0.84, 0.86, false); cyl(knee, legM, 0.84, o.skirt ? 0.5 : 0.66, 4.3, 0, -2.15, 0);
+      add(knee, HG.box, sole, 0.7, -4.95, 0, 3.15, 0.4, 1.5, false); sph(knee, shoe, 0.75, -4.48, 0, 1.55, 0.62, 0.74);
+      if (o.boots) cyl(knee, shoe, 0.74, 0.86, 1.6, 0, -3.85, 0, false); else sph(knee, shoe, -0.2, -4.3, 0, 0.8, 0.7, 0.72, false);
     }
     const body = new T.Group(); body.position.y = 10; g.add(body);
-    if (!HG.t[W]) { // torso lofted bottom to top: [height, half width, back, front]
-      HG.t[W] = loft(W ? [[-0.2, 2.25, -1.35, 1.35], [1.2, 2.1, -1.3, 1.35], [2.6, 1.85, -1.2, 1.25], [4.6, 2.3, -1.35, 1.55], [6.4, sw, -1.3, 1.35], [7.3, 1.6, -0.9, 0.9]]
-        : [[-0.2, 2.3, -1.45, 1.45], [2, 2.35, -1.5, 1.6], [4.4, 2.8, -1.55, 1.7], [6.5, sw, -1.5, 1.55], [7.4, 1.8, -1, 1]], 3, 0, true);
-      HG.t[W].rotateZ(Math.PI / 2);
+    add(body, torsoGeo(W, 0, false), top, 0, 0, 0);
+    sph(body, lower, 0, 0.05, 0, 1.38, 1.25, hipW + 0.98);
+    if (o.skirt) cyl(body, lower, 2.0, 3.2, 5.2, 0, -2.3, 0);                        // knee length
+    else if (!lod) { const belt = cyl(body, mat('#3a2a1e', true), 2.12, 2.12, 0.55, 0, 0.35, 0, false); belt.scale.set(0.66, 1, 1); add(body, HG.box, mat('#b9b3a4', true), 1.42, 0.35, 0, 0.2, 0.5, 0.7, false); }
+    if (jk) { // open jacket over the top: body, hem band, collar, lining strips along the opening, chest pockets
+      add(body, torsoGeo(W, 0.24, true), jk, 0, 0, 0);
+      const hem = cyl(body, jkDark, sw - 0.42, sw - 0.42, 0.8, 0, 0.9, 0, false); hem.scale.set(0.72, 1, 1);
+      if (!lod) {
+        const collar = add(body, HG.collar, jk, -0.1, 7.25, 0, 1, 1.5, 1.2, false); collar.rotation.z = -0.22;
+        for (const s of [-1, 1]) { const strip = add(body, HG.box, mat('#6f7072'), 1.6, 3.0, s * 0.9, 0.14, 4.2, 0.24, false); strip.rotation.z = 0.04; add(body, HG.box, jkDark, 1.66, 4.7, s * 1.7, 0.1, 0.6, 0.95, false); }
+      }
     }
-    add(body, HG.t[W], HG.m['d' + o.shirt] || (HG.m['d' + o.shirt] = lam(o.shirt, { side: T.DoubleSide })), 0, 0, 0);
-    sph(body, lower, 0, 0.1, 0, 1.45, 1.3, hipW + 1.05);
-    if (o.skirt) cyl(body, lower, 2.2, 3.5, 5.2, 0, -2.3, 0);                       // knee length
-    for (const s of [-1, 1]) { // shoulder joint -> upper arm -> elbow joint -> forearm and hand
-      const a = new T.Group(); a.position.set(0, 6.5, s * (sw + 0.35)); body.add(a); arms.push(a);
-      sph(a, shirt, 0, 0, 0, 0.95, 0.95, 0.95); cyl(a, o.long ? shirt : skin, 0.85, 0.7, 3.6, 0, -1.9, 0);
+    for (const s of [-1, 1]) { // shoulder -> upper arm -> elbow -> forearm -> hand
+      const a = new T.Group(); a.position.set(0, 6.5, s * (sw + 0.28)); body.add(a); arms.push(a);
+      const sleeve = jk || top, longS = jk ? !o.rolled : !!o.long;
+      sph(a, sleeve, 0, -0.1, 0, jk ? 0.9 : 0.84, jk ? 0.88 : 0.84, jk ? 0.9 : 0.84, false);
+      if (jk || o.long) cyl(a, sleeve, jk ? 0.86 : 0.76, jk ? 0.76 : 0.66, 3.7, 0, -1.9, 0); else { cyl(a, skin, 0.7, 0.6, 3.7, 0, -1.9, 0); cyl(a, top, 0.8, 0.76, 1.9, 0, -0.95, 0, false); }
       const e = new T.Group(); e.position.y = -3.75; a.add(e); elbows.push(e);
-      sph(e, o.long ? shirt : skin, 0, 0, 0, 0.68, 0.68, 0.68); cyl(e, o.long ? shirt : skin, 0.66, 0.5, 3.3, 0, -1.7, 0); sph(e, skin, 0, -3.65, 0, 0.52, 0.68, 0.4);
+      sph(e, longS ? sleeve : skin, 0, 0, 0, longS ? 0.74 : 0.6, longS ? 0.74 : 0.6, longS ? 0.74 : 0.6, false);
+      if (jk && o.rolled) cyl(e, jkDark, 0.84, 0.8, 0.9, 0, 0.1, 0, false);                                     // rolled-up cuff at the elbow
+      cyl(e, longS ? sleeve : skin, longS ? 0.7 : 0.58, longS ? 0.56 : 0.43, 3.2, 0, -1.65, 0);
+      if (longS && !lod) cyl(e, jk ? jkDark : top, 0.6, 0.58, 0.5, 0, -3.05, 0, false);
+      if (o.watch && s > 0 && !lod) cyl(e, mat('#232428', true), 0.52, 0.52, 0.34, 0, -2.95, 0, false);
+      sph(e, skin, 0.04, -3.75, 0, 0.3, 0.52, 0.42, false);
+      if (!lod) { sph(e, skin, 0.1, -4.42, 0, 0.24, 0.46, 0.36, false); sph(e, skin, 0.34, -3.95, -s * 0.05, 0.15, 0.32, 0.16, false); }
     }
-    cyl(body, skin, 0.78, 0.9, 1.7, 0, 8.1, 0);
-    const head = new T.Group(); head.position.y = 9.3; body.add(head);
-    sph(head, skin, 0, 1.45, 0, 1.95, 2.4, 1.85); sph(head, skin, 0.7, -0.3, 0, 1.1, 1.0, 1.25);     // skull, chin
-    if (!o.lod) {
-      const white = mat('#f4efe8'), dark = mat('#2a1d14');
-      for (const s of [-1, 1]) { sph(head, skin, -0.1, 1.2, s * 1.85, 0.4, 0.7, 0.3); sph(head, white, 1.72, 1.55, s * 0.78, 0.22, 0.3, 0.42); sph(head, dark, 1.86, 1.55, s * 0.78, 0.12, 0.2, 0.2); add(head, HG.box, hair, 1.8, 2.07, s * 0.8, 0.25, 0.13, 0.85); }
-      sph(head, skin, 1.95, 1.05, 0, 0.45, 0.6, 0.38); sph(head, mat(W ? '#b5625f' : '#a8685c'), 1.72, 0.25, 0, 0.3, 0.17, 0.7);
+    cyl(body, skin, 0.72, 0.8, 1.3, 0, 8.2, 0, false);
+    const head = new T.Group(); head.position.y = 8.7; body.add(head);
+    const u = { arms: arms, elbows: elbows, legs: legs, body: body, head: head };
+    if (!o.noHead) {
+      const face = new T.Group(); face.position.y = 1.45; head.add(face);
+      face.add(Object.assign(new T.Mesh(headGeo(W), HG.m['v' + o.skin] || (HG.m['v' + o.skin] = new T.MeshLambertMaterial({ color: o.skin, vertexColors: true }))), { castShadow: true }));
+      const hairM = HG.m['h' + o.hair] || (HG.m['h' + o.hair] = new T.MeshLambertMaterial({ color: o.hair, vertexColors: true })), hairP = mat(o.hair);
+      const style = W ? 'full' : (o.style === 1 ? 'short' : 'quiff');
+      face.add(Object.assign(new T.Mesh(hairGeo(style), hairM), { castShadow: true }));
+      const H = (x, y, z, sx, sy, sz, m) => sph(face, m || hairP, x * HK, y * HK, z * HK, sx * HK, sy * HK, sz * HK, false);
+      if (W && o.style === 1) { H(-4.3, 1.6, 0, 1.5, 1.5, 1.5); H(-5.1, -2.4, 0, 1.0, 4.4, 1.2); }                                  // ponytail
+      else if (W && o.style === 2) { H(-1.7, -1.3, 0, 2.5, 3.5, 3.95); }                                                          // bob
+      else if (W) { H(-2.7, -3.2, 0, 1.6, 5.6, 3.3); for (const s of [-1, 1]) H(-0.2, -2.6, s * 3.45, 1.0, 4.7, 0.85); }          // long
+      if (o.beard && !W) face.add(new T.Mesh(beardGeo(), hairP));
+      for (const s of [-1, 1]) {
+        H(-0.3, 0.05, s * 3.68, 0.5, 1.05, 0.45, skin);
+        if (lod) H(2.62, 0.6, s * 1.5, 0.3, 0.36, 0.5, mat('#2a1d14'));
+        else {
+          H(2.52, 0.6, s * 1.5, 0.52, 0.44, 0.6, mat('#f4efe8')); H(2.94, 0.58, s * 1.5, 0.15, 0.3, 0.3, mat(o.eye || '#4a3324')); H(3.03, 0.58, s * 1.5, 0.07, 0.14, 0.14, mat('#0c0a09'));
+          H(2.66, 0.93, s * 1.5, 0.62, 0.3, 0.84, skin); H(2.6, 0.2, s * 1.5, 0.48, 0.17, 0.66, skin);
+          const brow = add(face, HG.box, hairP, 3.42 * HK, 1.42 * HK, s * 1.5 * HK, (W ? 0.3 : 0.42) * HK, (W ? 0.2 : 0.32) * HK, 1.7 * HK, false); brow.rotation.set(s * 0.1, -s * 0.22, 0);
+        }
+      }
     }
-    const cap = add(head, HG.cap, hair, -0.2, 1.55, 0, 2.08, 2.6, 1.98); cap.rotation.z = 0.5;
-    if (W && o.style === 1) { sph(head, hair, -2.1, 2.4, 0, 0.9, 0.9, 0.9); sph(head, hair, -2.7, 0.4, 0, 0.6, 2.3, 0.7); }          // ponytail
-    else if (W && o.style === 2) { sph(head, hair, -1.1, 0.9, 0, 1.2, 2.1, 2.0); }                                                // bob
-    else if (W) { sph(head, hair, -1.35, 0.1, 0, 0.85, 3.1, 1.85); for (const s of [-1, 1]) sph(head, hair, 0, 0.5, s * 1.78, 0.7, 2.3, 0.45); }   // long
-    else if (o.beard) sph(head, hair, 0.72, -0.42, 0, 1.13, 0.9, 1.3);
-    Object.assign(g.userData, { arms: arms, elbows: elbows, legs: legs, body: body, head: head });
+    Object.assign(g.userData, u);
     return g;
   }
-  const LOOK = { skin: ['#e2b196', '#c98f6f', '#f0c7ad', '#a8704f', '#d9a892'], hair: ['#231d1b', '#5a3a22', '#c9a15a', '#7a2f2a', '#1b1a1f', '#8a8580'],
-    shirt: ['#f2f2ee', '#27405f', '#8f1d1d', '#2f5a43', '#d8d2c4', '#3a3f47', '#c9755f', '#7a6bb0', '#e0a321', '#4f8a9a'], pants: ['#22263a', '#2c3140', '#4a4038', '#1b1d21', '#5b5f6a'] };
-  function randomLook(woman, extra) {
-    return Object.assign({ woman: woman, skin: pick(LOOK.skin), hair: pick(LOOK.hair), shirt: pick(LOOK.shirt), pants: pick(LOOK.pants), skirt: woman && Math.random() < 0.4, style: Math.floor(Math.random() * 3), beard: !woman && Math.random() < 0.3, long: Math.random() < 0.5, shoe: Math.random() < 0.4 ? '#f2f2ee' : '#1b1a1f' }, extra || {});
+  const LOOK = { skin: ['#e2b196', '#c98f6f', '#f0c7ad', '#a8704f', '#d9a892', '#8a5a40'], hair: ['#231d1b', '#3b2a20', '#5a3a22', '#b08a4e', '#7a2f2a', '#1b1a1f', '#8a8580'],
+    top: ['#f2f2ee', '#e8e4dc', '#1f2126', '#27405f', '#7d2424', '#55624a', '#9aa0a8', '#c8b38a', '#35506b', '#b85c38'], jacket: ['#8a5a36', '#2b2c30', '#3d4a3a', '#6b3a2a', '#27344a', '#8b7d6b', '#4a2f3a'],
+    pants: ['#5a4f46', '#2c3140', '#1f2126', '#3a4a66', '#6b6455', '#4a4038', '#34373d'], shoe: ['#7a4a2c', '#1b1a1f', '#f2f2ee', '#3a2a1e', '#5b5f6a'] };
+  function randomLook(woman, extra) { // an everyday outfit: often a jacket over a T-shirt, sometimes long sleeves or short, trousers or a knee-length skirt
+    const jacket = Math.random() < 0.55, skirt = woman && Math.random() < 0.3;
+    return Object.assign({ woman: woman, skin: pick(LOOK.skin), hair: pick(LOOK.hair), shirt: pick(LOOK.top), jacket: jacket ? pick(LOOK.jacket) : null, rolled: Math.random() < 0.5, long: Math.random() < 0.45,
+      pants: pick(LOOK.pants), cargo: !woman && Math.random() < 0.4, skirt: skirt, skirtC: pick(LOOK.pants), style: Math.floor(Math.random() * 3), beard: !woman && Math.random() < 0.4, boots: Math.random() < 0.4, shoe: pick(LOOK.shoe), watch: Math.random() < 0.5 }, extra || {});
   }
-  function pedMesh(p) { const m = humanMesh(randomLook(Math.random() < 0.5, { shirt: p.c, lod: true })); m.scale.setScalar(1.3); return m; }
-  function dancerMesh(color, skinC, hairC, woman, dress) { return humanMesh({ woman: true, skin: skinC, hair: hairC, shirt: color, skirt: true, skirtC: dress ? color : '#22202a', style: dress ? 1 : 0, shoe: '#1b1a1f' }); }
+  function pedMesh(p) { const m = humanMesh(randomLook(Math.random() < 0.5, { lod: true })); m.scale.setScalar(1.3); return m; }
+  function dancerMesh(color, skinC, hairC, woman, dress) { return humanMesh({ woman: true, skin: skinC, hair: hairC, shirt: color, long: !dress, skirt: true, skirtC: dress ? color : '#22202a', style: dress ? 1 : 0, shoe: '#1b1a1f' }); }
   // poses: rotation.z swings a limb forward, rotation.x lifts it sideways
   function walkPose(u, ph, amp) {
     u.legs.forEach((l, k) => { const s = Math.sin(ph + k * Math.PI); l.rotation.set(0, 0, s * 0.55 * amp); l.userData.knee.rotation.z = -Math.max(0, Math.sin(ph + k * Math.PI + 1.0)) * 0.85 * amp; });
@@ -933,14 +1016,14 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const basic = (c) => new T.MeshBasicMaterial({ color: c }), put = (m, x, y, z) => { m.position.set(x, y, z); scene.add(m); return m; };
     const person = (look, x, y, face, scale, role, extra) => { const m = humanMesh(look); m.scale.setScalar(scale); m.position.set(x, 0, y); m.rotation.y = -face; scene.add(m); club.people.push(Object.assign({ m: m, x: x, y: y, face: face, sc: scale, role: role, ph: Math.random() * 20 }, extra || {})); return m; };
     const ringAt = (c, x, y) => { const r = put(new T.Mesh(new T.RingGeometry(9, 12, 28), new T.MeshBasicMaterial({ color: c, side: T.DoubleSide })), x, 0.7, y); r.rotation.x = -Math.PI / 2; };
-    const glass = (m, c) => { const gl = new T.Mesh(new T.CylinderGeometry(0.42, 0.34, 1.5, 8), basic(c)); gl.position.set(0.5, -3.9, 0); m.userData.elbows[1].add(gl); };
+    const glass = (m, c) => { const gl = new T.Mesh(new T.CylinderGeometry(0.42, 0.34, 1.5, 8), basic(c)); gl.position.set(0.55, -4.0, 0); m.userData.elbows[1].add(gl); };
     const stool = (x, y) => { put(new T.Mesh(new T.CylinderGeometry(3.3, 3.3, 1.1, 14), lam('#5a2a3f')), x, 5.4, y); put(new T.Mesh(new T.CylinderGeometry(0.7, 1.6, 5, 8), lam('#1d0c16')), x, 2.5, y); };
-    const suit = { woman: false, skin: '#c98f6f', hair: '#1b1a1f', shirt: '#17181c', pants: '#17181c', long: true, beard: true };
+    const suit = { woman: false, skin: '#c98f6f', hair: '#1b1a1f', shirt: '#f2f2ee', jacket: '#17181c', pants: '#17181c', beard: true, style: 1, shoe: '#151517', watch: true };
     // security: one outside by the door, one just inside
     person(suit, club.door.x + 15, club.door.y + 5, -Math.PI / 2, 1.5, 'guard');
     person(Object.assign({}, suit, { skin: '#e2b196', beard: false }), CX - 146, CY - 26, 0, 1.5, 'guard');
     // bar: a bartender behind it, guests leaning on it, a ring to buy a drink
-    person({ woman: false, skin: '#e2b196', hair: '#5a3a22', shirt: '#f2f2ee', pants: '#17181c', long: true }, CX - 30, CY - 116.5, Math.PI / 2, 1.3, 'tender');
+    person({ woman: false, skin: '#e2b196', hair: '#5a3a22', shirt: '#f2f2ee', pants: '#17181c', long: true, style: 1, watch: true }, CX - 30, CY - 116.5, Math.PI / 2, 1.3, 'tender');
     [[-78, true], [-64, false], [8, true], [22, false]].forEach((d) => glass(person(randomLook(d[1]), CX + d[0], CY - 93, -Math.PI / 2 + (d[1] ? 0.35 : -0.35), 1.3, 'bar'), '#ffcf4a'));
     ringAt('#35d6e6', CX - 30, CY - 82);
     // DJ booth in the corner beside the stage
@@ -948,9 +1031,9 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     put(new T.Mesh(new T.BoxGeometry(34, 9, 6), lam('#120d16')), CX + 62, 9.5, CY - 99);
     put(new T.Mesh(new T.BoxGeometry(34, 0.8, 0.6), basic('#ff4fa3')), CX + 62, 12.5, CY - 95.8);
     for (const s of [-1, 1]) { club.decks.push(put(new T.Mesh(new T.CylinderGeometry(3.6, 3.6, 0.6, 18), lam('#2a2a30')), CX + 62 + s * 9, 14.3, CY - 99)); put(new T.Mesh(new T.BoxGeometry(7, 26, 7), lam('#17181c')), CX + 62 + s * 26, 13, CY - 108); put(new T.Mesh(new T.CircleGeometry(2.6, 14), basic('#35d6e6')), CX + 62 + s * 26, 18, CY - 104.4); }
-    const dj = person({ woman: false, skin: '#a8704f', hair: '#231d1b', shirt: '#ffcf4a', pants: '#22263a', beard: true }, CX + 62, CY - 108, Math.PI / 2, 1.3, 'dj', { base: 5 });
-    const band = new T.Mesh(new T.TorusGeometry(2.25, 0.28, 6, 14, Math.PI), lam('#17181c')); band.position.y = 1.9; band.rotation.y = Math.PI / 2; dj.userData.head.add(band);
-    for (const s of [-1, 1]) { const cup = new T.Mesh(HG.s, lam('#17181c')); cup.scale.set(0.75, 0.9, 0.45); cup.position.set(0, 1.5, s * 2.15); dj.userData.head.add(cup); }
+    const dj = person({ woman: false, skin: '#a8704f', hair: '#231d1b', shirt: '#f2f2ee', jacket: '#b85c38', rolled: true, pants: '#22263a', beard: true, boots: true, shoe: '#f2f2ee', watch: true }, CX + 62, CY - 108, Math.PI / 2, 1.3, 'dj', { base: 5 });
+    const band = new T.Mesh(new T.TorusGeometry(1.5, 0.2, 6, 14, Math.PI), lam('#17181c')); band.position.y = 1.9; band.rotation.y = Math.PI / 2; dj.userData.head.add(band);
+    for (const s of [-1, 1]) { const cup = new T.Mesh(HG.s, lam('#17181c')); cup.scale.set(0.55, 0.65, 0.35); cup.position.set(0, 1.5, s * 1.5); dj.userData.head.add(cup); }
     // guests: standing round the tall tables, seated round low ones
     for (const sy of [-1, 1]) for (const k of [0, 1, 2]) { const a = k * 2.1 + sy, x = CX - 30 + Math.cos(a) * 15, y = CY + sy * 83 + Math.sin(a) * 9; glass(person(randomLook(k !== 1), x, y, Math.atan2(CY + sy * 83 - y, CX - 30 - x), 1.3, 'talk'), ['#7be0c3', '#ff8a5c', '#9db8ff'][k]); }
     for (const sy of [-1, 1]) {
@@ -1095,8 +1178,10 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     for (const [k, m] of meshOf) if (m.userData.s !== stamp) { scene.remove(m); meshOf.delete(k); }
     const play = mode === 'play';
     playerMesh.visible = play && !player.car;
-    const groove = danceFx > 0 && inside ? danceFx / 0.6 : 0;   // a hit on the beat makes the walker bounce and twist
-    playerMesh.position.set(player.x, Math.abs(Math.sin(player.walk)) * 1.2 + Math.sin(groove * 3.1416) * 3, player.y); playerMesh.rotation.y = -player.a + Math.sin(groove * 6.2832) * 0.5;
+    walkAmp += ((player.walk !== lastWalk ? 1 : 0) - walkAmp) * 0.25; lastWalk = player.walk;
+    playerMesh.rotation.y = -player.a;
+    if (inside && danceFx > 0) playerMesh.position.set(player.x, -dancePose(playerMesh, playerMesh.userData, time / (STEP * 4), 1, 1) * 1.35, player.y);   // a hit on the beat: dance
+    else { walkPose(playerMesh.userData, player.walk * 0.85, walkAmp); playerMesh.userData.head.rotation.set(0, 0, 0); playerMesh.position.set(player.x, 0, player.y); }
     marker.visible = play && !!job && !inside; clubFrame();
     if (marker.visible) { marker.position.set(job.p.x, 210, job.p.y); marker.material.color.set(job.stage === 'pickup' ? K.gold : K.go); const s = 1 + Math.sin(time * 5) * 0.08; marker.scale.set(s, 1, s); }
 
