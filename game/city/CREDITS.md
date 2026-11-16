@@ -28,6 +28,25 @@ Taken from the "Road segment" model at https://grab3d.com/models/city/road-segme
 repository owner. The colour textures were extracted, cropped square and resized to 512 px.
 The licence of this model has not been confirmed; check the source page before reusing these files.
 
+## Cars and street lanterns
+
+**Car and lantern** — `models/car.txt`, `models/lamp.txt` (binary glTF models stored as base64 text)
+
+"Car Scene" by toivo (https://sketchfab.com/toivo) is licensed under CC BY 4.0
+(http://creativecommons.org/licenses/by/4.0/).
+Source: https://sketchfab.com/3d-models/car-scene-b7b32eaca80d460c9338197e2c9d1408.
+Changes made here: the car and the lantern were split into two files; the car's interior, chrome trim,
+wipers, badge and ground shadow were removed; both were reduced in triangle count; only colour textures
+were kept and resized; the car's body texture was converted to neutral grey so the game can repaint it.
+
+## Nightclub interior
+
+**Club** — `models/club.txt` (a binary glTF model stored as base64 text)
+
+"Nightclub1" model supplied by the repository owner as `nightclub.zip`. The file carries no author or
+licence information, so its licence has not been confirmed; check the page it was downloaded from before
+reusing it. Changes made here: only the colour and emissive textures were kept and resized to 1024 px.
+
 ## People
 
 See `models/LICENSE.txt` (Microsoft Rocketbox Avatar Library, MIT).
