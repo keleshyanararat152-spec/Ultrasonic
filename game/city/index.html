@@ -84,6 +84,12 @@ body { background: var(--sky); color: var(--fg); font-family: var(--font-text); 
 }
 .pad button.act { width: 76px; height: 76px; border-color: var(--gold); }
 .touch .hint { bottom: calc(120px + env(safe-area-inset-bottom, 0px)); }
+.dance {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  min-width: 132px; height: 52px; border-radius: 26px; border: 2px solid #ffd3ea; background: #ff4fa3; color: var(--ink);
+  font: 800 17px var(--font-text); cursor: pointer; touch-action: none;
+}
+.touch .dance { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); height: 60px; min-width: 150px; }
 
 .overlay {
   position: absolute; inset: 0; display: grid; place-items: center; overflow-y: auto;
@@ -127,6 +133,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   <div class="toast out" id="toast"></div>
   <div class="hint" id="hint" hidden></div>
 
+  <button class="dance" id="danceBtn" type="button" hidden>Պարել</button>
+
   <div class="pad" id="pad" hidden>
     <button type="button" id="btnBrake">Արգելակ</button>
     <button type="button" id="btnAct" class="act">Մեքենա</button>
@@ -150,6 +158,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
         <li><b>Ձեռքի արգելակ՝</b> Space</li>
         <li><b>Դեմքը առջևից տեսնել՝</b> C կամ «Դեմք» կոճակը</li>
         <li><b>Դադար՝</b> P, Esc կամ Ⅱ կոճակը</li>
+        <li><b>Ակումբում՝</b> պարահրապարակում սեղմիր «Պարել» (կամ Space) ռիթմի տակ ու փող վաստակիր. բարից խմիչք առ, VIP-ում սեղան վարձիր</li>
         <li><b>Նեոն ակումբ՝</b> քարտեզի վարդագույն կետն է, կամ սեղմիր «Սկսել ակումբից»։ Ներսում 3D բեմական պարուհիներ ու լուսային շոու կան։ Ոսկեգույն օղակը տանում է VIP սրահ։</li>
         <li><b>Դեղին օղակում</b> վերցնում ես պատվերը, <b>կանաչում</b> հասցնում ես, քանի դեռ ժամանակը չի լրացել</li>
         <li><b>Աստղեր՝</b> վթարներն ու ուրիշի մեքենան վերցնելը կանչում են ոստիկաններին։ Կորիր նրանց աչքից, ու աստղերը կմարեն</li>
@@ -740,79 +749,91 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   }
 
   // ---------- night club: a door on one building, and a room kept far outside the city ----------
-  const CX = -3000, CY = 1000, FEE = 0, VX = -3000, VY = 1700, club = { door: { x: 0, y: 0 }, dancers: [], troupe: [], tiles: [], lights: [], ball: null };
+  const CX = -3000, CY = 1000, FEE = 0, VX = -3000, VY = 1700, club = { door: { x: 0, y: 0 }, dancers: [], troupe: [], tiles: [], lights: [], ball: null, people: [], decks: [], smoke: [], lasers: [], vipLasers: [], tableSet: null, posed: false };
   let inside = false, vip = false, beatT = 0, beatN = 0, clubArm = true;
-  function dancerMesh(color, skinC, hairC, woman, dress) {
-    // Fully clothed adult performers. A lightweight joint rig allows smooth non-explicit dance moves.
-    const g = new T.Group(), body = new T.Group(), arms = [], legs = [], elbows = [];
-    const skin = new T.MeshPhongMaterial({ color: skinC, shininess: 28 });
-    const fabric = new T.MeshPhongMaterial({ color, shininess: 92, specular: 0x555066 });
-    const hair = new T.MeshPhongMaterial({ color: hairC, shininess: 80, specular: 0x323032 });
-    const dark = new T.MeshPhongMaterial({ color: '#1c1825', shininess: 72 });
-    const pearl = new T.MeshPhongMaterial({ color: '#fff5ea', shininess: 80 });
-    const iris = new T.MeshPhongMaterial({ color: '#423227', shininess: 95 });
-    const accent = new T.MeshPhongMaterial({ color: '#d9b77b', shininess: 150, specular: 0xffecbf });
-    const lip = new T.MeshPhongMaterial({ color: '#ad5f68', shininess: 70 });
-    const sphere = new T.SphereGeometry(1, 18, 14);
-    const add = (parent, geo, mat, x, y, z, sx=1, sy=1, sz=1) => {
-      const m = new T.Mesh(geo, mat); m.position.set(x,y,z); m.scale.set(sx,sy,sz);
-      m.castShadow = true; parent.add(m); return m;
-    };
-    const sph = (parent, mat, x,y,z, sx,sy,sz) => add(parent,sphere,mat,x,y,z,sx,sy,sz);
-    const cyl = (parent, mat, a,b,h,x,y,z,segments=14) => add(parent,new T.CylinderGeometry(a,b,h,segments),mat,x,y,z);
-    // Legs have knee joints, making stepping look like walking rather than sliding puppets.
-    for (const side of [-1,1]) {
-      const leg = new T.Group(); leg.position.set(0,10.05,side*1.48); g.add(leg); legs.push(leg);
-      cyl(leg,skin,1.05,0.87,4.9,0,-2.45,0);
-      sph(leg,skin,0,-4.82,0,0.95,0.85,0.95);
-      const knee = new T.Group(); knee.position.y=-4.72; leg.add(knee); leg.userData.knee=knee;
-      cyl(knee,skin,0.84,0.58,3.65,0,-1.85,0);
-      sph(knee,dark,0.15,-3.75,0,0.72,0.75,0.8);
-      add(knee,new T.BoxGeometry(3.15,0.9,1.65),dark,0.95,-4.13,0);
+  // ---------- people: one jointed figure used for dancers, guests, staff and pedestrians (forward is +x, feet at y = 0) ----------
+  const HG = { c: {}, m: {}, t: {} };
+  function humanMesh(o) {
+    if (!HG.s) { HG.s = new T.SphereGeometry(1, 14, 10); HG.box = new T.BoxGeometry(1, 1, 1); HG.cap = new T.SphereGeometry(1, 14, 8, 0, 6.2832, 0, 1.75); }
+    const mat = (c) => HG.m[c] || (HG.m[c] = lam(c));
+    const cylG = (a, b, h) => { const k = a + '_' + b + '_' + h; return HG.c[k] || (HG.c[k] = new T.CylinderGeometry(a, b, h, 10)); };
+    const g = new T.Group(), arms = [], elbows = [], legs = [], W = !!o.woman, sw = W ? 2.75 : 3.35, hipW = W ? 1.35 : 1.25;
+    const add = (to, geo, m, x, y, z, sx, sy, sz) => { const e = new T.Mesh(geo, m); e.position.set(x, y, z); if (sx) e.scale.set(sx, sy, sz); e.castShadow = true; to.add(e); return e; };
+    const sph = (to, m, x, y, z, sx, sy, sz) => add(to, HG.s, m, x, y, z, sx, sy, sz), cyl = (to, m, a, b, h, x, y, z) => add(to, cylG(a, b, h), m, x, y, z);
+    const skin = mat(o.skin), shirt = mat(o.shirt), legM = mat(o.skirt ? o.skin : o.pants), lower = mat(o.skirt ? (o.skirtC || o.shirt) : o.pants), hair = mat(o.hair), shoe = mat(o.shoe || '#1b1a1f');
+    for (const s of [-1, 1]) { // hip joint -> thigh -> knee joint -> shin and shoe
+      const leg = new T.Group(); leg.position.set(0, 10, s * hipW); g.add(leg); legs.push(leg);
+      cyl(leg, legM, W ? 1.15 : 1.2, 0.9, 4.9, 0, -2.45, 0);
+      const knee = new T.Group(); knee.position.y = -4.85; leg.add(knee); leg.userData.knee = knee;
+      sph(knee, legM, 0, 0, 0, 0.88, 0.85, 0.88); cyl(knee, legM, 0.85, 0.6, 4.4, 0, -2.2, 0); add(knee, HG.box, shoe, 0.7, -4.7, 0, 3.1, 0.95, 1.5);
     }
-    body.position.y=10.2; g.add(body);
-    sph(body,fabric,0,3.5,0,2.15,4.25,2.8);            // fitted stage jacket / dress
-    sph(body,fabric,0,0.32,0,2.1,1.55,2.55);          // hips
-    cyl(body,accent,2.12,2.12,0.5,0,0.45,0,20);      // waist trim
-    const skirt = cyl(body,fabric,2.2,dress?3.55:3.15,dress?4.7:3.4,0,dress?-1.56:-0.95,0,24);
-    skirt.castShadow=true;
-    for (const side of [-1,1]) {
-      // Articulated shoulders/elbows, gloves and hands.
-      const a = new T.Group(); a.position.set(0,6.43,side*2.75); body.add(a); arms.push(a);
-      sph(a,fabric,0,-0.1,0,1.07,1.0,1.12);
-      cyl(a,skin,0.84,0.72,3.65,0,-2.0,0);
-      const elbow = new T.Group(); elbow.position.y=-3.75; a.add(elbow); elbows.push(elbow);
-      sph(elbow,skin,0,0,0,0.8,0.8,0.8);
-      cyl(elbow,skin,0.73,0.48,3.4,0,-1.72,0);
-      sph(elbow,skin,0,-3.45,0,0.59,0.7,0.58);
+    const body = new T.Group(); body.position.y = 10; g.add(body);
+    if (!HG.t[W]) { // torso lofted bottom to top: [height, half width, back, front]
+      HG.t[W] = loft(W ? [[-0.2, 2.25, -1.35, 1.35], [1.2, 2.1, -1.3, 1.35], [2.6, 1.85, -1.2, 1.25], [4.6, 2.3, -1.35, 1.55], [6.4, sw, -1.3, 1.35], [7.3, 1.6, -0.9, 0.9]]
+        : [[-0.2, 2.3, -1.45, 1.45], [2, 2.35, -1.5, 1.6], [4.4, 2.8, -1.55, 1.7], [6.5, sw, -1.5, 1.55], [7.4, 1.8, -1, 1]], 3, 0, true);
+      HG.t[W].rotateZ(Math.PI / 2);
     }
-    cyl(body,skin,0.85,0.95,1.95,0,8.1,0);
-    // Face points along local +X, just like the original character models.
-    const head = new T.Group(); head.position.set(0,9.5,0); body.add(head);
-    sph(head,skin,0,1.16,0,2.07,2.66,2.0);
-    sph(head,skin,0.9,-0.4,0,1.30,1.17,1.47);       // chin & jaw
-    for (const side of [-1,1]) {
-      sph(head,skin,0.12,0.6,side*2.02,0.52,0.87,0.43); // ear
-      sph(head,pearl,1.78,1.49,side*0.91,0.3,0.38,0.49);
-      sph(head,iris,2.05,1.49,side*0.91,0.15,0.23,0.25);
-      sph(head,accent,0.14,-0.08,side*2.27,0.22,0.27,0.2); // earring
-      sph(head,hair,-0.58,0.28,side*1.88,0.62,2.12,0.62);
+    add(body, HG.t[W], HG.m['d' + o.shirt] || (HG.m['d' + o.shirt] = lam(o.shirt, { side: T.DoubleSide })), 0, 0, 0);
+    sph(body, lower, 0, 0.1, 0, 1.45, 1.3, hipW + 1.05);
+    if (o.skirt) cyl(body, lower, 2.2, 3.5, 5.2, 0, -2.3, 0);                       // knee length
+    for (const s of [-1, 1]) { // shoulder joint -> upper arm -> elbow joint -> forearm and hand
+      const a = new T.Group(); a.position.set(0, 6.5, s * (sw + 0.35)); body.add(a); arms.push(a);
+      sph(a, shirt, 0, 0, 0, 0.95, 0.95, 0.95); cyl(a, o.long ? shirt : skin, 0.85, 0.7, 3.6, 0, -1.9, 0);
+      const e = new T.Group(); e.position.y = -3.75; a.add(e); elbows.push(e);
+      sph(e, o.long ? shirt : skin, 0, 0, 0, 0.68, 0.68, 0.68); cyl(e, o.long ? shirt : skin, 0.66, 0.5, 3.3, 0, -1.7, 0); sph(e, skin, 0, -3.65, 0, 0.52, 0.68, 0.4);
     }
-    sph(head,skin,2.0,0.5,0,0.65,0.75,0.58);        // nose
-    sph(head,lip,1.91,-0.85,0,0.34,0.2,0.82);       // mouth
-    sph(head,hair,-0.46,2.7,0,1.76,1.23,2.08);    // hair crown
-    const hairBack=sph(head,hair,-1.43,0.1,0,0.95,3.55,2.13);
-    hairBack.rotation.z=-0.08;
-    if (!dress) {
-      // Alternating silhouettes and haircuts make the performers distinct.
-      sph(head,hair,-0.8,-1.25,0,1.0,2.5,1.8);
-    } else {
-      sph(head,hair,-1.75,-0.9,0,1.04,1.7,1.3);
+    cyl(body, skin, 0.78, 0.9, 1.7, 0, 8.1, 0);
+    const head = new T.Group(); head.position.y = 9.3; body.add(head);
+    sph(head, skin, 0, 1.45, 0, 1.95, 2.4, 1.85); sph(head, skin, 0.7, -0.3, 0, 1.1, 1.0, 1.25);     // skull, chin
+    if (!o.lod) {
+      const white = mat('#f4efe8'), dark = mat('#2a1d14');
+      for (const s of [-1, 1]) { sph(head, skin, -0.1, 1.2, s * 1.85, 0.4, 0.7, 0.3); sph(head, white, 1.72, 1.55, s * 0.78, 0.22, 0.3, 0.42); sph(head, dark, 1.86, 1.55, s * 0.78, 0.12, 0.2, 0.2); add(head, HG.box, hair, 1.8, 2.07, s * 0.8, 0.25, 0.13, 0.85); }
+      sph(head, skin, 1.95, 1.05, 0, 0.45, 0.6, 0.38); sph(head, mat(W ? '#b5625f' : '#a8685c'), 1.72, 0.25, 0, 0.3, 0.17, 0.7);
     }
-    g.userData.arms=arms; g.userData.legs=legs; g.userData.elbows=elbows;
-    g.userData.body=body; g.userData.head=head; g.userData.skirt=skirt;
+    const cap = add(head, HG.cap, hair, -0.2, 1.55, 0, 2.08, 2.6, 1.98); cap.rotation.z = 0.5;
+    if (W && o.style === 1) { sph(head, hair, -2.1, 2.4, 0, 0.9, 0.9, 0.9); sph(head, hair, -2.7, 0.4, 0, 0.6, 2.3, 0.7); }          // ponytail
+    else if (W && o.style === 2) { sph(head, hair, -1.1, 0.9, 0, 1.2, 2.1, 2.0); }                                                // bob
+    else if (W) { sph(head, hair, -1.35, 0.1, 0, 0.85, 3.1, 1.85); for (const s of [-1, 1]) sph(head, hair, 0, 0.5, s * 1.78, 0.7, 2.3, 0.45); }   // long
+    else if (o.beard) sph(head, hair, 0.72, -0.42, 0, 1.13, 0.9, 1.3);
+    Object.assign(g.userData, { arms: arms, elbows: elbows, legs: legs, body: body, head: head });
     return g;
   }
+  const LOOK = { skin: ['#e2b196', '#c98f6f', '#f0c7ad', '#a8704f', '#d9a892'], hair: ['#231d1b', '#5a3a22', '#c9a15a', '#7a2f2a', '#1b1a1f', '#8a8580'],
+    shirt: ['#f2f2ee', '#27405f', '#8f1d1d', '#2f5a43', '#d8d2c4', '#3a3f47', '#c9755f', '#7a6bb0', '#e0a321', '#4f8a9a'], pants: ['#22263a', '#2c3140', '#4a4038', '#1b1d21', '#5b5f6a'] };
+  function randomLook(woman, extra) {
+    return Object.assign({ woman: woman, skin: pick(LOOK.skin), hair: pick(LOOK.hair), shirt: pick(LOOK.shirt), pants: pick(LOOK.pants), skirt: woman && Math.random() < 0.4, style: Math.floor(Math.random() * 3), beard: !woman && Math.random() < 0.3, long: Math.random() < 0.5, shoe: Math.random() < 0.4 ? '#f2f2ee' : '#1b1a1f' }, extra || {});
+  }
+  function pedMesh(p) { const m = humanMesh(randomLook(Math.random() < 0.5, { shirt: p.c, lod: true })); m.scale.setScalar(1.3); return m; }
+  function dancerMesh(color, skinC, hairC, woman, dress) { return humanMesh({ woman: true, skin: skinC, hair: hairC, shirt: color, skirt: true, skirtC: dress ? color : '#22202a', style: dress ? 1 : 0, shoe: '#1b1a1f' }); }
+  // poses: rotation.z swings a limb forward, rotation.x lifts it sideways
+  function walkPose(u, ph, amp) {
+    u.legs.forEach((l, k) => { const s = Math.sin(ph + k * Math.PI); l.rotation.set(0, 0, s * 0.55 * amp); l.userData.knee.rotation.z = -Math.max(0, Math.sin(ph + k * Math.PI + 1.0)) * 0.85 * amp; });
+    u.arms.forEach((a, k) => { a.rotation.set(0, 0, -Math.sin(ph + k * Math.PI) * 0.45 * amp); u.elbows[k].rotation.set(0, 0, 0.3 * amp); });
+    u.body.rotation.set(0, Math.sin(ph) * 0.06 * amp, 0);
+  }
+  function dancePose(m, u, tt, style, energy) { // tt counts beats; returns how far the hips drop so the feet stay on the floor
+    const b = (0.5 - 0.5 * Math.cos(tt * 6.2832)) * energy, sway = Math.sin(tt * 3.1416);
+    u.legs.forEach((l, k) => { const s = k ? 1 : -1; l.rotation.set(-s * (0.06 + 0.16 * Math.max(0, sway * s)), 0, 0.3 * b); l.userData.knee.rotation.z = -0.6 * b; });
+    u.body.rotation.set(sway * 0.11, Math.sin(tt * 1.5708) * 0.3, 0.05 * b);
+    u.head.rotation.set(-sway * 0.09, Math.sin(tt * 1.5708 + 0.6) * 0.25, Math.sin(tt * 6.2832) * 0.06);
+    u.arms.forEach((a, k) => {
+      const s = k ? 1 : -1, e = u.elbows[k];
+      if (style === 0) { a.rotation.set(-s * (2.3 + 0.25 * Math.sin(tt * 6.2832 + k)), 0, 0.3 * sway); e.rotation.set(-s * 0.5 * (0.5 + 0.5 * Math.sin(tt * 6.2832)), 0, 0.3); }          // hands in the air
+      else if (style === 1) { a.rotation.set(-s * 0.25, 0, Math.sin(tt * 3.1416 + k * Math.PI) * 0.8); e.rotation.set(0, 0, 1.0 + 0.4 * Math.sin(tt * 6.2832)); }                         // swinging step
+      else if (style === 2) { a.rotation.set(-s * (k ? 2.0 + 0.3 * Math.sin(tt * 6.2832) : 0.55), 0, 0.2); e.rotation.set(s * (k ? -0.4 : 1.1), 0, k ? 0.3 : 0.9); }                        // one arm up, one on the hip
+      else { a.rotation.set(-s * (1.2 + 0.5 * Math.sin(tt * 3.1416 + k * Math.PI)), 0, 0.5); e.rotation.set(0, 0, 0.8 + 0.5 * Math.cos(tt * 3.1416 + k * Math.PI)); }                     // rolling arms
+    });
+    return b * 1.25;
+  }
+  function talkPose(u, tt, sitting) {
+    u.legs.forEach((l) => { l.rotation.set(0, 0, sitting ? 1.5 : 0); l.userData.knee.rotation.z = sitting ? -1.5 : 0; });
+    u.body.rotation.set(Math.sin(tt * 0.5) * 0.03, 0, sitting ? 0.08 : 0.02);
+    u.head.rotation.set(0, Math.sin(tt * 0.7) * 0.4, Math.sin(tt * 2.3) * 0.07);
+    const talk = Math.sin(tt * 0.35) > 0 ? 1 : 0.2;                                 // gestures come and go
+    u.arms[0].rotation.set(0.15, 0, 0.35 + 0.2 * Math.sin(tt * 2.1) * talk); u.elbows[0].rotation.set(0, 0, 1.25 + 0.35 * Math.sin(tt * 3.3) * talk);
+    u.arms[1].rotation.set(-0.12, 0, sitting ? 0.6 : 0.3); u.elbows[1].rotation.set(0, 0, sitting ? 0.9 : 1.45 + 0.12 * Math.sin(tt * 0.9));
+  }
+
   function buildClub() {
     let r = null; for (const [i, j] of [[4, 3], [3, 2], [2, 3], [3, 4], [4, 4], [2, 2], [4, 2]]) if (blocks[i][j].type === 'b') { r = blocks[i][j].rects[0]; break; }
     const dx = r.x + r.w / 2; club.door.x = dx; club.door.y = r.y - 10;
@@ -906,60 +927,123 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       scene.add(m); club.troupe.push(m);
     });
     for (const c of [0xff4fa3, 0x35d6e6, 0xffcf4a]) { const l = new T.PointLight(c, 0.65, 300); scene.add(l); club.lights.push(l); }
+    clubExtras();
   }
-  function clubFrame() {
-    const beat = Math.floor(time * 2), t = time;
-    // Distinct tempo offsets, soft footwork and shoulder/knee movement: no teleporting/jumping.
-    const animate = (m, u, tt, isVip) => {
-      const pulse = Math.sin(tt * 6.2832), groove = Math.sin(tt * 3.1416);
-      u.body.rotation.x = 0.065 * Math.sin(tt*2.3 + u.ph);
-      u.body.rotation.z = 0.075 * groove;
-      u.head.rotation.y = 0.08 * Math.sin(tt*1.4+u.ph);
-      u.head.rotation.z = 0.045 * Math.cos(tt*1.1+u.ph);
-      u.arms.forEach((a,k) => {
-        const s=k?1:-1;
-        a.rotation.x = 0.35 + 0.45 * Math.sin(tt*3.1416 + k*1.8 + u.ph);
-        a.rotation.z = s * (0.25 + 0.33 * Math.sin(tt*2.7+u.ph+k*2.1));
-        u.elbows[k].rotation.x = -0.25 + 0.2 * Math.cos(tt*3.1416+k*2);
-      });
-      u.legs.forEach((leg,k) => {
-        leg.rotation.z = 0.16*Math.sin(tt*3.1416+u.ph+k*Math.PI);
-        leg.rotation.x = 0.055*Math.cos(tt*3.1416 + k*1.7);
-        leg.userData.knee.rotation.z = 0.1 + 0.13*Math.max(0,Math.sin(tt*3.1416+u.ph+k*Math.PI));
-      });
-    };
-    club.dancers.forEach((m,n) => {
-      const u=m.userData, tt=t + u.ph*0.28;
-      m.position.set(u.x + Math.sin(tt*1.8)*1.5, u.y + Math.abs(Math.sin(tt*3.1416))*0.42,
-        u.z + Math.sin(tt*1.3+u.ph)*1.6);
-      m.rotation.y=u.face + Math.sin(tt*1.4)*0.25;
-      animate(m,u,tt,false);
+  function clubExtras() { // staff, guests, DJ booth, seats, smoke, lasers, and the rings where money is spent
+    const basic = (c) => new T.MeshBasicMaterial({ color: c }), put = (m, x, y, z) => { m.position.set(x, y, z); scene.add(m); return m; };
+    const person = (look, x, y, face, scale, role, extra) => { const m = humanMesh(look); m.scale.setScalar(scale); m.position.set(x, 0, y); m.rotation.y = -face; scene.add(m); club.people.push(Object.assign({ m: m, x: x, y: y, face: face, sc: scale, role: role, ph: Math.random() * 20 }, extra || {})); return m; };
+    const ringAt = (c, x, y) => { const r = put(new T.Mesh(new T.RingGeometry(9, 12, 28), new T.MeshBasicMaterial({ color: c, side: T.DoubleSide })), x, 0.7, y); r.rotation.x = -Math.PI / 2; };
+    const glass = (m, c) => { const gl = new T.Mesh(new T.CylinderGeometry(0.42, 0.34, 1.5, 8), basic(c)); gl.position.set(0.5, -3.9, 0); m.userData.elbows[1].add(gl); };
+    const stool = (x, y) => { put(new T.Mesh(new T.CylinderGeometry(3.3, 3.3, 1.1, 14), lam('#5a2a3f')), x, 5.4, y); put(new T.Mesh(new T.CylinderGeometry(0.7, 1.6, 5, 8), lam('#1d0c16')), x, 2.5, y); };
+    const suit = { woman: false, skin: '#c98f6f', hair: '#1b1a1f', shirt: '#17181c', pants: '#17181c', long: true, beard: true };
+    // security: one outside by the door, one just inside
+    person(suit, club.door.x + 15, club.door.y + 5, -Math.PI / 2, 1.5, 'guard');
+    person(Object.assign({}, suit, { skin: '#e2b196', beard: false }), CX - 146, CY - 26, 0, 1.5, 'guard');
+    // bar: a bartender behind it, guests leaning on it, a ring to buy a drink
+    person({ woman: false, skin: '#e2b196', hair: '#5a3a22', shirt: '#f2f2ee', pants: '#17181c', long: true }, CX - 30, CY - 116.5, Math.PI / 2, 1.3, 'tender');
+    [[-78, true], [-64, false], [8, true], [22, false]].forEach((d) => glass(person(randomLook(d[1]), CX + d[0], CY - 93, -Math.PI / 2 + (d[1] ? 0.35 : -0.35), 1.3, 'bar'), '#ffcf4a'));
+    ringAt('#35d6e6', CX - 30, CY - 82);
+    // DJ booth in the corner beside the stage
+    put(new T.Mesh(new T.BoxGeometry(44, 5, 22), lam('#1d1524')), CX + 62, 2.5, CY - 107);
+    put(new T.Mesh(new T.BoxGeometry(34, 9, 6), lam('#120d16')), CX + 62, 9.5, CY - 99);
+    put(new T.Mesh(new T.BoxGeometry(34, 0.8, 0.6), basic('#ff4fa3')), CX + 62, 12.5, CY - 95.8);
+    for (const s of [-1, 1]) { club.decks.push(put(new T.Mesh(new T.CylinderGeometry(3.6, 3.6, 0.6, 18), lam('#2a2a30')), CX + 62 + s * 9, 14.3, CY - 99)); put(new T.Mesh(new T.BoxGeometry(7, 26, 7), lam('#17181c')), CX + 62 + s * 26, 13, CY - 108); put(new T.Mesh(new T.CircleGeometry(2.6, 14), basic('#35d6e6')), CX + 62 + s * 26, 18, CY - 104.4); }
+    const dj = person({ woman: false, skin: '#a8704f', hair: '#231d1b', shirt: '#ffcf4a', pants: '#22263a', beard: true }, CX + 62, CY - 108, Math.PI / 2, 1.3, 'dj', { base: 5 });
+    const band = new T.Mesh(new T.TorusGeometry(2.25, 0.28, 6, 14, Math.PI), lam('#17181c')); band.position.y = 1.9; band.rotation.y = Math.PI / 2; dj.userData.head.add(band);
+    for (const s of [-1, 1]) { const cup = new T.Mesh(HG.s, lam('#17181c')); cup.scale.set(0.75, 0.9, 0.45); cup.position.set(0, 1.5, s * 2.15); dj.userData.head.add(cup); }
+    // guests: standing round the tall tables, seated round low ones
+    for (const sy of [-1, 1]) for (const k of [0, 1, 2]) { const a = k * 2.1 + sy, x = CX - 30 + Math.cos(a) * 15, y = CY + sy * 83 + Math.sin(a) * 9; glass(person(randomLook(k !== 1), x, y, Math.atan2(CY + sy * 83 - y, CX - 30 - x), 1.3, 'talk'), ['#7be0c3', '#ff8a5c', '#9db8ff'][k]); }
+    for (const sy of [-1, 1]) {
+      const tx = CX - 124, ty = CY + sy * 52; put(new T.Mesh(new T.CylinderGeometry(7, 7, 0.9, 16), lam('#221624')), tx, 8, ty); put(new T.Mesh(new T.CylinderGeometry(1, 2, 8, 8), lam('#1d0c16')), tx, 4, ty); put(new T.Mesh(HG.s, basic('#ffe2a0')), tx, 9.6, ty).scale.set(1.2, 1.2, 1.2);
+      for (const k of [0, 1, 2]) { const a = k * 2.094 + 0.5, x = tx + Math.cos(a) * 13, y = ty + Math.sin(a) * 13; stool(x, y); person(randomLook(k !== 0), x, y, Math.atan2(ty - y, tx - x), 1.3, 'sit'); }
+    }
+    for (let n = 0; n < 3; n++) for (const sy of [-1, 1]) { // VIP guests; the middle table on one side stays free for the player
+      if (n === 1 && sy === 1) continue;
+      const tx = VX - 85 + n * 40, ty = VY + sy * 52;
+      for (const s of [-1, 1]) { const x = tx + s * 12, y = ty + sy * 6; stool(x, y); person(randomLook(s > 0, { long: true }), x, y, Math.atan2(ty - y, tx - x), 1.3, 'sit'); }
+    }
+    ringAt('#b48cff', VX - 45, VY + 30);
+    const set = new T.Group(); set.position.set(VX - 45, 9.6, VY + 52); set.visible = false; scene.add(set); club.tableSet = set;
+    const bottle = new T.Mesh(new T.CylinderGeometry(0.9, 1.1, 5.5, 10), basic('#58d68d')); bottle.position.set(0, 2.8, 0); set.add(bottle);
+    for (const s of [-1, 1]) { const gl = new T.Mesh(new T.CylinderGeometry(0.7, 0.45, 2, 8), basic('#fff3b8')); gl.position.set(s * 2.6, 1, 1.5); set.add(gl); }
+    const glow = new T.PointLight(0xffd27a, 1.1, 70); glow.position.y = 7; set.add(glow);
+    const flag = new T.Mesh(new T.BoxGeometry(12, 3, 0.5), basic('#ffcf4a')); flag.position.set(0, 16, 0); set.add(flag);
+    // smoke: soft sprites drifting above the floor
+    const sc = document.createElement('canvas'); sc.width = sc.height = 64; const sx = sc.getContext('2d'), sg = sx.createRadialGradient(32, 32, 2, 32, 32, 32);
+    sg.addColorStop(0, 'rgba(255,255,255,0.9)'); sg.addColorStop(1, 'rgba(255,255,255,0)'); sx.fillStyle = sg; sx.fillRect(0, 0, 64, 64); const smokeT = new T.CanvasTexture(sc);
+    for (let n = 0; n < 14; n++) { const s = new T.Sprite(new T.SpriteMaterial({ map: smokeT, transparent: true, opacity: 0.09, depthWrite: false, fog: false, color: n % 2 ? '#ffc4e2' : '#bfe9ff' })); s.scale.set(130, 70, 1); scene.add(s); club.smoke.push(s); }
+    // lasers: thin additive beams hinged at the ceiling
+    const beamG = new T.CylinderGeometry(0.22, 0.22, 320, 5); beamG.translate(0, -160, 0);
+    const beams = (list, n, cols, x, y, z) => { for (let k = 0; k < n; k++) { const b = new T.Mesh(beamG, new T.MeshBasicMaterial({ color: cols[k % cols.length], transparent: true, opacity: 0.6, blending: T.AdditiveBlending, depthWrite: false, fog: false })); b.position.set(x, y, z); scene.add(b); list.push(b); } };
+    beams(club.lasers, 8, ['#58ff8a', '#ff4fa3', '#35d6e6'], CX + 152, 64, CY); beams(club.vipLasers, 5, ['#ffcf4a', '#ffb07a'], VX + 106, 62, VY);
+  }
+  const STEP = 60 / 124 / 4;                                                        // one sixteenth note at 124 BPM
+  let seqT = 0, seqN = 0, lastKick = -9, combo = 0, lastHit = -9, danceFx = 0, drinkT = 0, vipTable = false, danceMsg = '', danceMsgT = 0;
+  function noise(dur, vol, hp) {
+    if (!actx) return;
+    if (!G.noise) { G.noise = actx.createBuffer(1, actx.sampleRate, actx.sampleRate); const d = G.noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+    const t = actx.currentTime, src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+    src.buffer = G.noise; f.type = 'highpass'; f.frequency.value = hp; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(master); src.start(t, Math.random() * 0.5, dur + 0.02);
+  }
+  function playStep(n) { // house loop in A minor: kick, clap, hats, bass line, arpeggio, a chord on each bar
+    const s = n % 16, bar = (n >> 4) % 4, root = [55, 55, 43.65, 49][bar];
+    if (s % 4 === 0) { tone(150, 40, 0.22, 'sine', 0.4); lastKick = time; }
+    if (s === 4 || s === 12) noise(0.14, 0.2, 1700);
+    if (s % 4 === 2) noise(0.05, 0.1, 7000); else if (s % 2 === 1) noise(0.025, 0.035, 9000);
+    if (s === 0 || s === 3 || s === 6 || s === 10 || s === 14) { tone(root * 2, root * 2, 0.15, 'triangle', 0.2); tone(root * 2, root * 2, 0.12, 'sawtooth', 0.035); }
+    if (s % 2 === 0) { const k = [1, 1.2, 1.5, 1.8, 2, 1.8, 1.5, 1.2][(s / 2 + bar * 3) % 8]; tone(root * 8 * k, root * 8 * k, 0.12, 'triangle', 0.045); }
+    if (s === 0) for (const k of [1, 1.2, 1.5]) tone(root * 4 * k, root * 4 * k, 0.55, 'sawtooth', 0.018);
+  }
+  const onFloor = () => inside && !vip && player.x > CX - 100 && player.x < CX + 76 && Math.abs(player.y - CY) < 68;
+  function danceHit() { // tap on the beat while standing on the dance floor
+    if (mode !== 'play' || paused || !onFloor()) return;
+    const age = time - lastKick, err = Math.min(age, STEP * 4 - age);
+    if (err < 0.125) {
+      combo = time - lastHit < 1.6 ? combo + 1 : 1; lastHit = time; danceFx = 0.6;
+      const gain = Math.round(50 * Math.min(combo, 10) * (drinkT > 0 ? 2 : 1) * (vipTable ? 1.5 : 1)); cash += gain;
+      danceMsg = '+' + money(gain) + '  ×' + combo; danceMsgT = 1; tone(660 + Math.min(combo, 10) * 50, 990 + Math.min(combo, 10) * 50, 0.09, 'triangle', 0.1);
+    } else { combo = 0; danceMsg = 'Ռիթմից դուրս'; danceMsgT = 1; sfx.empty && sfx.empty(); }
+  }
+  function clubFrame() { // everything that moves in the club; skipped while the player is in the city
+    if (!inside && club.posed) return; club.posed = true;
+    const t = time, beat = t / (STEP * 4), kick = Math.exp(-Math.max(0, t - lastKick) * 7);
+    club.dancers.forEach((m, n) => {
+      const u = m.userData, tt = beat + (n % 2) * 0.5, drop = dancePose(m, u, tt, n % 4, u.stage ? 1 : 0.75) * m.scale.x;
+      m.position.set(u.x + Math.sin(tt * 3.1416) * 2.2, u.y - drop, u.z + Math.sin(tt * 1.5708 + u.ph) * 2.5); m.rotation.y = -(u.stage ? Math.PI : u.face) + Math.sin(tt * 0.7854 + u.ph) * 0.35;
     });
-    // Synchronized VIP stage show: gentle formation changes, footwork and occasional turns.
-    club.troupe.forEach((m,n) => {
-      const u=m.userData, a=n*2*Math.PI/club.troupe.length + 0.15*Math.sin(t*0.75);
-      const rad=19 + 2*Math.sin(t*0.6+n);
-      m.position.set(VX+62+Math.cos(a)*rad, 6.55+Math.abs(Math.sin(t*3.1416+u.ph))*0.5,
-        VY+Math.sin(a)*rad);
-      const spinPhase=(t+n*0.25)%9;
-      const turn=spinPhase>8 ? (spinPhase-8)*2*Math.PI:0;
-      m.rotation.y=Math.PI+0.3*Math.sin(t*1.3+n*0.7)+turn;
-      animate(m,u,t+u.ph,true);
+    club.troupe.forEach((m, n) => { // one routine for all: a ring that opens and closes, a new move every four bars, a turn at the end of each phrase
+      const u = m.userData, a = n * 6.2832 / club.troupe.length + beat * 0.12, rad = 19 + 5 * Math.sin(beat * 0.3927), phrase = beat % 16;
+      const drop = dancePose(m, u, beat, Math.floor(beat / 16) % 4, 0.9) * m.scale.x, turn = phrase > 15 ? (phrase - 15) * 6.2832 : 0;
+      m.position.set(VX + 62 + Math.cos(a) * rad, 6.5 - drop, VY + Math.sin(a) * rad); m.rotation.y = Math.PI + 0.25 * Math.sin(beat * 0.7854) + turn;
     });
-    club.tiles.forEach((tile,n) => tile.material.color.setHSL(((n*31+beat*23)%360)/360,0.67,inside?0.28+0.12*Math.sin(t*5+n):0.16));
-    const lx=vip?VX+38:CX-10, ly=vip?VY:CY, lr=vip?60:105;
-    club.lights.forEach((l,n) => {
-      l.position.set(lx+Math.cos(t*(0.5+n*0.2)+n*2)*lr,47,
-        ly+Math.sin(t*(0.7+n*0.14)+n)*lr*0.65);
-      l.intensity=inside ? 0.7 + 0.15*Math.sin(t*3+n):0.18;
-    });
-    club.ball.rotation.y=t*0.65; club.ball.rotation.z=t*0.22;
+    for (const p of club.people) {
+      const u = p.m.userData, tt = t + p.ph;
+      if (p.role === 'sit') { talkPose(u, tt, true); p.m.position.y = 6.9 - 10 * p.sc; }
+      else if (p.role === 'talk') { talkPose(u, tt, false); }
+      else if (p.role === 'bar') { talkPose(u, tt, false); u.arms[0].rotation.set(0, 0, 0.9); u.elbows[0].rotation.set(0, 0, 0.75); u.body.rotation.z = 0.12; }
+      else if (p.role === 'guard') { u.arms.forEach((a, k) => { a.rotation.set((k ? 1 : -1) * 0.35, 0, 0.35); u.elbows[k].rotation.set((k ? 1 : -1) * 1.2, 0, 1.5); }); u.head.rotation.y = Math.sin(tt * 0.4) * 0.6; u.body.rotation.x = Math.sin(tt * 0.3) * 0.02; }
+      else if (p.role === 'tender') { const x = p.x + Math.sin(tt * 0.35) * 38; walkPose(u, tt * 3, 0.25); p.m.position.x = x; p.m.rotation.y = -Math.PI / 2 + Math.cos(tt * 0.35) * 0.5; u.arms.forEach((a, k) => { a.rotation.set(0, 0, 0.7); u.elbows[k].rotation.set(0, 0, 1.2 + 0.4 * Math.sin(tt * 9 + k)); }); }
+      else if (p.role === 'dj') { const b = 0.5 - 0.5 * Math.cos(beat * 6.2832); p.m.position.y = p.base - b * 0.8; u.head.rotation.set(0, Math.sin(beat * 0.7854) * 0.3, -0.12 - 0.14 * b); u.body.rotation.z = 0.1 + 0.05 * b; u.arms[0].rotation.set(0, 0, 0.75); u.elbows[0].rotation.set(0, 0, 0.9 + 0.1 * Math.sin(beat * 3.1416)); u.arms[1].rotation.set(-(2.4 + 0.2 * b), 0, 0.2); u.elbows[1].rotation.set(-0.3 * b, 0, 0.3); }
+    }
+    club.decks.forEach((d) => { d.rotation.y = t * 3.4; });
+    club.tiles.forEach((tile, n) => tile.material.color.setHSL(((n * 31 + Math.floor(beat) * 53) % 360) / 360, 0.7, 0.22 + 0.2 * kick + ((n + Math.floor(beat)) % 3 ? 0 : 0.1)));
+    const lx = vip ? VX + 38 : CX - 10, ly = vip ? VY : CY, lr = vip ? 60 : 105;
+    club.lights.forEach((l, n) => { l.position.set(lx + Math.cos(t * (0.5 + n * 0.2) + n * 2) * lr, 47, ly + Math.sin(t * (0.7 + n * 0.14) + n) * lr * 0.65); l.intensity = 0.45 + 0.75 * kick; });
+    club.smoke.forEach((s, n) => { const half = n < 9, cx = half ? CX : VX, cy = half ? CY : VY, w = half ? 140 : 95, d = half ? 100 : 70; s.position.set(cx + Math.sin(t * 0.07 + n * 2.4) * w, 9 + (n % 4) * 5 + Math.sin(t * 0.3 + n) * 3, cy + Math.cos(t * 0.05 + n * 1.7) * d); s.material.opacity = 0.07 + 0.03 * Math.sin(t * 0.4 + n); });
+    club.lasers.forEach((b, n) => { b.rotation.set(Math.sin(t * 0.6 + n * 0.9) * 0.75, 0, -(1.0 + 0.3 * Math.sin(t * 0.9 + n * 1.3))); b.material.opacity = 0.25 + 0.5 * kick; });
+    club.vipLasers.forEach((b, n) => { b.rotation.set(Math.sin(t * 0.4 + n * 1.2) * 0.6, 0, -(1.05 + 0.25 * Math.sin(t * 0.7 + n))); b.material.opacity = 0.2 + 0.35 * kick; });
+    club.tableSet.visible = vipTable;
+    club.ball.rotation.y = t * 0.65; club.ball.rotation.z = t * 0.22;
   }
   function clubRings() { // the floor rings of the room the player is in
     const enter = (x, y, a) => { player.x = x; player.y = y; player.a = a; camA = a; camO = 0; sfx.door(); };
-    if (vip) return [{ x: VX - 96, y: VY, hint: 'վերադառնալ դահլիճ', go: () => { vip = false; enter(CX - 60, CY + 70, -Math.PI / 2); } }];
+    const buy = (price, ok, what) => { if (cash < price) toast(what + ' ' + money(price) + ' է. փողդ չի հերիքում, պարիր ու վաստակիր'); else { cash -= price; sfx.coin(); ok(); } };
+    if (vip) return [{ x: VX - 96, y: VY, hint: 'վերադառնալ դահլիճ', go: () => { vip = false; enter(CX - 60, CY + 70, -Math.PI / 2); } },
+      { x: VX - 45, y: VY + 30, hint: vipTable ? 'քո VIP սեղանը' : 'VIP սեղան վարձել (3 000 ֏)', go: () => { if (vipTable) toast('Սեղանն արդեն քոնն է'); else buy(3000, () => { vipTable = true; toast('VIP սեղանը քոնն է · պարի շահույթը ×1,5'); }, 'VIP սեղանը'); } }];
     return [{ x: CX - 142, y: CY, hint: 'դուրս գալ', go: () => { inside = false; enter(club.door.x, club.door.y - 6, -Math.PI / 2); } },
-      { x: CX - 60, y: CY + 100, hint: 'մտնել VIP սրահ', go: () => { vip = true; enter(VX - 74, VY, 0); toast('VIP սրահ. պարային շոու'); } }];
+      { x: CX - 60, y: CY + 100, hint: 'մտնել VIP սրահ', go: () => { vip = true; enter(VX - 74, VY, 0); toast('VIP սրահ. պարային շոու'); } },
+      { x: CX - 30, y: CY - 82, hint: 'խմիչք առնել (500 ֏)', go: () => buy(500, () => { drinkT = 90; toast('Խմիչք −500 ֏ · պարի շահույթը ×2, 90 վրկ'); }, 'Խմիչքը') }];
   }
   function clubUpdate(dt) {
     const ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + (Math.abs(joy.dx) > 0.22 ? joy.dx : 0), iy = (keys.down ? 1 : 0) - (keys.up ? 1 : 0) + (Math.abs(joy.dy) > 0.22 ? joy.dy : 0);
@@ -967,12 +1051,9 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (Math.abs(iy) > 0.1) { const s = -iy * (iy < 0 ? 150 : 80); player.x += Math.cos(player.a) * s * dt; player.y += Math.sin(player.a) * s * dt; player.walk += dt * 10; }
     if (vip) { player.x = clamp(player.x, VX - 102, VX + 12); player.y = clamp(player.y, VY - 70, VY + 70); }
     else { player.x = clamp(player.x, CX - 152, CX + 88); player.y = clamp(player.y, CY - 94, CY + 112); }
-    beatT -= dt;
-    if (beatT <= 0) { // four-on-the-floor with an off-beat hat and a walking bass
-      beatT += 0.25; const s = beatN++ % 8, note = [55, 55, 65.4, 49][(beatN >> 1) % 4] * 2;
-      if (s % 2 === 0) tone(130, 42, 0.2, 'sine', 0.3); else tone(6000, 5000, 0.04, 'square', 0.03);
-      if (s % 2 === 1) tone(note, note, 0.18, 'sawtooth', 0.07);
-    }
+    seqT -= dt; while (seqT <= 0) { seqT += STEP; playStep(seqN++); }
+    if (drinkT > 0) drinkT -= dt; if (danceFx > 0) danceFx -= dt; if (danceMsgT > 0) danceMsgT -= dt;
+    if (combo && time - lastHit > 1.6) combo = 0;
     if (actx) { const now = actx.currentTime; master.gain.setTargetAtTime(soundOn ? 1 : 0, now, 0.05); engGain.gain.setTargetAtTime(0, now, 0.05); sirGain.gain.setTargetAtTime(0, now, 0.05); }
     let near = 1e9, hit = null;
     for (const r of clubRings()) { const d = Math.hypot(player.x - r.x, player.y - r.y); if (d < near) near = d; if (d < 13) hit = r; }
@@ -1005,14 +1086,17 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       if (m.userData.l1) { m.userData.l1.material.color.set(c.chase ? (flash ? K.alert : K.cop) : '#9aa3ad'); m.userData.l2.material.color.set(c.chase ? (flash ? K.cop : K.alert) : '#9aa3ad'); }
     }
     for (const p of peds) {
-      let m = meshOf.get(p); if (!m) { m = personMesh(p.c); meshOf.set(p, m); scene.add(m); }
+      let m = meshOf.get(p); if (!m) { m = pedMesh(p); meshOf.set(p, m); scene.add(m); }
       m.userData.s = stamp; m.position.set(p.x, p.down > 0 ? 3 : 0, p.y);
       m.rotation.set(0, -(p.free ? p.a : Math.floor(p.t / 378) * Math.PI / 2 + (p.dir < 0 ? Math.PI : 0)), p.down > 0 ? Math.PI / 2 : 0);
+      m.visible = !inside && Math.abs(p.x - cam3.position.x) + Math.abs(p.y - cam3.position.z) < 1300;
+      if (m.visible) walkPose(m.userData, p.down > 0 ? 0 : p.free ? time * 11 : p.t * 0.17, p.down > 0 ? 0 : 1);
     }
     for (const [k, m] of meshOf) if (m.userData.s !== stamp) { scene.remove(m); meshOf.delete(k); }
     const play = mode === 'play';
     playerMesh.visible = play && !player.car;
-    playerMesh.position.set(player.x, Math.abs(Math.sin(player.walk)) * 1.2, player.y); playerMesh.rotation.y = -player.a;
+    const groove = danceFx > 0 && inside ? danceFx / 0.6 : 0;   // a hit on the beat makes the walker bounce and twist
+    playerMesh.position.set(player.x, Math.abs(Math.sin(player.walk)) * 1.2 + Math.sin(groove * 3.1416) * 3, player.y); playerMesh.rotation.y = -player.a + Math.sin(groove * 6.2832) * 0.5;
     marker.visible = play && !!job && !inside; clubFrame();
     if (marker.visible) { marker.position.set(job.p.x, 210, job.p.y); marker.material.color.set(job.stage === 'pickup' ? K.gold : K.go); const s = 1 + Math.sin(time * 5) * 0.08; marker.scale.set(s, 1, s); }
 
@@ -1021,7 +1105,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       const t = target(), spd = player.car ? Math.abs(player.car.v) : 0;
       camA += ad((player.car ? player.car.a : player.a) - camA) * Math.min(1, lastDt * 3.6);
       // face view: the camera swings round to the front, on request or after standing still for a while
-      const look = faceCam || (!player.car && idleT > 2.5), mix = (u, v, w) => u + (v - u) * w;
+      const look = faceCam || (!player.car && !inside && idleT > 2.5), mix = (u, v, w) => u + (v - u) * w;
       camO += ad((look ? Math.PI : 0) - camO) * Math.min(1, lastDt * (look ? 2.5 : 6));
       const o = Math.abs(ad(camO)) / Math.PI, ang = camA + camO, far = W < H ? 1.45 : 1;
       const dist = player.car ? (80 + spd * 0.07) * far : mix(66, 21, o) * far, p = { x: t.x - Math.cos(ang) * dist, y: t.y - Math.sin(ang) * dist };
@@ -1041,6 +1125,13 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
     // overlay: compass arrow to the job, touch stick
     octx.setTransform(dpr, 0, 0, dpr, 0, 0); octx.clearRect(0, 0, W, H);
+    if (play && onFloor()) { // rhythm meter: tap when the closing ring meets the circle
+      const age = time - lastKick, ph = clamp(age / (STEP * 4), 0, 1), mx = W / 2, my = H - (touch ? 215 : 150);
+      octx.lineWidth = 4; octx.strokeStyle = '#ff4fa3'; octx.beginPath(); octx.arc(mx, my, 26, 0, 6.2832); octx.stroke();
+      octx.lineWidth = 3; octx.strokeStyle = K.fg; octx.globalAlpha = 0.35 + 0.65 * ph; octx.beginPath(); octx.arc(mx, my, 26 + 46 * (1 - ph), 0, 6.2832); octx.stroke(); octx.globalAlpha = 1;
+      octx.font = '700 15px "JetBrains Mono", monospace'; octx.textAlign = 'center'; octx.lineWidth = 3; octx.strokeStyle = K.ink; octx.fillStyle = K.fg;
+      if (danceMsgT > 0) { octx.globalAlpha = Math.min(1, danceMsgT * 2); octx.strokeText(danceMsg, mx, my - 84 - (1 - danceMsgT) * 14); octx.fillText(danceMsg, mx, my - 84 - (1 - danceMsgT) * 14); octx.globalAlpha = 1; }
+    }
     if (play && job && !inside) {
       const t = target(), dx = job.p.x - t.x, dy = job.p.y - t.y, rel = ad(Math.atan2(dy, dx) - camA - camO), col = job.stage === 'pickup' ? K.gold : K.go;
       const ax = W / 2, ay = Math.max(150, H * 0.22);
@@ -1075,7 +1166,9 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     put('cash', money(cash));
     const n = Math.ceil(heat), key = 's' + n;
     if (cache.stars !== key) { cache.stars = key; $('stars').innerHTML = '<b>' + '★'.repeat(n) + '</b>' + '☆'.repeat(5 - n); $('stars').classList.toggle('hot', n > 0); }
-    put('speed', player.car ? Math.round(Math.abs(player.car.v) * 0.42) + ' կմ/ժ' : 'ոտքով');
+    put('speed', inside ? (drinkT > 0 ? 'խմիչք ×2 · ' + Math.ceil(drinkT) + ' վ' : vip ? 'VIP սրահ' : 'ակումբում') : player.car ? Math.round(Math.abs(player.car.v) * 0.42) + ' կմ/ժ' : 'ոտքով');
+    const showDance = play && !paused && onFloor();
+    if (cache.dance !== showDance) { cache.dance = showDance; $('danceBtn').hidden = !showDance; }
     const showJob = play && !!job;
     if (cache.jobShow !== showJob) { cache.jobShow = showJob; $('job').hidden = !showJob; }
     if (showJob) {
@@ -1102,6 +1195,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (mode !== 'play') return;
     if ((e.code === 'KeyP' || e.code === 'Escape') && !e.repeat) { setPause(!paused); e.preventDefault(); return; }
     if (paused) return;
+    if (inside && e.code === 'Space') { if (!e.repeat) danceHit(); e.preventDefault(); return; }
     if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
     if ((e.code === 'KeyE' || e.code === 'KeyF') && !e.repeat) enterExit();
     if (e.code === 'KeyC' && !e.repeat) toggleFace();
@@ -1124,6 +1218,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   const joyEnd = (e) => { if (e.pointerId === joy.id) { joy.id = null; joy.dx = joy.dy = 0; } };
   cv.addEventListener('pointerup', joyEnd); cv.addEventListener('pointercancel', joyEnd);
   $('btnAct').addEventListener('click', enterExit);
+  $('danceBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); danceHit(); });
   $('hint').addEventListener('click', enterExit);
   const bb = $('btnBrake');
   bb.addEventListener('pointerdown', (e) => { padBrake = true; e.preventDefault(); });
@@ -1142,7 +1237,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   $('faceBtn').addEventListener('click', () => { toggleFace(); $('faceBtn').blur(); });
   $('snd').addEventListener('click', () => { soundOn = !soundOn; $('snd').classList.toggle('off', !soundOn); });
   function startGame(startAtClub) {
-    initAudio(); reset(); inside = !!startAtClub; vip = false; clubArm = !startAtClub;
+    initAudio(); reset(); inside = !!startAtClub; vip = false; clubArm = !startAtClub; combo = 0; drinkT = 0; vipTable = false; seqT = 0;
     mode = 'play'; $('menu').hidden = true;
     if (touch) $('pad').hidden = false;
     if (startAtClub) {
