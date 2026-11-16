@@ -55,6 +55,8 @@ body { background: var(--sky); color: var(--fg); font-family: var(--font-text); 
 .side { display: flex; gap: 8px; align-items: flex-start; }
 #map { width: 92px; height: 92px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); display: block; }
 .snd { pointer-events: auto; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font: 600 15px var(--font-data); cursor: pointer; }
+.snd.face { width: auto; padding: 0 10px; font: 600 13px var(--font-text); }
+.snd.on { background: var(--tuff); color: var(--ink); }
 .snd.off { color: var(--muted); text-decoration: line-through; }
 .job { grid-column: 1 / -1; justify-self: center; max-width: 100%; font-size: 14px; font-weight: 600; text-align: center; min-width: 0; }
 .job .t { font-family: var(--font-data); font-variant-numeric: tabular-nums; margin-left: 8px; }
@@ -114,6 +116,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       </div>
     </div>
     <div class="side">
+      <button class="snd face" id="faceBtn" type="button">Դեմք</button>
       <button class="snd" id="snd" type="button" aria-label="Ձայն">♪</button>
       <canvas id="map" width="184" height="184" aria-label="Քարտեզ"></canvas>
     </div>
@@ -136,6 +139,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
         <li><b>Գնալ՝</b> W և S, <b>թեքվել՝</b> A և D (կամ սլաքներ)։ Հեռախոսով՝ մատով քաշիր էկրանի վրա</li>
         <li><b>Նստել կամ իջնել՝</b> E</li>
         <li><b>Ձեռքի արգելակ՝</b> Space</li>
+        <li><b>Դեմքը առջևից տեսնել՝</b> C կամ «Դեմք» կոճակը</li>
         <li><b>Դեղին օղակում</b> վերցնում ես պատվերը, <b>կանաչում</b> հասցնում ես, քանի դեռ ժամանակը չի լրացել</li>
         <li><b>Աստղեր՝</b> վթարներն ու ուրիշի մեքենան վերցնելը կանչում են ոստիկաններին։ Կորիր նրանց աչքից, ու աստղերը կմարեն</li>
       </ul>
@@ -462,7 +466,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
   // ---------- 3D view ----------
   const T = window.THREE, SKY = '#f0d2b6';
-  let renderer = null, scene, cam3, marker, playerMesh, camA = 0, camO = 0, idleT = 0, lastDt = 0.016, stamp = 0;
+  let renderer = null, scene, cam3, marker, playerMesh, camA = 0, camO = 0, idleT = 0, faceCam = false, lastDt = 0.016, stamp = 0;
   const meshOf = new Map(), ov = $('ov'), octx = ov.getContext('2d');
   const lam = (c, extra) => new T.MeshLambertMaterial(Object.assign({ color: c }, extra || {}));
   const box = (w, h, d, mat, x, y, z) => { const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); return m; };
@@ -470,7 +474,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   function init3d() {
     renderer = new T.WebGLRenderer({ canvas: cv, antialias: true });
     scene = new T.Scene(); scene.background = new T.Color(SKY); scene.fog = new T.Fog(SKY, 500, 2600);
-    cam3 = new T.PerspectiveCamera(60, 1, 2, 5000);
+    cam3 = new T.PerspectiveCamera(60, 1, 2, 5000); cam3.add(new T.PointLight(0xfff4e8, 0.45, 160)); scene.add(cam3);
     scene.add(new T.HemisphereLight(0xfff1e0, 0x8a7f78, 0.72));
     const sun = new T.DirectionalLight(0xffe0bd, 0.7); sun.position.set(-0.55, 1, -0.3); scene.add(sun);
     const base = new T.Mesh(new T.PlaneGeometry(14000, 14000), lam(K.hills)); base.rotation.x = -Math.PI / 2; base.position.set(WS / 2, -1, WS / 2); scene.add(base);
@@ -529,40 +533,74 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   }
 
   const G = {};
-  function playerModel() { // the walker: grey T-shirt, jeans and a sculpted head (forward is +x)
-    const g = new T.Group(), add = (to, m, x, y, z) => { m.position.set(x, y, z); to.add(m); return m; };
-    const skin = lam('#e2b196'), tee = lam('#9a9c9f'), jeans = lam('#2c3140'), hair = lam('#231d1b'), shoe = lam('#e9e6df');
-    const ball = (r, mat, sx, sy, sz) => { const m = new T.Mesh(new T.SphereGeometry(r, 20, 14), mat); m.scale.set(sx || 1, sy || 1, sz || 1); return m; };
-    for (const z of [-2.1, 2.1]) {
-      add(g, new T.Mesh(new T.BoxGeometry(3.6, 7.5, 3.4), jeans), 0, 4.6, z); add(g, new T.Mesh(new T.BoxGeometry(5, 1.5, 3.4), shoe), 0.7, 0.75, z);
-      add(g, new T.Mesh(new T.BoxGeometry(3.2, 4, 2.6), tee), 0, 14.6, z * 2.75); add(g, new T.Mesh(new T.BoxGeometry(2.6, 5.5, 2.2), skin), 0, 10.2, z * 2.75);
-    }
-    add(g, new T.Mesh(new T.BoxGeometry(4.8, 9, 8.8), tee), 0, 12.6, 0);
-    add(g, new T.Mesh(new T.CylinderGeometry(1.7, 1.9, 2.4, 10), skin), 0, 17.8, 0);
+  function sculptHead() { // one smooth mesh pushed into shape: broad cheeks and jaw, brow ridge, nose, lips; forward is +x
+    const g = (v, m, s) => Math.exp(-((v - m) * (v - m)) / (2 * s * s));
+    const ss = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+    const h = new T.Group(), add = (m, x, y, z) => { m.position.set(x, y, z); h.add(m); return m; };
+    const skinM = lam('#e3b099'), hairM = lam('#1d1816');
+    const SK = [1, 0.8, 0.71], ROSY = [1, 0.68, 0.64], LIP = [0.82, 0.48, 0.47], SHADE = [0.8, 0.62, 0.56];
 
-    const h = new T.Group(); h.position.y = 22.4; g.add(h);
-    add(h, ball(3.9, skin, 0.96, 1.12, 0.9), 0, 0.4, 0);            // skull
-    add(h, ball(3.1, skin, 0.98, 0.95, 0.9), 0.5, -1.9, 0);         // jaw and chin
-    for (const z of [-1, 1]) {
-      add(h, ball(0.95, skin, 0.55, 1, 0.5), -0.2, -0.1, z * 3.55); // ears
-      add(h, ball(0.62, lam('#f6f1ea'), 0.6, 0.62, 1.05), 3.2, 0.55, z * 1.45);   // eye
-      add(h, ball(0.34, lam('#5a3a22'), 0.6, 1, 1), 3.5, 0.52, z * 1.45);         // brown iris
-      add(h, ball(0.17, lam('#0d0b0a'), 0.6, 1, 1), 3.62, 0.52, z * 1.45);        // pupil
-      add(h, ball(0.75, skin, 0.5, 0.42, 1.25), 3.3, 1.02, z * 1.45);             // upper lid
-      const brow = add(h, new T.Mesh(new T.BoxGeometry(0.75, 0.5, 2.1), hair), 3.4, 1.62, z * 1.5); brow.rotation.x = z * 0.14; brow.rotation.y = -z * 0.2; // thick straight brows
-      add(h, ball(0.3, skin, 1, 0.8, 1), 3.55, -1.2, z * 0.42);    // nostrils
+    const geo = new T.SphereGeometry(1, 128, 96), pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i), dy = pos.getY(i), dz = pos.getZ(i);
+      let x = dx * 3.7, y = dy * 4.6, z = dz * 3.5;
+      z *= 1 + 0.14 * Math.sin(Math.PI * clamp((-dy - 0.08) / 0.78, 0, 1));          // full cheeks, wide jaw
+      if (dy < -0.7) y = -3.22 + (y + 3.22) * 0.7;                                   // squared-off chin
+      const f = ss(0.1, 0.55, dx), az = Math.abs(z);
+      const sock = g(y, 0.55, 0.36) * g(az, 1.45, 0.62), ck = g(y, -0.8, 0.95) * g(az, 2.0, 0.9);
+      const ul = g(y, -2.2, 0.17) * g(z, 0, 0.8), ll = g(y, -2.66, 0.2) * g(z, 0, 0.66);
+      let b = 0.3 * g(y, 1.3, 0.34) * g(az, 1.3, 1.1) - 0.3 * sock + 0.25 * ck;        // brow ridge, eye sockets, cheeks
+      b += ss(-1.5, -1.05, y) * (1 - ss(0.9, 1.5, y)) * g(z, 0, 0.34) * (0.25 + 1.0 * clamp((1.2 - y) / 2.2, 0, 1)); // nose bridge
+      b += 0.38 * g(y, -0.9, 0.3) * g(z, 0, 0.55) + 0.3 * g(y, -1.0, 0.24) * g(az, 0.62, 0.26);                     // tip and nostrils
+      b += 0.2 * g(y, -2.4, 0.5) * g(z, 0, 1.3) + 0.3 * ul + 0.36 * ll - 0.24 * g(y, -2.43, 0.09) * g(z, 0, 0.95);  // mouth
+      b += 0.32 * g(y, -3.55, 0.45) * g(z, 0, 1.05);                                                                 // chin
+      pos.setXYZ(i, x * (1 - 0.06 * f) + b * f, y, z);
+      const lipW = ss(0.45, 0.8, (ul + ll) * 1.15) * f, beard = 0.1 * ss(-1.3, -2.3, y) * ss(-0.2, 0.3, dx) + 0.07 * g(y, -1.75, 0.2) * g(z, 0, 1) * f;
+      for (let k = 0; k < 3; k++) {
+        let c = SK[k]; c += (ROSY[k] - c) * 0.6 * ck * f; c += (SHADE[k] - c) * (0.3 * sock * f + beard); c += (LIP[k] - c) * lipW;
+        col[i * 3 + k] = c;
+      }
     }
-    const bridge = add(h, ball(1, skin, 0.55, 1.5, 0.48), 3.42, 0.05, 0); bridge.rotation.z = -0.25;
-    add(h, ball(0.58, skin, 1.05, 0.85, 1), 3.9, -0.95, 0);        // nose tip
-    add(h, ball(0.9, lam('#b9716b'), 0.45, 0.26, 1.2), 3.18, -2.3, 0);  // upper lip
-    add(h, ball(0.9, lam('#c98279'), 0.48, 0.3, 1), 3.12, -2.62, 0);   // lower lip
-    add(h, ball(1.1, skin, 0.8, 0.7, 1.4), 2.25, -3.7, 0);         // chin
-    // hair: a cap tilted back off the forehead, sides, and a fringe swept to one side
-    const cap = add(h, new T.Mesh(new T.SphereGeometry(4.2, 24, 12, 0, 6.2832, 0, 1.45), hair), -0.2, 0.75, 0); cap.scale.set(1, 1.12, 0.96); cap.rotation.z = 0.6;
-    const fringe = add(h, ball(2.5, hair, 1.05, 0.55, 1.5), 1.9, 3.75, 0.25); fringe.rotation.x = 0.16; fringe.rotation.z = -0.18;
-    add(h, ball(1.6, hair, 1, 0.55, 1), 2.7, 3.2, -1.9);
-    for (const z of [-1, 1]) add(h, ball(1.5, hair, 1.3, 1.05, 0.4), -0.2, 2.1, z * 3.4);
-    g.userData.head = h;
+    geo.setAttribute('color', new T.BufferAttribute(col, 3)); geo.computeVertexNormals();
+    h.add(new T.Mesh(geo, new T.MeshLambertMaterial({ vertexColors: true })));
+
+    // thick dark hair: volume on top, a fringe down over the forehead swept to one side, short at the nape
+    const hg = new T.SphereGeometry(1, 96, 64), hp = hg.attributes.position, hc = new Float32Array(hp.count * 3);
+    for (let i = 0; i < hp.count; i++) {
+      const dx = hp.getX(i), dy = hp.getY(i), dz = hp.getZ(i), a = Math.atan2(dz, dx);
+      const line = (dx > 0 ? 0.08 + 0.52 * Math.pow(dx, 0.8) : 0.08 + 0.55 * dx) - 0.2 * dz * Math.max(0, dx);
+      const k = ss(line - 0.06, line + 0.1, dy), strand = Math.sin(a * 16 + dy * 5) * 0.035 + Math.sin(a * 41 + dy * 9) * 0.015;
+      const r = 1 + k * (0.11 + (0.1 + 0.1 * ss(0.1, 0.8, dx)) * Math.max(0, dy) + strand) - (1 - k) * 0.25;
+      const fr = k * ss(0.3, 0.8, dx) * (1 - ss(line + 0.1, line + 0.5, dy));
+      hp.setXYZ(i, dx * 3.7 * r - 0.15 + 0.45 * fr, dy * 4.6 * r + 0.1 - 0.25 * fr, dz * 3.5 * r * 1.06);
+      const sh = 0.75 + strand * 7; hc[i * 3] = 0.15 * sh; hc[i * 3 + 1] = 0.12 * sh; hc[i * 3 + 2] = 0.11 * sh;
+    }
+    hg.setAttribute('color', new T.BufferAttribute(hc, 3)); hg.computeVertexNormals();
+    h.add(new T.Mesh(hg, new T.MeshLambertMaterial({ vertexColors: true })));
+
+    const ball = (r, mat, sx, sy, sz) => { const m = new T.Mesh(new T.SphereGeometry(r, 20, 14), mat); m.scale.set(sx, sy, sz); return m; };
+    const white = lam('#f4efe8'), iris = lam('#5b3b22'), pupil = lam('#0c0a09');
+    for (const s of [-1, 1]) {
+      add(ball(0.6, white, 1, 0.85, 1.15), 2.52, 0.55, s * 1.45); add(ball(0.33, iris, 0.5, 1, 1), 3.0, 0.55, s * 1.45); add(ball(0.15, pupil, 0.5, 1, 1), 3.1, 0.55, s * 1.45);
+      add(ball(0.7, skinM, 0.9, 0.42, 1.2), 2.68, 0.98, s * 1.45); add(ball(0.62, skinM, 0.8, 0.28, 1.1), 2.6, 0.13, s * 1.45);   // hooded upper lid, lower lid
+      const brow = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([new T.Vector3(3.62, 1.36, s * 0.5), new T.Vector3(3.48, 1.48, s * 1.2), new T.Vector3(3.12, 1.55, s * 1.9), new T.Vector3(2.55, 1.38, s * 2.5)]), 16, 0.24, 8), hairM);
+      h.add(brow);
+      const ear = add(ball(1, skinM, 0.5, 1.05, 0.45), -0.3, 0.05, s * 3.6); ear.rotation.y = s * 0.3;
+    }
+    return h;
+  }
+  function playerModel() { // the walker: grey T-shirt, jeans, white trainers
+    const g = new T.Group(), add = (m, x, y, z) => { m.position.set(x, y, z); g.add(m); return m; };
+    const skin = lam('#e3b099'), tee = lam('#9a9c9f'), jeans = lam('#2c3140'), shoe = lam('#e9e6df');
+    const cyl = (rt, rb, hh, mat) => new T.Mesh(new T.CylinderGeometry(rt, rb, hh, 12), mat);
+    for (const z of [-2.1, 2.1]) {
+      add(cyl(1.9, 1.5, 8, jeans), 0, 4.8, z); add(new T.Mesh(new T.BoxGeometry(5, 1.5, 3.2), shoe), 0.7, 0.75, z);
+      add(cyl(1.75, 1.6, 4.2, tee), 0, 14.7, z * 2.7); add(cyl(1.25, 1.05, 5.6, skin), 0, 10, z * 2.7);
+      const sh = add(new T.Mesh(new T.SphereGeometry(1.8, 12, 10), tee), 0, 16.6, z * 2.55); sh.scale.set(1, 0.8, 1);
+    }
+    const torso = add(cyl(4.6, 4.1, 9.2, tee), 0, 12.9, 0); torso.scale.set(0.58, 1, 1);
+    add(cyl(2.1, 2.3, 2.6, skin), 0, 18, 0);
+    const head = sculptHead(); head.scale.setScalar(0.82); head.position.y = 22; g.add(head);
     g.scale.setScalar(1.25); return g;
   }
 
@@ -622,13 +660,14 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (play) {
       const t = target(), spd = player.car ? Math.abs(player.car.v) : 0;
       camA += ad((player.car ? player.car.a : player.a) - camA) * Math.min(1, lastDt * 3.6);
-      // standing still on foot: the camera walks round to the front so you can see the face
-      const look = !player.car && idleT > 1.5;
-      if (look) camO += lastDt * 0.7; else camO += ad(-camO) * Math.min(1, lastDt * 6);
-      const ang = camA + camO, far = W < H ? 1.45 : 1, dist = (player.car ? 80 + spd * 0.07 : look ? 50 : 66) * far, p = { x: t.x - Math.cos(ang) * dist, y: t.y - Math.sin(ang) * dist };
+      // face view: the camera swings round to the front, on request or after standing still for a while
+      const look = faceCam || (!player.car && idleT > 2.5), mix = (u, v, w) => u + (v - u) * w;
+      camO += ad((look ? Math.PI : 0) - camO) * Math.min(1, lastDt * (look ? 2.5 : 6));
+      const o = Math.abs(ad(camO)) / Math.PI, ang = camA + camO, far = W < H ? 1.45 : 1;
+      const dist = player.car ? (80 + spd * 0.07) * far : mix(66, 21, o) * far, p = { x: t.x - Math.cos(ang) * dist, y: t.y - Math.sin(ang) * dist };
       pushOut(p, 9);
-      cam3.position.set(p.x, (player.car ? 36 : look ? 30 : 32) * far, p.y);
-      if (Math.abs(ad(camO)) > 0.05) cam3.lookAt(t.x, 20, t.y); else cam3.lookAt(t.x + Math.cos(camA) * 45, 9, t.y + Math.sin(camA) * 45);
+      cam3.position.set(p.x, player.car ? 36 * far : mix(32 * far, 28.5, o), p.y);
+      if (o > 0.03) cam3.lookAt(t.x, player.car ? 10 : mix(14, 27.5, o), t.y); else cam3.lookAt(t.x + Math.cos(camA) * 45, 9, t.y + Math.sin(camA) * 45);
       const fov = 60 + spd * 0.035; if (Math.abs(cam3.fov - fov) > 0.2) { cam3.fov = fov; cam3.updateProjectionMatrix(); }
     } else {
       const a = time * 0.07, cx = ic(3) + 260, cy = ic(3) + 260;
@@ -696,6 +735,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (mode !== 'play') return;
     if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
     if ((e.code === 'KeyE' || e.code === 'KeyF') && !e.repeat) enterExit();
+    if (e.code === 'KeyC' && !e.repeat) toggleFace();
   });
   window.addEventListener('keyup', (e) => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
@@ -718,6 +758,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   const bb = $('btnBrake');
   bb.addEventListener('pointerdown', (e) => { padBrake = true; e.preventDefault(); });
   ['pointerup', 'pointercancel', 'pointerleave'].forEach((n) => bb.addEventListener(n, () => { padBrake = false; }));
+  function toggleFace() { faceCam = !faceCam; $('faceBtn').classList.toggle('on', faceCam); }
+  $('faceBtn').addEventListener('click', () => { toggleFace(); $('faceBtn').blur(); });
   $('snd').addEventListener('click', () => { soundOn = !soundOn; $('snd').classList.toggle('off', !soundOn); });
   $('startBtn').addEventListener('click', (e) => {
     initAudio(); reset(); mode = 'play'; $('menu').hidden = true;
