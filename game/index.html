@@ -1,0 +1,447 @@
+<meta charset="utf-8">
+<title>Չղջիկի արձագանք</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Armenian:wght@400;600;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one dark screen. The cave canvas bleeds to every edge; a thin instrument
+   strip (sensor LEDs, distance, energy, score) floats on top like a breadboard readout. */
+:root {
+  color-scheme: dark;
+  --bg: #070a14;
+  --rock: #0d1222;
+  --fg: #e6e9f5;
+  --muted: #8a93b0;
+  --echo: #8fd3ff;
+  --moth: #ffc857;
+  --danger: #ff5d73;
+  --led-blue: #4d8dff;
+  --led-yellow: #ffd23f;
+  --led-green: #3ddc84;
+  --led-off: #232a40;
+  --panel: rgba(13, 18, 34, 0.86);
+  --line: rgba(143, 211, 255, 0.22);
+  --font-text: "Noto Sans Armenian", "Segoe UI", system-ui, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-text);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.stage { position: relative; height: 100%; width: 100%; overflow: hidden; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+
+.hud {
+  position: absolute; inset: 0 0 auto 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  pointer-events: none;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+.sensor { display: flex; align-items: center; gap: 8px; }
+.led { width: 12px; height: 12px; border-radius: 50%; background: var(--led-off); transition: background 80ms, box-shadow 80ms; }
+.led.b.on { background: var(--led-blue); box-shadow: 0 0 12px var(--led-blue); }
+.led.y.on { background: var(--led-yellow); box-shadow: 0 0 12px var(--led-yellow); }
+.led.g.on { background: var(--led-green); box-shadow: 0 0 12px var(--led-green); }
+.dist { min-width: 7ch; font-weight: 700; font-size: 15px; }
+.dist small, .score small { color: var(--muted); font-family: var(--font-text); font-size: 11px; font-weight: 400; margin-left: 3px; }
+.energy { flex: 1 1 90px; min-width: 70px; max-width: 260px; height: 8px; border-radius: 4px; background: var(--led-off); overflow: hidden; }
+.energy i { display: block; height: 100%; width: 100%; background: var(--echo); transform-origin: left center; }
+.energy.low i { background: var(--danger); }
+.right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.score { font-weight: 700; font-size: 15px; }
+.lives { color: var(--danger); letter-spacing: 3px; font-size: 14px; min-width: 3.4em; }
+.snd {
+  pointer-events: auto; width: 34px; height: 34px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+  font: 600 15px var(--font-data); cursor: pointer;
+}
+.snd.off { color: var(--muted); text-decoration: line-through; }
+
+.overlay {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  padding-block: 64px 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  overflow-y: auto;
+}
+.card {
+  width: min(460px, 100%); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px;
+  backdrop-filter: blur(6px);
+}
+h1 { margin: 0; font-size: clamp(26px, 6vw, 36px); font-weight: 800; line-height: 1.15; text-wrap: balance; letter-spacing: -0.01em; }
+h1 span { color: var(--echo); }
+.card p { margin: 0; line-height: 1.55; color: var(--fg); font-size: 15px; }
+.how { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.45; color: var(--muted); }
+.how b { color: var(--fg); font-weight: 600; }
+.how .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 2px; vertical-align: baseline; }
+.result { display: flex; gap: 28px; font-family: var(--font-data); }
+.result div { display: flex; flex-direction: column; gap: 2px; }
+.result span { font-family: var(--font-text); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.result strong { font-size: 30px; font-variant-numeric: tabular-nums; }
+.go {
+  align-self: flex-start; border: 0; border-radius: 10px; padding: 12px 28px;
+  background: var(--echo); color: var(--bg); font: 800 16px var(--font-text); cursor: pointer;
+}
+.go:hover { filter: brightness(1.1); }
+button:focus-visible { outline: 2px solid var(--moth); outline-offset: 3px; }
+</style>
+
+<div class="stage">
+  <canvas id="cave" aria-label="Քարանձավ"></canvas>
+
+  <div class="hud" id="hud">
+    <div class="sensor" title="HC-SR04">
+      <span class="led b" id="ledB"></span><span class="led y" id="ledY"></span><span class="led g" id="ledG"></span>
+      <span class="dist"><span id="dist">—</span><small>սմ</small></span>
+    </div>
+    <div class="energy" id="energy" aria-label="Էներգիա"><i id="energyFill"></i></div>
+    <div class="right">
+      <span class="score"><span id="score">0</span><small>միավոր</small></span>
+      <span class="lives" id="lives">♥♥♥</span>
+      <button class="snd" id="snd" type="button" aria-label="Ձայն">♪</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="menu">
+    <div class="card">
+      <h1>Չղջիկի <span>արձագանք</span></h1>
+      <p>Քարանձավը մութ է։ Ուլտրաձայն ուղարկիր, ու արձագանքը մի պահ ցույց կտա պատերը։</p>
+      <ul class="how">
+        <li><b>Շարժվել՝</b> մկնիկով, մատով կամ ↑ ↓ ստեղներով</li>
+        <li><b>Ուլտրաձայն՝</b> սեղմում, երկրորդ մատով հպում կամ Space</li>
+        <li><b>Թիթեռները</b> լցնում են էներգիան, առանց էներգիայի ձայն չկա</li>
+        <li><span class="dot" style="background:var(--led-blue)"></span> մոտ է
+            <span class="dot" style="background:var(--led-yellow);margin-left:8px"></span> միջին
+            <span class="dot" style="background:var(--led-green);margin-left:8px"></span> հեռու։
+            Սենսորն ու ազդանշանը աշխատում են քո Arduino-ի նման</li>
+      </ul>
+      <button class="go" id="startBtn" type="button">Սկսել</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="over" hidden>
+    <div class="card">
+      <h1>Բախվեցիր <span>պատին</span></h1>
+      <div class="result">
+        <div><span>Միավոր</span><strong id="finalScore">0</strong></div>
+        <div><span>Ռեկորդ</span><strong id="bestScore">0</strong></div>
+        <div><span>Թիթեռ</span><strong id="finalMoths">0</strong></div>
+      </div>
+      <button class="go" id="againBtn" type="button">Նորից</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const canvas = $('cave'), ctx = canvas.getContext('2d');
+  const css = getComputedStyle(document.documentElement);
+  const C = {};
+  ['bg', 'rock', 'fg', 'echo', 'moth', 'danger'].forEach((k) => { C[k] = css.getPropertyValue('--' + k).trim(); });
+
+  // ---- world constants (1 unit = 1 cm for the sensor readout) ----
+  const VH = 600, COL = 16, BAT_R = 9, PING_COST = 14, PING_MAX = 760, PING_SPEED = 820;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  let W = 0, H = 0, S = 1, OY = 0, dpr = 1;
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    W = Math.max(1, r.width); H = Math.max(1, r.height);
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    S = Math.min(H / VH, W / 720);
+    OY = (H - VH * S) / 2;
+  }
+  window.addEventListener('resize', resize);
+
+  // ---- sound ----
+  let actx = null, soundOn = true;
+  function tone(f0, f1, dur, type, vol) {
+    if (!actx || !soundOn) return;
+    const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur + 0.02);
+  }
+  const sfx = {
+    ping: () => tone(2600, 900, 0.22, 'sine', 0.12),
+    beep: () => tone(880, 880, 0.045, 'square', 0.035),
+    moth: () => { tone(700, 1400, 0.1, 'triangle', 0.1); },
+    hit: () => tone(180, 50, 0.4, 'sawtooth', 0.16),
+    empty: () => tone(140, 110, 0.08, 'square', 0.05),
+  };
+
+  // ---- state ----
+  let mode = 'menu';
+  let cols, first, phases, nextPillar, pillar, nextMothX, moths, pings;
+  let bat, dist, mothCount, energy, lives, invuln, flash, beepT, sensor, demoPingT;
+  let targetY = null, keyDir = 0, movePointer = null;
+  let best = 0;
+  try { best = +localStorage.getItem('echoBatBest') || 0; } catch (e) {}
+
+  function reset() {
+    cols = []; first = 0; moths = []; pings = [];
+    phases = [rand(0, 6.28), rand(0, 6.28), rand(0, 6.28)];
+    nextPillar = 95; pillar = null; nextMothX = 700;
+    bat = { x: 200, y: VH / 2, flap: 0 };
+    dist = 0; mothCount = 0; energy = 100; lives = 3; invuln = 0; flash = 0; beepT = 0; sensor = 400; demoPingT = 0.4;
+    targetY = null; keyDir = 0;
+    ensure(bat.x + 1400);
+    for (const c of cols) c.lit = 1.25;
+  }
+
+  function genCol(i) {
+    const x = i * COL, d = clamp(x / 30000, 0, 1);
+    const ease = clamp(x / 900, 0, 1);
+    const gap = lerp(430, lerp(330, 190, d), ease);
+    let c = VH / 2 + ease * (lerp(60, 110, d) * Math.sin(x / 310 + phases[0]) + 45 * Math.sin(x / 127 + phases[1]) + 12 * Math.sin(x / 53 + phases[2]));
+    c = clamp(c, 30 + gap / 2, VH - 30 - gap / 2);
+    let top = c - gap / 2 + rand(-6, 6), bot = c + gap / 2 + rand(-6, 6);
+    if (!pillar && i >= nextPillar) pillar = { start: i, side: Math.random() < 0.5 ? -1 : 1, depth: rand(0.34, 0.46) };
+    let inPillar = false;
+    if (pillar) {
+      const k = i - pillar.start, shape = [0.35, 0.8, 1, 0.8, 0.35][k];
+      if (shape === undefined) { pillar = null; nextPillar = i + Math.round(rand(lerp(46, 26, d), lerp(70, 40, d))); }
+      else { inPillar = true; if (pillar.side < 0) top += gap * pillar.depth * shape; else bot -= gap * pillar.depth * shape; }
+    }
+    if (x >= nextMothX && !inPillar) {
+      moths.push({ x: x, y: c + rand(-0.3, 0.3) * gap, lit: 0, ph: rand(0, 6.28) });
+      nextMothX = x + rand(230, 430);
+    }
+    return { top: top, bot: bot, lit: 0 };
+  }
+  function ensure(xMax) { while ((first + cols.length) * COL < xMax) cols.push(genCol(first + cols.length)); }
+  function col(i) { return cols[clamp(i - first, 0, cols.length - 1)]; }
+  function wallAt(x) {
+    const f = x / COL, i = Math.floor(f), t = f - i, a = col(i), b = col(i + 1);
+    return { top: lerp(a.top, b.top, t), bot: lerp(a.bot, b.bot, t) };
+  }
+
+  function ping() {
+    if (mode !== 'play') return;
+    if (energy < PING_COST) { sfx.empty(); return; }
+    energy -= PING_COST; pings.push({ x: bat.x, y: bat.y, r: 0 }); sfx.ping();
+  }
+
+  function measure() { // straight-ahead time-of-flight, like the HC-SR04
+    const i0 = Math.floor(bat.x / COL) + 1;
+    for (let i = i0; i < i0 + 26; i++) {
+      const c = col(i);
+      if (bat.y < c.top || bat.y > c.bot) return Math.max(0, i * COL - bat.x);
+    }
+    return 400;
+  }
+
+  function update(dt) {
+    const playing = mode === 'play';
+    const speed = playing ? 150 + 150 * clamp(dist / 25000, 0, 1) : (mode === 'menu' ? 70 : 0);
+    bat.x += speed * dt; bat.flap += dt * (playing ? 14 : 9);
+    if (playing) dist += speed * dt;
+    const viewW = W / S;
+    ensure(bat.x + viewW + 600);
+    const camX = bat.x - viewW * 0.22;
+    while (cols.length > 4 && (first + 1) * COL < camX - 120) { cols.shift(); first++; }
+    while (moths.length && moths[0].x < camX - 60) moths.shift();
+
+    // bat movement
+    if (playing) {
+      if (keyDir) { bat.y += keyDir * 430 * dt; targetY = null; }
+      else if (targetY !== null) { const dy = targetY - bat.y; bat.y += clamp(dy * 12 * dt, -560 * dt, 560 * dt); }
+      bat.y = clamp(bat.y, 4, VH - 4);
+    } else if (mode === 'menu') {
+      const w = wallAt(bat.x + 40); bat.y = lerp(bat.y, (w.top + w.bot) / 2, 1 - Math.pow(0.02, dt));
+      demoPingT -= dt;
+      if (demoPingT <= 0) { pings.push({ x: bat.x, y: bat.y, r: 0 }); demoPingT = 2.3; }
+    }
+
+    // pings light what they pass
+    for (const p of pings) {
+      const r0 = p.r; p.r += PING_SPEED * dt;
+      const a = Math.floor((p.x - p.r) / COL), b = Math.ceil((p.x + p.r) / COL);
+      for (let i = Math.max(a, first); i <= b && i < first + cols.length; i++) {
+        const dx = Math.abs(i * COL - p.x);
+        if (dx > r0 && dx <= p.r) cols[i - first].lit = 1;
+      }
+      for (const m of moths) { const dm = Math.hypot(m.x - p.x, m.y - p.y); if (dm > r0 && dm <= p.r) m.lit = 1; }
+    }
+    pings = pings.filter((p) => p.r < PING_MAX);
+    const fade = dt / 3.4;
+    for (const c of cols) if (c.lit > 0) c.lit -= fade;
+    for (const m of moths) if (m.lit > 0) m.lit -= fade;
+
+    if (!playing) return;
+    energy = Math.min(100, energy + 5 * dt);
+    invuln = Math.max(0, invuln - dt); flash = Math.max(0, flash - dt * 2.2);
+
+    // moths
+    for (let i = moths.length - 1; i >= 0; i--) {
+      const m = moths[i];
+      if (Math.hypot(m.x - bat.x, m.y - bat.y) < 24) { moths.splice(i, 1); mothCount++; energy = Math.min(100, energy + 18); sfx.moth(); }
+    }
+
+    // walls
+    const w = wallAt(bat.x);
+    if (invuln <= 0 && (bat.y - BAT_R < w.top || bat.y + BAT_R > w.bot)) {
+      lives--; invuln = 1.7; flash = 1; sfx.hit();
+      for (const c of cols) c.lit = Math.max(c.lit, 0.9);
+      bat.y = (w.top + w.bot) / 2; targetY = null;
+      if (lives <= 0) return gameOver();
+    }
+
+    // sensor: LEDs + buzzer, same idea as the breadboard build
+    sensor = measure();
+    if (sensor < 150) {
+      beepT -= dt;
+      if (beepT <= 0) { sfx.beep(); beepT = lerp(0.08, 0.55, sensor / 150); }
+    } else beepT = 0;
+  }
+
+  const score = () => Math.floor(dist / 20) + mothCount * 25;
+
+  function gameOver() {
+    mode = 'over';
+    const s = score();
+    if (s > best) { best = s; try { localStorage.setItem('echoBatBest', String(best)); } catch (e) {} }
+    $('finalScore').textContent = s; $('bestScore').textContent = best; $('finalMoths').textContent = mothCount;
+    $('over').hidden = false; $('againBtn').focus();
+  }
+
+  // ---- drawing ----
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+    const viewW = W / S, camX = bat.x - viewW * 0.22;
+    const sx = (x) => (x - camX) * S, sy = (y) => OY + y * S;
+    const i0 = Math.max(first, Math.floor(camX / COL) - 1), i1 = Math.min(first + cols.length - 2, Math.ceil((camX + viewW) / COL));
+
+    ctx.lineWidth = 2; ctx.lineCap = 'round';
+    for (let i = i0; i <= i1; i++) {
+      const a = cols[i - first], b = cols[i - first + 1], l = clamp(a.lit, 0, 1);
+      if (l <= 0.01) continue;
+      const x0 = sx(i * COL), x1 = sx((i + 1) * COL);
+      ctx.globalAlpha = l * 0.16; ctx.fillStyle = C.echo;
+      ctx.beginPath(); ctx.moveTo(x0, -2); ctx.lineTo(x0, sy(a.top)); ctx.lineTo(x1 + 0.5, sy(b.top)); ctx.lineTo(x1 + 0.5, -2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x0, H + 2); ctx.lineTo(x0, sy(a.bot)); ctx.lineTo(x1 + 0.5, sy(b.bot)); ctx.lineTo(x1 + 0.5, H + 2); ctx.fill();
+      ctx.globalAlpha = l; ctx.strokeStyle = C.echo;
+      ctx.beginPath(); ctx.moveTo(x0, sy(a.top)); ctx.lineTo(x1, sy(b.top)); ctx.moveTo(x0, sy(a.bot)); ctx.lineTo(x1, sy(b.bot)); ctx.stroke();
+    }
+
+    // ping rings
+    ctx.strokeStyle = C.echo;
+    for (const p of pings) {
+      ctx.globalAlpha = (1 - p.r / PING_MAX) * 0.55; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), p.r * S, 0, 6.2832); ctx.stroke();
+    }
+
+    // moths
+    ctx.fillStyle = C.moth;
+    for (const m of moths) {
+      const a = Math.max(clamp(m.lit, 0, 1), 0.1 + 0.06 * Math.sin(bat.flap * 0.6 + m.ph));
+      const x = sx(m.x), y = sy(m.y + Math.sin(bat.flap * 0.5 + m.ph) * 5), wv = (3 + 3 * Math.abs(Math.sin(bat.flap * 1.7 + m.ph))) * S;
+      ctx.globalAlpha = a;
+      ctx.beginPath(); ctx.ellipse(x - wv, y, wv, 4 * S, 0, 0, 6.2832); ctx.ellipse(x + wv, y, wv, 4 * S, 0, 0, 6.2832); ctx.fill();
+    }
+
+    // bat
+    if (!(invuln > 0 && Math.floor(invuln * 12) % 2)) {
+      const x = sx(bat.x), y = sy(bat.y), f = Math.sin(bat.flap), u = S;
+      ctx.globalAlpha = 1; ctx.fillStyle = C.fg; ctx.shadowColor = C.echo; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.ellipse(x, y, 7 * u, 5 * u, 0, 0, 6.2832); ctx.fill();
+      ctx.beginPath(); // ears
+      ctx.moveTo(x + 2 * u, y - 4 * u); ctx.lineTo(x + 4 * u, y - 10 * u); ctx.lineTo(x + 6 * u, y - 3 * u);
+      ctx.moveTo(x - 1 * u, y - 4 * u); ctx.lineTo(x, y - 9 * u); ctx.lineTo(x + 3 * u, y - 4 * u); ctx.fill();
+      for (const side of [-1, 1]) { // wings, drawn above and below the body
+        const tipY = y + side * (6 + 12 * (0.5 + 0.5 * f * side)) * u;
+        ctx.beginPath(); ctx.moveTo(x + 4 * u, y); ctx.lineTo(x - 2 * u, tipY); ctx.lineTo(x - 12 * u, tipY - side * 2 * u);
+        ctx.lineTo(x - 8 * u, y + side * 3 * u); ctx.lineTo(x - 14 * u, y + side * 1 * u); ctx.lineTo(x - 5 * u, y); ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    if (flash > 0) { ctx.globalAlpha = flash * 0.3; ctx.fillStyle = C.danger; ctx.fillRect(0, 0, W, H); }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- HUD ----
+  const hudCache = {};
+  function setText(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).textContent = v; } }
+  function setOn(id, on) { if (hudCache[id] !== on) { hudCache[id] = on; $(id).classList.toggle('on', on); } }
+  function hud() {
+    const live = mode === 'play';
+    setText('dist', live ? (sensor >= 400 ? '400+' : String(Math.round(sensor))) : '—');
+    setOn('ledB', live && sensor < 50);
+    setOn('ledY', live && sensor >= 50 && sensor < 150);
+    setOn('ledG', live && sensor >= 150);
+    $('energyFill').style.transform = 'scaleX(' + (energy / 100).toFixed(3) + ')';
+    const low = energy < PING_COST;
+    if (hudCache.low !== low) { hudCache.low = low; $('energy').classList.toggle('low', low); }
+    setText('score', String(mode === 'menu' ? 0 : score()));
+    setText('lives', '♥'.repeat(Math.max(0, lives)));
+  }
+
+  // ---- input ----
+  const toWorldY = (e) => (e.clientY - canvas.getBoundingClientRect().top - OY) / S;
+  canvas.addEventListener('pointerdown', (e) => {
+    if (mode !== 'play') return;
+    e.preventDefault();
+    if (e.pointerType === 'mouse' || movePointer === null) { movePointer = e.pointerId; targetY = toWorldY(e); }
+    ping();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (mode !== 'play') return;
+    if (e.pointerType === 'mouse' || e.pointerId === movePointer) targetY = toWorldY(e);
+  });
+  const release = (e) => { if (e.pointerId === movePointer) movePointer = null; };
+  canvas.addEventListener('pointerup', release); canvas.addEventListener('pointercancel', release);
+  const held = { up: false, down: false };
+  window.addEventListener('keydown', (e) => {
+    if (mode !== 'play') return;
+    if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) ping(); }
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') { held.up = true; e.preventDefault(); }
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') { held.down = true; e.preventDefault(); }
+    keyDir = (held.down ? 1 : 0) - (held.up ? 1 : 0);
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') held.up = false;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') held.down = false;
+    keyDir = (held.down ? 1 : 0) - (held.up ? 1 : 0);
+  });
+
+  function startGame() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (actx && actx.state === 'suspended') actx.resume();
+    reset(); held.up = held.down = false; movePointer = null;
+    mode = 'play'; $('menu').hidden = true; $('over').hidden = true;
+    pings.push({ x: bat.x, y: bat.y, r: 0 }); sfx.ping();
+  }
+  $('startBtn').addEventListener('click', startGame);
+  $('againBtn').addEventListener('click', startGame);
+  $('snd').addEventListener('click', () => {
+    soundOn = !soundOn; $('snd').classList.toggle('off', !soundOn);
+  });
+
+  // ---- loop ----
+  let last = 0;
+  function frame(t) {
+    const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t;
+    update(dt); draw(); hud();
+    requestAnimationFrame(frame);
+  }
+  function boot() { resize(); reset(); requestAnimationFrame(frame); }
+  if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(boot); else boot();
+})();
+</script>
