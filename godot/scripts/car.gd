@@ -130,60 +130,90 @@ func kick(imp: Vector2, m: float, inertia: float, r: Vector2, hard: float) -> vo
 		if driver: stun = maxf(stun, 0.5 + hard / 250)
 
 # ------------------------------------------------------------------ the AI driver ----------
-func next_leg(I: int, J: int) -> void:
+func next_leg(I: int, J: int, target := Vector2.INF) -> void:
 	var opts := []
 	for d in 4:
 		var nx: int = I + DV[d].x; var ny: int = J + DV[d].y
 		if nx >= 0 and ny >= 0 and nx <= 7 and ny <= 7: opts.append(d)
 	if ai.get("d", -1) >= 0 and opts.size() > 1: opts.erase((ai.d + 2) % 4)
 	var d: int = opts.pick_random()
+	if chase and target != Vector2.INF:   # a police car picks the street that gets it closest to you
+		var best := 1e12
+		for o: int in opts:
+			var q := Vector2(520.0 * (I + DV[o].x) + 60, 520.0 * (J + DV[o].y) + 60).distance_to(target)
+			if q < best: best = q; d = o
 	var r: Vector2i = DV[(d + 1) % 4]
 	ai = { "i": I, "j": J, "d": d, "stage": 1,
-		"wx": 520.0 * I + 60 + DV[d].x * 85 + r.x * 28, "wy": 520.0 * J + 60 + DV[d].y * 85 + r.y * 28 }
+		"wx": 520.0 * I + 60 + DV[d].x * 85 + r.x * 28, "wy": 520.0 * J + 60 + DV[d].y * 85 + r.y * 28, "direct": false }
 
 func resync() -> void:  # head for the nearest crossroads, then follow the streets from there
 	var I := clampi(roundi((x - 60) / 520.0), 0, 7); var J := clampi(roundi((y - 60) / 520.0), 0, 7)
-	ai = { "i": I, "j": J, "d": -1, "stage": 2, "wx": 520.0 * I + 60, "wy": 520.0 * J + 60 }
+	ai = { "i": I, "j": J, "d": -1, "stage": 2, "wx": 520.0 * I + 60, "wy": 520.0 * J + 60, "direct": false }
 
-func drive(city, cars: Array, player_pos: Vector2, player_on_foot: bool, dt: float) -> void:
+var chase := false
+var red_stop := false
+
+## The street-following driver. world gives light_at(I, J, d) and the player's position; blockers are
+## positions a civilian car must not drive into (the player on foot, people on a crossing).
+func drive(world, cars: Array, blockers: Array, dt: float) -> void:
+	var city = world.city
 	if stun > 0:
 		stun -= dt; step(city, 0, 0, false, dt)
 		if stun <= 0: resync()
 		return
-	var tx: float = ai.wx; var ty: float = ai.wy
-	if Vector2(tx - x, ty - y).length() < 34:
+	var tgt: Vector2 = world.target_pos()
+	var dp := tgt.distance_to(Vector2(x, y))
+	var tx: float = ai.wx; var ty: float = ai.wy; var direct := false
+	if chase and dp < 280: tx = tgt.x; ty = tgt.y; direct = true
+	elif ai.get("direct", false): resync(); tx = ai.wx; ty = ai.wy
+	ai.direct = direct
+	if not direct and Vector2(tx - x, ty - y).length() < 34:
 		var d: Vector2i = DV[max(ai.d, 0)]
-		if ai.stage == 2: next_leg(ai.i, ai.j)
+		if ai.stage == 2: next_leg(ai.i, ai.j, tgt)
 		elif ai.stage == 1:
 			var r: Vector2i = DV[(ai.d + 1) % 4]
 			ai.stage = 0; ai.wx = 520.0 * (ai.i + d.x) + 60 - d.x * 85 + r.x * 28; ai.wy = 520.0 * (ai.j + d.y) + 60 - d.y * 85 + r.y * 28
-		else: next_leg(ai.i + d.x, ai.j + d.y)
+		else:
+			var st: String = world.light_at(ai.i + d.x, ai.j + d.y, ai.d)
+			if not chase and (st == "r" or (st == "y" and v < 60)): red_stop = true
+			else: red_stop = false; next_leg(ai.i + d.x, ai.j + d.y, tgt)
 		tx = ai.wx; ty = ai.wy
 	var diff := wrapf(atan2(ty - y, tx - x) - a, -PI, PI)
-	var steer := clampf(diff * 2.2, -1, 1); var tv := cruise
+	var steer := clampf(diff * 2.2, -1, 1); var tv := 285.0 if chase else cruise
 	if absf(diff) > 0.6: tv = minf(tv, 75)
-	if ai.stage == 1: tv = minf(tv, 85)
-	var f := Vector2(cos(a), sin(a)); var blocked := false
-	for o: Car in cars:
-		if o == self: continue
-		var rel := Vector2(o.x - x, o.y - y); var fw := rel.dot(f)
-		if fw > 8 and fw < 76 and absf(rel.x * f.y - rel.y * f.x) < 18: blocked = true; break
-	if not blocked and player_on_foot:
-		var rel := player_pos - Vector2(x, y); var fw := rel.dot(f)
-		if fw > 8 and fw < 76 and absf(rel.x * f.y - rel.y * f.x) < 18: blocked = true
-	ignore -= dt
-	if blocked and ignore <= 0:
-		tv = 0; stuck += dt
-		if stuck > 4: ignore = 1.5; stuck = 0
-	elif not blocked: stuck = 0
+	if not chase and ai.stage == 1: tv = minf(tv, 85)
+	if not chase and ai.stage == 0 and ai.d >= 0:   # slow for a red or amber at the next crossroads
+		var d: Vector2i = DV[ai.d]
+		var st: String = world.light_at(ai.i + d.x, ai.j + d.y, ai.d)
+		var dw := Vector2(ai.wx - x, ai.wy - y).length()
+		if st == "g": red_stop = false
+		elif dw < 120 and not (st == "y" and dw < 45 and v > 60):
+			tv = minf(tv, 0.0 if dw < 36 else (dw - 30) * 1.4)
+			if dw < 40: red_stop = true
+	if red_stop: tv = 0
+	if not chase:
+		var f := Vector2(cos(a), sin(a)); var blocked := false
+		for o: Car in cars:
+			if o == self: continue
+			var rel := Vector2(o.x - x, o.y - y); var fw := rel.dot(f)
+			if fw > 8 and fw < 76 and absf(rel.x * f.y - rel.y * f.x) < 18: blocked = true; break
+		if not blocked:
+			for bp: Vector2 in blockers:
+				var rel := bp - Vector2(x, y); var fw := rel.dot(f)
+				if fw > 8 and fw < 76 and absf(rel.x * f.y - rel.y * f.x) < 18: blocked = true; break
+		ignore -= dt
+		if blocked and ignore <= 0:
+			tv = 0; stuck += dt
+			if stuck > 4: ignore = 1.5; stuck = 0
+		elif not blocked: stuck = 0
 	var thr := 0.0
 	if rev > 0: rev -= dt; thr = -1; steer = -steer
 	elif tv == 0:
 		if v > 5: thr = -1
 		else: v = 0
-	elif v < tv: thr = 0.6
+	elif v < tv: thr = 1.0 if chase else 0.6
 	elif v > tv + 15: thr = -0.6
 	var hit := step(city, thr, steer, false, dt)
-	if hit > 0:
+	if chase or hit > 0:
 		slow = slow + dt if absf(v) < 12 else 0.0
 		if slow > 1.2: rev = 0.9; slow = 0

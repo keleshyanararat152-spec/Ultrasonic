@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://ioi65pqbe70i"
+path="res://.godot/imported/f13_head.jpg-4ca5bf2b8669b0a926f4a3ee95aa865a.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "a9c241c8a1f01fd9f2f24ed42518b0b2"
+}
+
+[deps]
+
+source_file="res://assets/people/f13_head.jpg"
+dest_files=["res://.godot/imported/f13_head.jpg-4ca5bf2b8669b0a926f4a3ee95aa865a.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

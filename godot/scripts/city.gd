@@ -14,6 +14,9 @@ const WIDE := 562.0        # width it covers
 var WS: int = N * CELL + 120
 var blocks: Array = []     # blocks[i][j] = { type, rects: [ {x, y, w, h, z, d} ], trees: [ {x, y, r} ] }
 var _seed: int = 20261116
+var facade_mats: Array = []   # their night windows light up after dusk
+var bulb_mat: StandardMaterial3D
+var lamps: Array = []   # lamp positions, game units
 
 static func ic(i: int) -> float:
 	return i * CELL + 60.0
@@ -157,8 +160,16 @@ func build() -> void:
 	_multi(unit, _tex_mat("res://assets/tex/paving.jpg", Vector3(1, 1, 1) / 5.7, Color(0.95, 0.88, 0.8)), plaza, false)
 	_multi(unit, _plain(Color("6c9659")), parks, false)
 	var fac_uv := Vector3(1.0 / (WIDE * S), 1.0 / (FULL * S), 1.0 / (WIDE * S))
-	_multi(unit, _tex_mat("res://assets/tex/facade1.jpg", fac_uv, Color(0.86, 0.84, 0.82), 0.75), walls[0])
-	_multi(unit, _tex_mat("res://assets/tex/facade2.jpg", fac_uv, Color(0.9, 0.82, 0.76), 0.75), walls[1])
+	for q in 2:
+		_multi(unit, _tex_mat("res://assets/tex/facade%d.jpg" % (q + 1), fac_uv, [Color(0.86, 0.84, 0.82), Color(0.9, 0.82, 0.76)][q], 0.75), walls[q])
+		# night windows: the same walls a hair larger, the lit-window texture added on top after dusk
+		var glow := _tex_mat("res://assets/tex/facade%d_n.jpg" % (q + 1), fac_uv, Color.BLACK)
+		glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; glow.disable_receive_shadows = true
+		var gx := []
+		for xf: Transform3D in walls[q]: gx.append(Transform3D(xf.basis.scaled(Vector3(1.004, 1.0, 1.004)), xf.origin))
+		var gi := _multi(unit, glow, gx, false); gi.visible = false
+		facade_mats.append([glow, gi])
 	_multi(unit, _tex_mat("res://assets/tex/roof.jpg", Vector3(1, 1, 1) / 12.0), roofs, false)
 	_multi(unit, _plain(Color("c9bfb3")), ledges)
 	# trees: the park trees plus a row along every pavement, and three-headed lamps at the corners
@@ -181,7 +192,12 @@ func build() -> void:
 				posts.append(_box_xf(p[0], CURB + 23, p[1], 1.6, 46, 1.6))
 				bulbs.append(_box_xf(p[0], CURB + 47, p[1], 4, 4, 4))
 	_multi(unit, _plain(Color("2f3238")), posts)
-	var bm := _plain(Color("fff1c9")); bm.emission_enabled = true; bm.emission = Color("ffe6b0"); bm.emission_energy_multiplier = 0.4
+	var bm := _plain(Color("fff1c9")); bm.emission_enabled = true; bm.emission = Color("ffe6b0"); bm.emission_energy_multiplier = 0.4; bulb_mat = bm
+	lamps.clear()
+	for i in N:
+		for j in N:
+			var bx := i * CELL + 120.0; var by := j * CELL + 120.0
+			for p in [[bx + 7, by + 7], [bx + 393, by + 7], [bx + 7, by + 393], [bx + 393, by + 393]]: lamps.append(Vector2(p[0], p[1]))
 	_multi(unit, bm, bulbs, false)
 	# road markings: a dashed centre line on every street and zebra crossings at every crossroads
 	var dashes := []; var zebra := []
