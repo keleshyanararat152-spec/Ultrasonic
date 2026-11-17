@@ -555,6 +555,9 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     rg.addColorStop(0, 'rgba(255,250,235,1)'); rg.addColorStop(0.18, 'rgba(255,236,190,0.95)'); rg.addColorStop(0.4, 'rgba(255,214,150,0.25)'); rg.addColorStop(1, 'rgba(255,214,150,0)'); dg.fillStyle = rg; dg.fillRect(0, 0, 128, 128);
     sunDisc = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(sdC), fog: false, depthWrite: false, transparent: true })); sunDisc.scale.set(900, 900, 1); scene.add(sunDisc);
     smokeInit();
+    { const lite2 = window.matchMedia('(pointer: coarse)').matches;
+      CITY.lampL = []; for (let k = 0; k < (lite2 ? 3 : 6); k++) { const l = new T.PointLight(0xffcf8f, 0, 230, 2); CH.real(l); CITY.lampL.push(l); }
+      CITY.beamL = []; for (let k = 0; k < (lite2 ? 1 : 3); k++) { const l = new T.SpotLight(0xfff0d2, 0, 330, 0.46, 0.65, 1.3); CH.real(l); CH.real(l.target); CITY.beamL.push(l); } }
     const base = new T.Mesh(new T.PlaneGeometry(14000, 14000), lam(K.hills)); base.rotation.x = -Math.PI / 2; base.position.set(WS / 2, -1, WS / 2); scene.add(base);
 
     // streets, zebra stripes, parks and the square are painted once onto the ground
@@ -1161,11 +1164,18 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const glow = night;                                           // windows, shops, lamps and car lights come on at dusk
     if (CITY.winMats) CITY.winMats.forEach((m) => m.emissive.setScalar(glow * 0.95));
     if (CITY.shopMat) CITY.shopMat.emissive.setScalar(0.08 + glow * 0.95);
-    if (CITY.glowM) { CITY.glowM.opacity = glow * 0.5; CITY.glowM.visible = glow > 0.02; }
+    if (CITY.glowM) { CITY.glowM.opacity = glow * 0.22; CITY.glowM.visible = glow > 0.02; }
     if (CARM.mats.lights) CARM.mats.lights.emissive.setScalar(glow * 0.9);
-    const hl = CITY.head, c = player.car;
-    if (c && !club && glow > 0.02) { hl.visible = true; hl.position.set(c.x + Math.cos(c.a) * 14, groundY(c.x, c.y) + 0.35, c.y + Math.sin(c.a) * 14); hl.rotation.y = -c.a; hl.material.opacity = glow * 0.7; }
-    else hl.visible = false;
+    const on = club ? 0 : glow, hl = CITY.head; hl.visible = false;                    // its geometry and material are shared by every car's beam
+    hl.material.opacity = on * 0.42; hl.material.visible = on > 0.02;
+    if (CITY.winMats) CITY.winMats.forEach((m) => { m.reflectivity = 0.42 - 0.34 * night; });
+    const px = player.car ? player.car.x : player.x, py = player.car ? player.car.y : player.y;
+    CITY.lampT = (CITY.lampT || 0) - dt;
+    if (CITY.lamps && CITY.lampT <= 0) { CITY.lampT = 0.3; const near = CITY.lamps.map((q) => [Math.hypot(q[0] - px, q[1] - py), q]).sort((a, b) => a[0] - b[0]); CITY.lampL.forEach((l, k) => { const q = near[k][1]; l.position.set(q[0], CURB + 41, q[1]); }); }
+    CITY.lampL.forEach((l) => { l.intensity = on * 1.7; });
+    const lit = []; if (player.car) lit.push(player.car);
+    if (on > 0.02) { const others = cars.filter((c) => c !== player.car && c.driver && Math.abs(c.x - px) + Math.abs(c.y - py) < 700).sort((a, b) => (Math.abs(a.x - px) + Math.abs(a.y - py)) - (Math.abs(b.x - px) + Math.abs(b.y - py))); lit.push(...others); }
+    CITY.beamL.forEach((l, k) => { const c = lit[k]; if (!c || on < 0.02) { l.intensity = 0; return; } const fx = Math.cos(c.a), fz = Math.sin(c.a), gy = groundY(c.x, c.y); l.position.set(c.x + fx * 19, gy + 9, c.y + fz * 19); l.target.position.set(c.x + fx * 170, gy, c.y + fz * 170); l.target.updateMatrixWorld(); l.intensity = on * 2.3; });
   }
   function clockText() { const m = Math.floor(((6 + DAY.t * 24) % 24) * 60); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
 
@@ -1308,7 +1318,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   const groundY = (x, y) => CITY.up && x > 120 && y > 120 && x < WS && y < WS && x % CELL >= 120 && y % CELL >= 120 ? CURB : 0;   // pavements are raised
   function loadCity() {
     if (location.protocol === 'file:' || !T.GLTFLoader) return;
-    const names = ['facade1', 'facade2', 'roof', 'asphalt', 'paving', 'curb', 'facade1_n', 'facade2_n'], tx = {}, TL = new T.TextureLoader(); let left = names.length + 1, bad = false, tower = null;
+    const names = ['facade1', 'facade2', 'roof', 'asphalt', 'paving', 'curb', 'facade1_n', 'facade2_n', 'facade1_g', 'facade2_g'], tx = {}, TL = new T.TextureLoader(); let left = names.length + 1, bad = false, tower = null;
     ldAdd(left); const done = () => { ldDone('շենքեր ու փողոցներ'); if (!--left && !bad) upgradeCity(tx, tower); };
     names.forEach((n) => TL.load('tex/' + n + '.jpg', (t) => { t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 8; tx[n] = t; done(); }, undefined, () => { bad = true; done(); }));
     fetch('models/tower.txt').then((r) => { if (!r.ok) throw new Error('tower'); return r.text(); }).then((txt) => {
@@ -1316,24 +1326,56 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       new T.GLTFLoader().parse(buf.buffer, '', (g) => { g.scene.traverse((o) => { if (o.isMesh) tower = o; }); done(); }, () => { bad = true; done(); });
     }).catch(() => { bad = true; done(); });
   }
+  // balcony rails traced from the two baked facades: [u0, u1, v0, v1] in texture space
+  const BALC = [[[0.0005, 0.1685, 0.8682, 0.8867], [0.1729, 0.1846, 0.8682, 0.8867], [0.2178, 0.2651, 0.8682, 0.8867], [0.3164, 0.3638, 0.8682, 0.8867], [0.415, 0.4624, 0.8682, 0.8867], [0.5381, 0.5854, 0.8682, 0.8867], [0.6367, 0.6841, 0.8682, 0.8867], [0.7354, 0.7827, 0.8682, 0.8867], [0.8159, 0.8276, 0.8682, 0.8867], [0.832, 0.8794, 0.8682, 0.8867], [0.8799, 1.0, 0.8682, 0.8867], [0.0005, 0.1685, 0.7969, 0.8154], [0.1729, 0.1846, 0.7969, 0.8154], [0.2178, 0.2651, 0.7969, 0.8154], [0.3164, 0.3638, 0.7969, 0.8154], [0.415, 0.4624, 0.7969, 0.8154], [0.5381, 0.5854, 0.7969, 0.8154], [0.6367, 0.6841, 0.7969, 0.8154], [0.7354, 0.7827, 0.7969, 0.8154], [0.8159, 0.8276, 0.7969, 0.8154], [0.832, 0.8794, 0.7969, 0.8154], [0.8799, 1.0, 0.7969, 0.8154], [0.0005, 0.1685, 0.7256, 0.7441], [0.1729, 0.1846, 0.7256, 0.7441], [0.2178, 0.2651, 0.7256, 0.7441], [0.3164, 0.3638, 0.7256, 0.7441], [0.415, 0.4624, 0.7256, 0.7441], [0.5381, 0.5854, 0.7256, 0.7441], [0.6367, 0.6841, 0.7256, 0.7441], [0.7354, 0.7827, 0.7256, 0.7441], [0.8159, 0.8276, 0.7256, 0.7441], [0.832, 0.8794, 0.7256, 0.7441], [0.8799, 1.0, 0.7256, 0.7441], [0.0005, 0.1685, 0.6553, 0.6729], [0.1729, 0.1846, 0.6553, 0.6729], [0.2178, 0.2651, 0.6553, 0.6729], [0.3164, 0.3638, 0.6553, 0.6729], [0.415, 0.4624, 0.6553, 0.6729], [0.5381, 0.5854, 0.6553, 0.6729], [0.6367, 0.6841, 0.6553, 0.6729], [0.7354, 0.7827, 0.6553, 0.6729], [0.8159, 0.8276, 0.6553, 0.6729], [0.832, 0.8794, 0.6553, 0.6729], [0.8799, 1.0, 0.6553, 0.6729], [0.0005, 0.1685, 0.584, 0.6016], [0.1729, 0.1846, 0.584, 0.6016], [0.2178, 0.2651, 0.584, 0.6016], [0.3164, 0.3638, 0.584, 0.6016], [0.415, 0.4624, 0.584, 0.6016], [0.5381, 0.5854, 0.584, 0.6016], [0.6367, 0.6841, 0.584, 0.6016], [0.7354, 0.7827, 0.584, 0.6016], [0.8159, 0.8276, 0.584, 0.6016], [0.832, 0.957, 0.584, 0.6016], [0.9575, 1.0, 0.584, 0.6016], [0.0005, 0.1685, 0.5117, 0.5312], [0.1729, 0.1846, 0.5117, 0.5312], [0.2178, 0.2651, 0.5117, 0.5312], [0.3164, 0.3638, 0.5117, 0.5312], [0.415, 0.4624, 0.5117, 0.5312], [0.5381, 0.5854, 0.5117, 0.5312], [0.6367, 0.6841, 0.5117, 0.5312], [0.7354, 0.7827, 0.5117, 0.5312], [0.8159, 0.8276, 0.5117, 0.5312], [0.832, 0.957, 0.5117, 0.5312], [0.9575, 1.0, 0.5117, 0.5312], [0.0005, 0.1685, 0.4414, 0.459], [0.1729, 0.1846, 0.4414, 0.459], [0.2178, 0.2651, 0.4414, 0.459], [0.3164, 0.3638, 0.4414, 0.459], [0.415, 0.4624, 0.4414, 0.459], [0.5381, 0.5854, 0.4414, 0.459], [0.6367, 0.6841, 0.4414, 0.459], [0.7354, 0.7827, 0.4414, 0.459], [0.8159, 0.8276, 0.4414, 0.459], [0.832, 0.877, 0.4414, 0.459], [0.8774, 1.0, 0.4414, 0.459], [0.0005, 0.1685, 0.3701, 0.3877], [0.1729, 0.1846, 0.3701, 0.3877], [0.2178, 0.2651, 0.3701, 0.3877], [0.3164, 0.3638, 0.3701, 0.3877], [0.415, 0.4624, 0.3701, 0.3877], [0.5381, 0.5854, 0.3701, 0.3877], [0.6367, 0.6841, 0.3701, 0.3877], [0.7354, 0.7827, 0.3701, 0.3877], [0.8159, 0.8276, 0.3701, 0.3877], [0.832, 0.877, 0.3701, 0.3877], [0.8774, 1.0, 0.3701, 0.3877], [0.0005, 0.1685, 0.2988, 0.3164], [0.1729, 0.1846, 0.2988, 0.3164], [0.2178, 0.2651, 0.2988, 0.3164], [0.3164, 0.3638, 0.2988, 0.3164], [0.415, 0.4624, 0.2988, 0.3164], [0.5381, 0.5854, 0.2988, 0.3164], [0.6367, 0.6841, 0.2988, 0.3164], [0.7354, 0.7827, 0.2988, 0.3164], [0.8159, 0.8276, 0.2988, 0.3164], [0.832, 0.877, 0.2988, 0.3164], [0.8774, 1.0, 0.2988, 0.3164], [0.0005, 0.1685, 0.2275, 0.2461], [0.1729, 0.1846, 0.2275, 0.2461], [0.2178, 0.2651, 0.2275, 0.2461], [0.3164, 0.3638, 0.2275, 0.2461], [0.415, 0.4624, 0.2275, 0.2461], [0.5381, 0.5854, 0.2275, 0.2461], [0.6367, 0.6841, 0.2275, 0.2461], [0.7354, 0.7827, 0.2275, 0.2461], [0.8159, 0.8276, 0.2275, 0.2461], [0.832, 0.877, 0.2275, 0.2461], [0.8774, 1.0, 0.2275, 0.2461], [0.0005, 0.1685, 0.1562, 0.1748], [0.1729, 0.1846, 0.1562, 0.1748], [0.2178, 0.2651, 0.1562, 0.1748], [0.3164, 0.3638, 0.1562, 0.1748], [0.415, 0.4624, 0.1562, 0.1748], [0.5381, 0.5854, 0.1562, 0.1748], [0.6367, 0.6841, 0.1562, 0.1748], [0.7354, 0.7827, 0.1562, 0.1748], [0.8159, 0.8276, 0.1562, 0.1748], [0.832, 0.877, 0.1562, 0.1748], [0.8774, 1.0, 0.1562, 0.1748], [0.0005, 0.1685, 0.085, 0.1035], [0.1729, 0.1846, 0.085, 0.1035], [0.2178, 0.2651, 0.085, 0.1035], [0.3164, 0.3638, 0.085, 0.1035], [0.415, 0.4624, 0.085, 0.1035], [0.5381, 0.5854, 0.085, 0.1035], [0.6367, 0.6841, 0.085, 0.1035], [0.7354, 0.7827, 0.085, 0.1035], [0.8159, 0.8276, 0.085, 0.1035], [0.832, 0.877, 0.085, 0.1035], [0.8774, 1.0, 0.085, 0.1035]],
+    [[0.0513, 0.0986, 0.8682, 0.8867], [0.2505, 0.2969, 0.8682, 0.8867], [0.3291, 0.4976, 0.8682, 0.8867], [0.502, 0.6704, 0.8682, 0.8867], [0.7026, 0.749, 0.8682, 0.8867], [0.9009, 0.9453, 0.8682, 0.8867], [0.0513, 0.0986, 0.7969, 0.8154], [0.2505, 0.2969, 0.7969, 0.8154], [0.3291, 0.4976, 0.7969, 0.8154], [0.502, 0.6704, 0.7969, 0.8154], [0.7026, 0.749, 0.7969, 0.8154], [0.9009, 0.9453, 0.7969, 0.8154], [0.0513, 0.0986, 0.7256, 0.7441], [0.2505, 0.2969, 0.7256, 0.7441], [0.3291, 0.4976, 0.7256, 0.7441], [0.502, 0.6704, 0.7256, 0.7441], [0.7026, 0.749, 0.7256, 0.7441], [0.9009, 0.9453, 0.7256, 0.7441], [0.0513, 0.0986, 0.6553, 0.6729], [0.2505, 0.2969, 0.6553, 0.6729], [0.3291, 0.4976, 0.6553, 0.6729], [0.502, 0.6704, 0.6553, 0.6729], [0.7026, 0.749, 0.6553, 0.6729], [0.9009, 0.9453, 0.6553, 0.6729], [0.0513, 0.0986, 0.584, 0.6016], [0.2505, 0.2969, 0.584, 0.6016], [0.3291, 0.4976, 0.584, 0.6016], [0.502, 0.6704, 0.584, 0.6016], [0.7026, 0.749, 0.584, 0.6016], [0.9009, 0.9453, 0.584, 0.6016], [0.0513, 0.0986, 0.5117, 0.5312], [0.2505, 0.2969, 0.5117, 0.5312], [0.3291, 0.4976, 0.5117, 0.5312], [0.502, 0.6704, 0.5117, 0.5312], [0.7026, 0.749, 0.5117, 0.5312], [0.9009, 0.9453, 0.5117, 0.5312], [0.0513, 0.0986, 0.4414, 0.459], [0.2505, 0.2969, 0.4414, 0.459], [0.3291, 0.4976, 0.4414, 0.459], [0.502, 0.6587, 0.4414, 0.459], [0.6592, 0.6704, 0.4414, 0.459], [0.7026, 0.749, 0.4414, 0.459], [0.9009, 0.9453, 0.4414, 0.459], [0.0513, 0.0986, 0.3701, 0.3877], [0.2505, 0.2969, 0.3701, 0.3877], [0.3291, 0.4976, 0.3701, 0.3877], [0.502, 0.6704, 0.3701, 0.3877], [0.7026, 0.749, 0.3701, 0.3877], [0.9009, 0.9453, 0.3701, 0.3877], [0.0513, 0.0986, 0.2988, 0.3164], [0.2505, 0.2969, 0.2988, 0.3164], [0.3291, 0.4976, 0.2988, 0.3164], [0.502, 0.6567, 0.2988, 0.3164], [0.6572, 0.6704, 0.2988, 0.3164], [0.7026, 0.749, 0.2988, 0.3164], [0.9009, 0.9453, 0.2988, 0.3164], [0.0513, 0.0986, 0.2275, 0.2461], [0.2505, 0.2969, 0.2275, 0.2461], [0.3291, 0.4976, 0.2275, 0.2461], [0.502, 0.6704, 0.2275, 0.2461], [0.7026, 0.749, 0.2275, 0.2461], [0.9009, 0.9453, 0.2275, 0.2461], [0.0513, 0.0986, 0.1562, 0.1748], [0.2505, 0.2969, 0.1562, 0.1748], [0.3291, 0.4976, 0.1562, 0.1748], [0.502, 0.6704, 0.1562, 0.1748], [0.7026, 0.749, 0.1562, 0.1748], [0.9009, 0.9453, 0.1562, 0.1748], [0.0513, 0.0986, 0.085, 0.1035], [0.2505, 0.2969, 0.085, 0.1035], [0.3291, 0.4976, 0.085, 0.1035], [0.502, 0.6704, 0.085, 0.1035], [0.7026, 0.749, 0.085, 0.1035], [0.9009, 0.9453, 0.085, 0.1035]]];
+  function skyCube() { // a small sky-and-street cube that the window glass reflects
+    const face = (stops) => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), gr = x.createLinearGradient(0, 0, 0, 64); stops.forEach((s, n) => gr.addColorStop(n / (stops.length - 1), s)); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return c; };
+    const side = face(['#4f86bd', '#7fa9cf', '#b9c7d2', '#5d6670', '#3a3d42']);
+    const t = new T.CubeTexture([side, side, face(['#5f9bd1', '#6fa5d6']), face(['#4d4a48', '#3e3b39']), side, side]); t.needsUpdate = true; return t;
+  }
   function upgradeCity(tx, tower) {
     for (const m of CITY.old) if (m.userData.rect !== club.rect) scene.remove(m);
     // apartment blocks: four walls each showing a window of the baked facade at true scale, merged into one mesh per facade
     const FULL = 390, WIDE = 562, TINT = [[1, 1, 1], [1, 0.93, 0.86], [1, 0.86, 0.82], [0.9, 0.92, 0.96], [0.97, 0.9, 0.78]];
     const W = {}, bucket = (i, j, kind) => W[i + '_' + j + '_' + kind] || (W[i + '_' + j + '_' + kind] = { p: [], u: [], c: [], n: [], i: i, j: j, kind: kind }), towers = [];
     const quad = (o, a, b, c, d, uv, col, nrm) => { for (const k of [0, 1, 2, 0, 2, 3]) { const v = [a, b, c, d][k]; o.p.push(v[0], v[1], v[2]); o.u.push(uv[k][0], uv[k][1]); o.c.push(col[0], col[1], col[2]); o.n.push(nrm[0], nrm[1], nrm[2]); } };
+    // real depth: concrete balconies over the painted rails, and a cornice round each roof, as one instanced mesh per cell
+    const BX = {}, bxList = (i, j) => BX[i + '_' + j] || (BX[i + '_' + j] = { i: i, j: j, m: [], c: [] });
+    const _q = new T.Quaternion(), _up = new T.Vector3(0, 1, 0);
+    const addBox = (i, j, cx, cy, cz, sx, sy, sz, yaw, col) => { _q.setFromAxisAngle(_up, yaw); const L = bxList(i, j); L.m.push(new T.Matrix4().compose(new T.Vector3(cx, cy, cz), _q, new T.Vector3(sx, sy, sz))); L.c.push(col); };
+    const balconies = (i, j, kind, ax, az, bx, bz, nrm, L, u0, du, f, col) => {
+      const yaw = Math.atan2(-(bz - az), bx - ax), D = 6.5, shade = [col[0] * 0.9, col[1] * 0.89, col[2] * 0.88];
+      for (const k of BALC[kind]) {
+        if (k[3] > f - 0.012) continue;
+        const t0 = Math.max(0, (k[0] - u0) / du), t1 = Math.min(1, (k[1] - u0) / du); if ((t1 - t0) * L < 8) continue;
+        const tm = (t0 + t1) / 2, y0 = k[2] * FULL - 1.8, y1 = k[3] * FULL + 0.5;
+        addBox(i, j, ax + (bx - ax) * tm + nrm[0] * D / 2, (y0 + y1) / 2, az + (bz - az) * tm + nrm[2] * D / 2, (t1 - t0) * L, y1 - y0, D, yaw, shade);
+      }
+    };
+    const cornice = (i, j, x0, x1, z0, z1, Hh, col) => {
+      const c = [col[0] * 0.78, col[1] * 0.76, col[2] * 0.74], cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0, d = z1 - z0;
+      addBox(i, j, cx, Hh + 1.6, z1 + 1.1, w + 4.4, 4.2, 2.2, 0, c); addBox(i, j, cx, Hh + 1.6, z0 - 1.1, w + 4.4, 4.2, 2.2, 0, c);
+      addBox(i, j, x1 + 1.1, Hh + 1.6, cz, 2.2, 4.2, d, 0, c); addBox(i, j, x0 - 1.1, Hh + 1.6, cz, 2.2, 4.2, d, 0, c);
+    };
     let n = 0;
     for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) for (const r of blocks[i][j].rects) {
       if (r === club.rect) continue; n++;
       if (r.d > 0.84 && Math.abs(r.w - r.h) < 70) { towers.push(r); continue; }
       const f = [1, 0.77, 0.62, 0.85][Math.floor(r.z) % 4], Hh = FULL * f, col = TINT[Math.floor(r.d * 97) % TINT.length], o = bucket(i, j, n % 2);
-      const x0 = r.x, x1 = r.x + r.w, z0 = r.y, z1 = r.y + r.h, side = (ax, az, bx, bz, nrm, seed) => { const L = Math.hypot(bx - ax, bz - az), du = Math.min(1, L / WIDE), u0 = (1 - du) * ((r.d * 7 + seed * 0.37) % 1); quad(o, [ax, 0, az], [bx, 0, bz], [bx, Hh, bz], [ax, Hh, az], [[u0, 0], [u0 + du, 0], [u0 + du, f], [u0, f]], col, nrm); };
-      side(x0, z1, x1, z1, [0, 0, 1], 1); side(x1, z1, x1, z0, [1, 0, 0], 2); side(x1, z0, x0, z0, [0, 0, -1], 3); side(x0, z0, x0, z1, [-1, 0, 0], 4);
+      const x0 = r.x, x1 = r.x + r.w, z0 = r.y, z1 = r.y + r.h, side = (ax, az, bx, bz, nrm, seed) => { const L = Math.hypot(bx - ax, bz - az), du = Math.min(1, L / WIDE), u0 = (1 - du) * ((r.d * 7 + seed * 0.37) % 1); quad(o, [ax, 0, az], [bx, 0, bz], [bx, Hh, bz], [ax, Hh, az], [[u0, 0], [u0 + du, 0], [u0 + du, f], [u0, f]], col, nrm); balconies(i, j, n % 2, ax, az, bx, bz, nrm, L, u0, du, f, col); };
+      side(x0, z1, x1, z1, [0, 0, 1], 1); side(x1, z1, x1, z0, [1, 0, 0], 2); side(x1, z0, x0, z0, [0, 0, -1], 3); side(x0, z0, x0, z1, [-1, 0, 0], 4); cornice(i, j, x0, x1, z0, z1, Hh, col);
       quad(bucket(i, j, 2), [x0, Hh, z1], [x1, Hh, z1], [x1, Hh, z0], [x0, Hh, z0], [[0, 0], [1, 0], [1, 1], [0, 1]], col, [0, 1, 0]);
     }
     const mesh = (o, map) => { const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(o.p, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(o.u, 2)); g.setAttribute('color', new T.Float32BufferAttribute(o.c, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(o.n, 3)); const m = new T.Mesh(g, map); m.castShadow = m.receiveShadow = true; route(m, o.i, o.j); };
-    const bm = [tx.facade1, tx.facade2, tx.roof].map((t, q) => new T.MeshLambertMaterial({ map: t, vertexColors: true, emissiveMap: q < 2 ? tx['facade' + (q + 1) + '_n'] : null, emissive: 0x000000 })); for (const k in W) mesh(W[k], bm[W[k].kind]);
+    CITY.env = skyCube();
+    const bm = [tx.facade1, tx.facade2, tx.roof].map((t, q) => q < 2
+      ? new T.MeshPhongMaterial({ map: t, vertexColors: true, emissiveMap: tx['facade' + (q + 1) + '_n'], emissive: 0x000000, specularMap: tx['facade' + (q + 1) + '_g'], envMap: CITY.env, combine: T.MixOperation, reflectivity: 0.42, shininess: 90, specular: 0x9a9a9a })
+      : new T.MeshLambertMaterial({ map: t, vertexColors: true })); for (const k in W) mesh(W[k], bm[W[k].kind]);
     CITY.winMats = [bm[0], bm[1]];
+    { const boxG = new T.BoxGeometry(1, 1, 1), boxM = new T.MeshLambertMaterial({ color: '#f1ece3' }), col = new T.Color(); let total = 0;
+      for (const k in BX) { const b = BX[k], m = new T.InstancedMesh(boxG, boxM, b.m.length); b.m.forEach((mm, q) => { m.setMatrixAt(q, mm); m.setColorAt(q, col.setRGB(b.c[q][0], b.c[q][1], b.c[q][2])); }); m.castShadow = m.receiveShadow = true; route(m, b.i, b.j); total += b.m.length; }
+      CITY.ledges = total; }
     // shop fronts on every wall that faces a street, with an awning over some of them
     const atlas = shopAtlas(), SH = {}, sb = (i, j, kind) => SH[i + '_' + j + '_' + kind] || (SH[i + '_' + j + '_' + kind] = { p: [], u: [], c: [], n: [], i: i, j: j, kind: kind });
     const AWN = [[0.7, 0.2, 0.2], [0.18, 0.36, 0.26], [0.15, 0.25, 0.4], [0.78, 0.54, 0.18], [0.42, 0.22, 0.36], [0.85, 0.83, 0.78]];
@@ -1368,7 +1410,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     for (const r of towers) { const m = new T.Mesh(tower.geometry, twM); m.position.set(r.x + r.w / 2, 0, r.y + r.h / 2); m.scale.set(r.w / 7.38, (620 + r.z * 12) / 20, r.h / 8.35); m.castShadow = m.receiveShadow = true; scene.add(m); }
 
     // streets: tiled asphalt, markings on a transparent layer, raised pavements with stone kerbs
-    tx.asphalt.repeat.set(WS / 96, WS / 96); CITY.ground.material = lam('#c9c9c9', { map: tx.asphalt });
+    tx.asphalt.repeat.set(WS / 96, WS / 96); CITY.ground.material = new T.MeshPhongMaterial({ color: '#c9c9c9', map: tx.asphalt, shininess: 14, specular: 0x1c1c1c });
     const size = renderer.capabilities.maxTextureSize >= 4096 && !window.matchMedia('(pointer: coarse)').matches ? 4096 : 2048, mc = document.createElement('canvas'); mc.width = mc.height = size; const g = mc.getContext('2d'); g.scale(size / WS, size / WS);
     g.strokeStyle = '#ecebe6'; g.lineWidth = 2.6; g.setLineDash([20, 24]); g.beginPath(); for (let k = 0; k <= N; k++) { g.moveTo(ic(k), 0); g.lineTo(ic(k), WS); g.moveTo(0, ic(k)); g.lineTo(WS, ic(k)); } g.stroke();
     g.setLineDash([]); g.lineWidth = 2.2; g.beginPath(); for (let k = 0; k <= N; k++) for (const e of [7, 113]) { g.moveTo(k * CELL + e, 0); g.lineTo(k * CELL + e, WS); g.moveTo(0, k * CELL + e); g.lineTo(WS, k * CELL + e); } g.stroke();   // solid edge lines
@@ -1376,7 +1418,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const mt = new T.CanvasTexture(mc); mt.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const marks = new T.Mesh(new T.PlaneGeometry(WS, WS), new T.MeshLambertMaterial({ map: mt, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })); marks.rotation.x = -Math.PI / 2; marks.position.set(WS / 2, 0.12, WS / 2); marks.receiveShadow = true; scene.add(marks);
     tx.paving.repeat.set(7, 7); tx.curb.repeat.set(9, 0.12);
-    const slabG = new T.BoxGeometry(400, CURB, 400), kerb = lam('#d0d0d0', { map: tx.curb }), pave = lam('#cfcfcf', { map: tx.paving }), pale = lam('#e6dccb', { map: tx.paving }), lawnG = new T.PlaneGeometry(352, 352), lawn = lam(K.park);
+    const slabG = new T.BoxGeometry(400, CURB, 400), kerb = new T.MeshPhongMaterial({ color: '#d0d0d0', map: tx.curb, shininess: 8, specular: 0x111111 }), pave = new T.MeshPhongMaterial({ color: '#cfcfcf', map: tx.paving, shininess: 8, specular: 0x111111 }), pale = new T.MeshPhongMaterial({ color: '#e6dccb', map: tx.paving, shininess: 8, specular: 0x111111 }), lawnG = new T.PlaneGeometry(352, 352), lawn = lam(K.park);
     for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
       const b = blocks[i][j], top = b.type === 'plaza' ? pale : pave, slab = new T.Mesh(slabG, [kerb, kerb, top, top, kerb, kerb]); slab.position.set(i * CELL + 320, CURB / 2, j * CELL + 320); slab.receiveShadow = true; scene.add(slab);
       if (b.type === 'park') { const l = new T.Mesh(lawnG, lawn); l.rotation.x = -Math.PI / 2; l.position.set(i * CELL + 320, CURB + 0.08, j * CELL + 320); l.receiveShadow = true; scene.add(l); }
@@ -1452,6 +1494,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     for (const p of CARM.parts.concat(c.lug ? CARM.lug : [])) { const m = new T.Mesh(p.geo, mat(p)); m.castShadow = p.name === 'body' || p.name === 'wheels'; inner.add(m); }
     g.userData.wheels = CARM.wheels.map((p) => { const steer = new T.Group(), spin = new T.Mesh(p.geo, mat(p)); steer.position.copy(p.c); spin.castShadow = true; steer.add(spin); wi.add(steer); return { steer: steer, spin: spin, front: p.front }; });
     g.userData.tilt = tilt;
+    const beam = new T.Mesh(CITY.head.geometry, CITY.head.material); beam.position.set(14, 0.35, 0); g.add(beam);   // the headlight cone on the road, shown at night
     const bx = (m, sx, sy, sz, x, y, z) => { const e = new T.Mesh(G.box || (G.box = new T.BoxGeometry(1, 1, 1)), m); e.scale.set(sx, sy, sz); e.position.set(x, y, z); g.add(e); return e; };
     if (c.kind === 'police') { for (const s of [-1, 1]) bx(lam(K.cop), 17, 3.4, 0.5, 1, 11, s * 11.75); g.userData.l1 = bx(new T.MeshBasicMaterial({ color: '#9aa3ad' }), 2.6, 1.8, 4.6, -1, 22, -2.9); g.userData.l2 = bx(new T.MeshBasicMaterial({ color: '#9aa3ad' }), 2.6, 1.8, 4.6, -1, 22, 2.9); }
     if (c.taxi) bx(new T.MeshBasicMaterial({ color: '#fff3b8' }), 2.4, 1.8, 6, -1, 22, 0);
