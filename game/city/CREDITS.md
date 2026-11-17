@@ -50,3 +50,20 @@ reusing it. Changes made here: only the colour and emissive textures were kept a
 ## People
 
 See `models/LICENSE.txt` (Microsoft Rocketbox Avatar Library, MIT).
+
+## More cars (`models/cars/*.txt`, binary glTF stored as base64 text)
+
+All from Sketchfab under **CC Attribution 4.0** (https://creativecommons.org/licenses/by/4.0/).
+Changes made here for every model: split into one file per vehicle, turned to face along one axis and
+set on the ground, wheels grouped so they can turn, normal/roughness textures removed, colour textures
+resized to 512 px (256 px for the packs), and the two sports cars reduced in triangle count.
+
+- **V12 Goblin** (`goblin`) — "Fictional supercar - V12 Goblin" by ollitei — https://sketchfab.com/3d-models/fictional-supercar-v12-goblin-0a20e49ad5774d778567cb5c3f345786
+- **Lamborghini Revuelto** (`revuelto`) — "Free Lamborghini Revuelto" by ALIEEEN — https://sketchfab.com/3d-models/free-lamborghini-revuelto-cf52245eb68f48daa909c7ad2a8deaa3
+- **McLaren 720S** (`mclaren`) — "2017 Mclaren 720s" by s0h1o9b — https://sketchfab.com/3d-models/2017-mclaren-720s-f7bece69400f4640a4a3be746b44998b
+- **Mercedes G-class** (`gclass`) — "Mercedes Benz G-class W263" by Lexyc16 — https://sketchfab.com/3d-models/mercedes-benz-g-class-w263-1a2a52b16cad4e618af347461817895c
+- **Police SUV** (`policesuv`) — "Lowpoly Generic SUV Police" by mk2design — https://sketchfab.com/3d-models/lowpoly-generic-suv-police-259fc16c23d548ba8d5802c563d8ebdc
+- **Police sedan, taxi** (`police_sedan`, `taxi`) — from "Generic civil service vehicles pack" by comrade1280 — https://sketchfab.com/3d-models/generic-civil-service-vehicles-pack-8ff2a13f30914932a70c7950cfa58465
+- **Traffic cars** (`traffic_*`: compact, coupe, hatchback, minivan, offroad, pickup, sedan, sport, SUV, wagon) — from "Generic passenger car pack" by comrade1280 — https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5
+
+Brand names belong to their owners; the models are fan-made and not endorsed by the car makers.
