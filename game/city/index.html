@@ -1206,6 +1206,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     sunDisc.material.opacity = 1 - night; sunDisc.material.color.set(0xffffff).lerp(_c.set(0xff8a4a), dusk);
     const glow = night;                                           // windows, shops, lamps and car lights come on at dusk
     if (CITY.winMats) CITY.winMats.forEach((m) => m.emissive.setScalar(glow * 0.95));
+    if (CITY.houseGlass) CITY.houseGlass.emissive.setRGB(glow * 0.95, glow * 0.72, glow * 0.42);
     if (CITY.shopMat) CITY.shopMat.emissive.setScalar(0.08 + glow * 0.95);
     if (CITY.glowM) { CITY.glowM.opacity = glow * 0.22; CITY.glowM.visible = glow > 0.02; }
     if (CARM.mats.lights) CARM.mats.lights.emissive.setScalar(glow * 0.9);
@@ -1405,7 +1406,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     };
     let n = 0;
     for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) for (const r of blocks[i][j].rects) {
-      if (r === club.rect) continue; n++;
+      if (r === club.rect || r.house) continue; n++;
       if (r.d > 0.84 && Math.abs(r.w - r.h) < 70) { towers.push(r); continue; }
       const f = [1, 0.77, 0.62, 0.85][Math.floor(r.z) % 4], Hh = FULL * f, col = TINT[Math.floor(r.d * 97) % TINT.length], o = bucket(i, j, n % 2);
       const x0 = r.x, x1 = r.x + r.w, z0 = r.y, z1 = r.y + r.h, side = (ax, az, bx, bz, nrm, seed) => { const L = Math.hypot(bx - ax, bz - az), du = Math.min(1, L / WIDE), u0 = (1 - du) * ((r.d * 7 + seed * 0.37) % 1); quad(o, [ax, 0, az], [bx, 0, bz], [bx, Hh, bz], [ax, Hh, az], [[u0, 0], [u0 + du, 0], [u0 + du, f], [u0, f]], col, nrm); balconies(i, j, n % 2, ax, az, bx, bz, nrm, L, u0, du, f, col); };
@@ -1426,7 +1427,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const AWN = [[0.7, 0.2, 0.2], [0.18, 0.36, 0.26], [0.15, 0.25, 0.4], [0.78, 0.54, 0.18], [0.42, 0.22, 0.36], [0.85, 0.83, 0.78]];
     let hash = 1; const rnd3 = () => { hash = (hash * 16807) % 2147483647; return hash / 2147483647; };
     for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) for (const r of blocks[i][j].rects) {
-      if (r === club.rect || (r.d > 0.84 && Math.abs(r.w - r.h) < 70)) continue;
+      if (r === club.rect || r.house || (r.d > 0.84 && Math.abs(r.w - r.h) < 70)) continue;
       const ox = i * CELL + 142, oy = j * CELL + 142, x0 = r.x, x1 = r.x + r.w, z0 = r.y, z1 = r.y + r.h;
       const front = (ax, az, bx, bz, nrm) => {
         const L = Math.hypot(bx - ax, bz - az), m = Math.max(1, Math.round(L / 62));
@@ -1944,19 +1945,50 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d'), tex = new T.CanvasTexture(c);
       const paint = () => { g.fillStyle = '#16121c'; g.fillRect(0, 0, 512, 128); g.fillStyle = d.col; g.fillRect(0, 110, 512, 18); g.font = '800 58px "Noto Sans Armenian", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#ffffff'; g.fillText(d.name, 256, 56); tex.needsUpdate = true; };
       paint(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(paint);
-      if (d.id === 'home') { // a real entrance: vestibule, door, frame, canopy, lamps, step and a plaque
-        const porch = new T.Group(); porch.position.set(x, 0, j * CELL + 141);
-        const PB = (w, h, dd, mat, px, py, pz) => { const m = new T.Mesh(new T.BoxGeometry(w, h, dd), mat); m.position.set(px, py + h / 2, pz); m.castShadow = true; m.receiveShadow = true; porch.add(m); return m; };
-        const stone = lam('#d8cbb8');
-        PB(36, 42, 22, stone, 0, 0, 11); PB(20, 30, 1, lam('#f2ebdf'), 0, 0, -0.4); PB(15, 27, 1, lam('#3f5e46'), 0, 0, -0.9);
-        PB(1.4, 1.4, 1.4, new T.MeshPhongMaterial({ color: '#d9b45c', shininess: 80 }), 5, 13, -1.8); PB(32, 1.5, 12, lam('#2f3a44'), 0, 31, -5);
-        for (const lx of [-12, 12]) PB(2.4, 3.4, 2, new T.MeshBasicMaterial({ color: '#ffe2a0' }), lx, 22, -1.2);
-        PB(24, 1.2, 7, stone, 0, 0, -3.6);
+      if (d.id === 'home') { // a detached two-storey house with a pitched roof and a front garden, set back in the park
+        const W = 130, D = 96, front = j * CELL + 152, house = new T.Group(); house.position.set(x, 0, front);
+        const PB = (w, h, dd, mat, px, py, pz) => { const m = new T.Mesh(new T.BoxGeometry(w, h, dd), mat); m.position.set(px, py + h / 2, pz); m.castShadow = true; m.receiveShadow = true; house.add(m); return m; };
+        const plaster = lam('#d9a28a'), stone = lam('#b8ab98'), trim = lam('#f3ede2'), roofM = lam('#9c4430', { flatShading: true }), brick = lam('#8a4a36'), green = lam('#3f5e46');
+        CITY.houseGlass = new T.MeshPhongMaterial({ color: '#2d3d4c', shininess: 90, specular: 0x8899aa, emissive: 0x000000 });
+        // trees that stood where the house goes are cleared, and the house becomes solid for walking and driving
+        const cell = CH.cells[i][j], fx0 = x - W / 2 - 8, fx1 = x + W / 2 + 8, fz0 = front - 14, fz1 = front + D + 8;
+        for (const o of cell.children.slice()) if (o.isMesh && o.position.x > fx0 && o.position.x < fx1 && o.position.z > fz0 && o.position.z < fz1) cell.remove(o);
+        blocks[i][j].trees = blocks[i][j].trees.filter((t) => !(t.x > fx0 && t.x < fx1 && t.y > fz0 && t.y < fz1));
+        CITY.house = { x: x - W / 2, y: front, w: W, h: D, house: true, d: 0, z: 0, c: '#d9a28a' }; blocks[i][j].rects.push(CITY.house);
+        // walls in two storeys with a plinth and bands
+        PB(W, 4, D, stone, 0, 0, D / 2); PB(W - 0.4, 30, D - 0.4, plaster, 0, 4, D / 2); PB(W + 1.6, 2, D + 1.6, trim, 0, 34, D / 2);
+        PB(W, 32, D, plaster, 0, 36, D / 2); PB(W + 3, 2, D + 3, trim, 0, 68, D / 2);
+        // pitched roof: a prism along the length, with a ridge cap and a chimney
+        const sh = new T.Shape(); sh.moveTo(-D / 2 - 7, 0); sh.lineTo(D / 2 + 7, 0); sh.lineTo(0, 36); sh.closePath();
+        const rg = new T.ExtrudeGeometry(sh, { depth: W + 12, bevelEnabled: false }); rg.translate(0, 0, -(W + 12) / 2); rg.rotateY(-Math.PI / 2);
+        const roof = new T.Mesh(rg, roofM); roof.position.set(0, 70, D / 2); roof.castShadow = roof.receiveShadow = true; house.add(roof);
+        PB(W + 13, 2.4, 3, lam('#7d3424'), 0, 105, D / 2); PB(11, 30, 11, brick, W / 2 - 28, 84, D / 2 + 14); PB(13, 2, 13, stone, W / 2 - 28, 114, D / 2 + 14);
+        // windows with frames, sills and glass that lights up at night
+        const win = (cx, yb, face) => {
+          const f = { front: [0, -1], back: [0, 1], left: [-1, 0], right: [1, 0] }[face], along = f[0] === 0, px = f[0] ? f[0] * (W / 2) : cx, pz = f[1] ? (f[1] > 0 ? D : 0) : cx, o = 0.8;
+          const fr = PB(along ? 16 : 1.4, 20, along ? 1.4 : 16, trim, px + f[0] * o, yb, pz + f[1] * o); fr.castShadow = false;
+          const gl = PB(along ? 13 : 1.4, 17, along ? 1.4 : 13, CITY.houseGlass, px + f[0] * (o + 0.5), yb + 1.5, pz + f[1] * (o + 0.5)); gl.castShadow = false;
+          PB(along ? 18 : 3.4, 1.4, along ? 3.4 : 18, trim, px + f[0] * 1.6, yb - 1.4, pz + f[1] * 1.6).castShadow = false;
+          PB(along ? 1 : 1.6, 17, along ? 1.6 : 1, trim, px + f[0] * (o + 0.9), yb + 1.5, pz + f[1] * (o + 0.9)).castShadow = false;   // mullion
+        };
+        for (const cx of [-40, 40]) win(cx, 11, 'front'); for (const cx of [-40, 0, 40]) win(cx, 44, 'front');
+        for (const cx of [-40, 0, 40]) { win(cx, 11, 'back'); win(cx, 44, 'back'); }
+        for (const cz of [28, 68]) for (const s of ['left', 'right']) { win(cz, 11, s); win(cz, 44, s); }
+        // front door with frame, canopy, lamps, step and a name plate
+        PB(20, 30, 1, trim, 0, 4, -0.4); PB(15, 26, 1, green, 0, 4, -0.9); PB(1.4, 1.4, 1.4, new T.MeshPhongMaterial({ color: '#d9b45c', shininess: 80 }), 5, 16, -1.7);
+        PB(34, 1.6, 13, lam('#2f3a44'), 0, 33, -6); for (const lx of [-13, 13]) PB(2.4, 3.4, 2, new T.MeshBasicMaterial({ color: '#ffe2a0' }), lx, 24, -1.2);
+        PB(26, 2, 9, stone, 0, 0, -4.5); PB(22, 1.2, 6, stone, 0, 2, -3);
         const pc = document.createElement('canvas'); pc.width = 256; pc.height = 64; const pg = pc.getContext('2d'), pt = new T.CanvasTexture(pc);
         const pp = () => { pg.fillStyle = '#1d2a22'; pg.fillRect(0, 0, 256, 64); pg.font = '800 34px "Noto Sans Armenian", sans-serif'; pg.textAlign = 'center'; pg.textBaseline = 'middle'; pg.fillStyle = '#e9f4ec'; pg.fillText('ԻՄ ՏՈՒՆԸ', 128, 34); pt.needsUpdate = true; };
         pp(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(pp);
-        const plate = new T.Mesh(new T.PlaneGeometry(18, 4.5), new T.MeshBasicMaterial({ map: pt })); plate.position.set(0, 36.5, -1.2); plate.rotation.y = Math.PI; porch.add(plate);
-        scene.add(porch); pl.sign = porch; PLACES.push(pl); continue;
+        const plate = new T.Mesh(new T.PlaneGeometry(18, 4.5), new T.MeshBasicMaterial({ map: pt })); plate.position.set(0, 39.5, -0.9); plate.rotation.y = Math.PI; house.add(plate);
+        // front garden: a low fence with a gate gap, a stone path and shrubs
+        for (let px = -W / 2 - 4; px <= W / 2 + 4; px += 10) if (Math.abs(px) > 10) PB(1.6, 9, 1.6, trim, px, 0, -10);
+        for (const s of [-1, 1]) { const len = W / 2 + 4 - 10, cx = s * (10 + len / 2); PB(len, 1.2, 1, trim, cx, 4, -10); PB(len, 1.2, 1, trim, cx, 7.4, -10); }
+        PB(12, 0.4, 10, stone, 0, 0, -5);
+        const bush = lam('#4f7d45', { flatShading: true }), flower = [lam('#e05a7a'), lam('#f2c14e'), lam('#f6f1ea')];
+        for (const bx of [-52, -30, 30, 52]) { const b2 = new T.Mesh(new T.IcosahedronGeometry(5.5, 1), bush); b2.position.set(bx, 4.5, -4); b2.castShadow = true; house.add(b2); for (let q = 0; q < 3; q++) { const fl = new T.Mesh(new T.SphereGeometry(1.2, 6, 4), flower[q]); fl.position.set(bx + (q - 1) * 3, 9, -6 + (q % 2)); house.add(fl); } }
+        scene.add(house); pl.sign = house; PLACES.push(pl); continue;
       }
       const sign = new T.Group(); sign.position.set(x, 0, j * CELL + (d.car ? 128 : 140));
       const face = new T.Mesh(new T.PlaneGeometry(56, 14), new T.MeshBasicMaterial({ map: tex })); face.position.y = 34; face.rotation.y = Math.PI; sign.add(face);
@@ -2105,6 +2137,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       else if (b.type === 'plaza') { g.fillStyle = '#d8c7ad'; g.fillRect(ox * k, oy * k, 356 * k, 356 * k); g.fillStyle = '#6fb5c9'; g.beginPath(); g.arc((ox + 178) * k, (oy + 178) * k, 54 * k, 0, 6.2832); g.fill(); }
       else for (const r of b.rects) { g.fillStyle = r === club.rect ? '#ff7ab8' : '#b98576'; g.fillRect(r.x * k, r.y * k, r.w * k, r.h * k); g.strokeStyle = 'rgba(40,20,20,0.35)'; g.lineWidth = 1; g.strokeRect(r.x * k + 0.5, r.y * k + 0.5, r.w * k - 1, r.h * k - 1); }
     }
+    if (CITY.house) { const h = CITY.house; g.fillStyle = '#d9a28a'; g.fillRect(h.x * k, h.y * k, h.w * k, h.h * k); g.fillStyle = '#9c4430'; g.fillRect(h.x * k, (h.y + h.h / 2 - 1.5) * k, h.w * k, 3 * k); }
     return c;
   }
   function mapItems() {
