@@ -59,6 +59,8 @@ body { background: var(--sky); color: var(--fg); font-family: var(--font-text); 
 #bigCv { width: min(92vw, 80vh); max-width: 100%; height: auto; aspect-ratio: 1; border-radius: 12px; border: 1px solid var(--line); }
 .bm-side { display: flex; flex-direction: column; gap: 12px; min-width: 210px; }
 .bm-side h2 { margin: 0; font-size: 22px; }
+.bm-tip { margin: 0; max-width: 32ch; font-size: 13px; line-height: 1.5; color: var(--muted); }
+#bigCv { cursor: crosshair; }
 .bm-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .bm-legend li { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .bm-legend canvas { width: 26px; height: 26px; flex: none; }
@@ -175,7 +177,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   <div class="overlay bigmap" id="bigmap" hidden>
     <div class="bm-wrap">
       <canvas id="bigCv" width="1024" height="1024" aria-label="Քաղաքի քարտեզ"></canvas>
-      <div class="bm-side"><h2>Քարտեզ</h2><ul class="bm-legend" id="bmLegend"></ul><button class="go ghost" id="bmClose" type="button">Փակել</button></div>
+      <div class="bm-side"><h2>Քարտեզ</h2><p class="bm-tip">Սեղմիր քարտեզի ցանկացած տեղ կամ նշան, ու ճանապարհը կնկարվի։ Նորից սեղմիր նշմանը՝ ջնջելու համար։</p><ul class="bm-legend" id="bmLegend"></ul><button class="go ghost" id="wpClear" type="button" hidden>Ջնջել նշումը</button><button class="go ghost" id="bmClose" type="button">Փակել</button></div>
     </div>
   </div>
 
@@ -206,7 +208,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
         <li><b>Ձեռքի արգելակ՝</b> Space</li>
         <li><b>Դեմքը առջևից տեսնել՝</b> C կամ «Դեմք» կոճակը</li>
         <li><b>Դադար՝</b> P, Esc կամ Ⅱ կոճակը</li>
-        <li><b>Քարտեզ՝</b> M կամ սեղմիր կլոր քարտեզին. այնտեղ կտեսնես ամեն նշանի բացատրությունը</li>
+        <li><b>Քարտեզ՝</b> M կամ սեղմիր կլոր քարտեզին. այնտեղ կտեսնես ամեն նշանի բացատրությունը, ու սեղմելով կնշես, թե ուր ես գնում</li>
         <li><b>Գնումներ՝</b> քարտեզի գունավոր կետերը. կապույտը ավտոսրահն է, մանուշակագույնը՝ հագուստը, կանաչը՝ բնակարանը։ Ոտքով մտիր օղակը</li>
         <li><b>Առաջադրանքներ՝</b> նստիր դեղին տաքսի ու ուղևորներ տար, կամ մեքենայով մտիր երկնագույն (մրցարշավ) ու կարմիր (փախուստ) օղակները</li>
         <li><b>Ակումբում՝</b> պարահրապարակում սեղմիր «Պարել» (կամ Space) ռիթմի տակ ու փող վաստակիր. բարից խմիչք առ, VIP-ում սեղան վարձիր</li>
@@ -540,6 +542,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
     // jobs
     actUpdate(dt); placeCheck();
+    if (WP && Math.hypot(WP.x - tg.x, WP.y - tg.y) < 45) { setWaypoint(null); toast('Հասար նշված տեղը'); }
     if (job && !ACT) {
       const d = Math.hypot(job.p.x - tg.x, job.p.y - tg.y);
       if (job.stage === 'pickup' && d < 38 && (job.kind !== 'taxi' || (player.car && player.car.taxi && Math.abs(player.car.v) < 140))) {
@@ -1821,6 +1824,13 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       octx.font = '700 13px "JetBrains Mono", monospace'; octx.textAlign = 'center'; octx.lineWidth = 3; octx.strokeStyle = K.ink; octx.fillStyle = K.fg;
       const label = Math.round(Math.hypot(dx, dy) / 8.4) + ' մ'; octx.strokeText(label, ax, ay + 36); octx.fillText(label, ax, ay + 36);
     }
+    if (play && WP && !inside && !atHome) {
+      const t = target(), dx = WP.x - t.x, dy = WP.y - t.y, rel = ad(Math.atan2(dy, dx) - camA - camO), ax = W / 2 + (gol && gol.p ? 72 : 0), ay = Math.max(150, H * 0.22);
+      octx.save(); octx.translate(ax, ay); octx.rotate(rel); octx.scale(0.85, 0.85);
+      octx.fillStyle = '#ff9f1c'; octx.strokeStyle = K.ink; octx.lineWidth = 2; octx.beginPath(); octx.moveTo(0, -20); octx.lineTo(13, 12); octx.lineTo(0, 5); octx.lineTo(-13, 12); octx.closePath(); octx.fill(); octx.stroke(); octx.restore();
+      octx.font = '700 13px "JetBrains Mono", monospace'; octx.textAlign = 'center'; octx.lineWidth = 3; octx.strokeStyle = K.ink; octx.fillStyle = '#ffd6a0';
+      const lb = Math.round(Math.hypot(dx, dy) / 8.4) + ' մ'; octx.strokeText(lb, ax, ay + 36); octx.fillText(lb, ax, ay + 36);
+    }
     if (joy.id !== null) {
       octx.strokeStyle = K.fg; octx.globalAlpha = 0.4; octx.lineWidth = 2; octx.beginPath(); octx.arc(joy.ox, joy.oy, 52, 0, 6.2832); octx.stroke();
       octx.fillStyle = K.fg; octx.globalAlpha = 0.6; octx.beginPath(); octx.arc(joy.ox + joy.dx * 52, joy.oy + joy.dy * 52, 22, 0, 6.2832); octx.fill(); octx.globalAlpha = 1;
@@ -2100,7 +2110,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
   // ---------- map: a round radar that turns with the camera, and a full map (M, or tap the radar) with a legend ----------
   const MAP = { base: null, open: false };
-  const ICON = { club: '#ff4fa3', dealer: '#4d8dff', clothes: '#b48cff', home: '#58d68d', race: '#35d6e6', escape: '#ff5a5f', pickup: '#ffcf4a', deliver: '#58d68d', cp: '#35d6e6', mycar: '#f1ede6' };
+  const ICON = { club: '#ff4fa3', dealer: '#4d8dff', clothes: '#b48cff', home: '#58d68d', race: '#35d6e6', escape: '#ff5a5f', pickup: '#ffcf4a', deliver: '#58d68d', cp: '#35d6e6', mycar: '#f1ede6', wp: '#ff9f1c' };
   const PLACE_NAME = { club: 'Նեոն ակումբ', dealer: 'Ավտոսրահ', clothes: 'Հագուստ', home: 'Տուն', race: 'Մրցարշավ', escape: 'Փախուստ' };
   function badge(g, kind, x, y, r, n) { // an original set of symbols, each on its own colour
     const col = ICON[kind], fg = kind === 'mycar' ? '#1d1e22' : '#ffffff', u = r / 10;
@@ -2119,7 +2129,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     else if (kind === 'race') { g.fillRect(-5.6 * u, -7 * u, 1.4 * u, 14 * u); for (let a = 0; a < 3; a++) for (let b = 0; b < 2; b++) { g.fillStyle = (a + b) % 2 ? col : fg; g.fillRect((-4.2 + a * 3.2) * u, (-7 + b * 3) * u, 3.2 * u, 3 * u); } g.strokeStyle = fg; g.lineWidth = 0.8 * u; g.strokeRect(-4.2 * u, -7 * u, 9.6 * u, 6 * u); }
     else if (kind === 'escape') { g.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = (k % 2 ? 3.1 : 7.2) * u; k ? g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : g.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); } g.closePath(); g.fill(); }
     else if (kind === 'pickup') { g.fillRect(-5.5 * u, -4.5 * u, 11 * u, 10 * u); g.fillStyle = col; g.fillRect(-5.5 * u, -1.4 * u, 11 * u, 1.6 * u); g.fillRect(-0.8 * u, -4.5 * u, 1.6 * u, 10 * u); }
-    else if (kind === 'deliver') { g.beginPath(); g.arc(0, -2 * u, 4.6 * u, Math.PI, 0); g.lineTo(0, 7 * u); g.closePath(); g.fill(); g.fillStyle = col; g.beginPath(); g.arc(0, -2 * u, 1.9 * u, 0, 6.2832); g.fill(); }
+    else if (kind === 'deliver' || kind === 'wp') { g.beginPath(); g.arc(0, -2 * u, 4.6 * u, Math.PI, 0); g.lineTo(0, 7 * u); g.closePath(); g.fill(); g.fillStyle = col; g.beginPath(); g.arc(0, -2 * u, 1.9 * u, 0, 6.2832); g.fill(); }
     else if (kind === 'cp') { g.font = '800 ' + Math.round(11 * u) + 'px "JetBrains Mono", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(n || ''), 0, 0.6 * u); }
     g.restore();
   }
@@ -2147,6 +2157,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const g = goal();
     if (ACT && ACT.kind === 'race') out.push({ kind: 'cp', x: g.p.x, y: g.p.y, n: ACT.k + 1, big: true });
     else if (g && g.p) out.push({ kind: g.stage === 'pickup' ? 'pickup' : 'deliver', x: g.p.x, y: g.p.y, big: true });
+    if (WP) out.push({ kind: 'wp', x: WP.x, y: WP.y, big: true });
     return out;
   }
   const homePlace = () => PLACES.find((q) => q.id === 'home');
@@ -2156,6 +2167,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     g.save(); g.beginPath(); g.arc(R, R, R - 3, 0, 6.2832); g.clip(); g.fillStyle = '#6f7d63'; g.fillRect(0, 0, C, C);
     if (MAP.base) { const kb = 1024 / WS; g.save(); g.translate(R, R); g.rotate(th); g.scale(z / kb, z / kb); g.drawImage(MAP.base, -ctr.x * kb, -ctr.y * kb); g.restore(); }
     const P = (x, y) => { const dx = (x - ctr.x) * z, dy = (y - ctr.y) * z; return [R + dx * Math.cos(th) - dy * Math.sin(th), R + dx * Math.sin(th) + dy * Math.cos(th)]; };
+    if (WP && play && time - routeT > 0.3) { routeT = time; ROUTE = routeCalc(); }
+    if (WP && play && ROUTE) strokeRoute(g, ROUTE.map((p) => P(p.x, p.y)), 6);
     if (play) {
       for (const c of cars) if (c.kind === 'police' && c.chase) { const q = P(c.x, c.y); g.fillStyle = flash ? K.alert : K.cop; g.beginPath(); g.arc(q[0], q[1], 7, 0, 6.2832); g.fill(); }
       for (const it of mapItems()) { let q = P(it.x, it.y); const dx = q[0] - R, dy = q[1] - R, d = Math.hypot(dx, dy), lim = R - 18; if (d > lim) q = [R + dx / d * lim, R + dy / d * lim]; badge(g, it.kind, q[0], q[1], it.big ? 15 : 12, it.n); }
@@ -2171,6 +2184,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const cv2 = $('bigCv'), g = cv2.getContext('2d'), S = cv2.width, k = S / WS;
     g.clearRect(0, 0, S, S); if (MAP.base) g.drawImage(MAP.base, 0, 0, S, S * (1024 / 1024));
     for (const c of cars) if (c.kind === 'police' && c.chase) { g.fillStyle = flash ? K.alert : K.cop; g.beginPath(); g.arc(c.x * k, c.y * k, 9, 0, 6.2832); g.fill(); }
+    if (WP && ROUTE) strokeRoute(g, ROUTE.map((p) => [p.x * k, p.y * k]), 9);
     if (ACT && ACT.kind === 'race') ACT.cps.forEach((p, n) => { if (n > ACT.k) badge(g, 'cp', p.x * k, p.y * k, 14, n + 1); });
     g.font = '700 17px "Noto Sans Armenian", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'top'; g.lineWidth = 4; g.strokeStyle = 'rgba(14,12,18,0.9)'; g.fillStyle = '#ffffff';
     for (const it of mapItems()) { badge(g, it.kind, it.x * k, it.y * k, it.big ? 22 : 18, it.n); if (it.name) { g.strokeText(it.name, it.x * k, it.y * k + 25); g.fillText(it.name, it.x * k, it.y * k + 25); } }
@@ -2178,7 +2192,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   }
   function buildLegend() {
     const L = $('bmLegend'), rows = [['you', 'Դու'], ['club', 'Նեոն ակումբ'], ['dealer', 'Ավտոսրահ'], ['clothes', 'Հագուստի խանութ'], ['home', 'Տուն'], ['race', 'Մրցարշավ'], ['escape', 'Փախուստ'],
-      ['pickup', 'Վերցնել պատվերը'], ['deliver', 'Հասցնել պատվերը'], ['cp', 'Մրցարշավի ստուգակետ'], ['mycar', 'Քո մեքենան'], ['cop', 'Ոստիկան']];
+      ['pickup', 'Վերցնել պատվերը'], ['deliver', 'Հասցնել պատվերը'], ['cp', 'Մրցարշավի ստուգակետ'], ['mycar', 'Քո մեքենան'], ['wp', 'Քո նշած տեղը'], ['cop', 'Ոստիկան']];
     for (const [kind, text] of rows) {
       const li = document.createElement('li'), c = document.createElement('canvas'), sp = document.createElement('span'); c.width = c.height = 52; const g = c.getContext('2d');
       if (kind === 'you') youArrow(g, 26, 26, -Math.PI / 2, 18); else if (kind === 'cop') { g.fillStyle = K.alert; g.beginPath(); g.arc(18, 26, 9, 0, 6.2832); g.fill(); g.fillStyle = K.cop; g.beginPath(); g.arc(36, 26, 9, 0, 6.2832); g.fill(); } else badge(g, kind, 26, 26, 19, 1);
@@ -2189,6 +2203,33 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (mode !== 'play') return;
     MAP.open = !MAP.open; $('bigmap').hidden = !MAP.open;
     for (const k in keys) keys[k] = false; joy.id = null; joy.dx = joy.dy = 0;
+  }
+
+  // ---------- waypoint: tap the full map to mark a place; the way there along the streets is drawn on both maps ----------
+  let WP = null, ROUTE = [], routeT = -9;
+  function snapRoad(p) { // the nearest point on a street, which road it is on, and the crossroads either side
+    const fi = (v) => clamp((v - 60) / CELL, 0, N), I = Math.round(fi(p.x)), J = Math.round(fi(p.y)), vert = Math.abs(p.x - ic(I)) < Math.abs(p.y - ic(J));
+    const q = vert ? { x: ic(I), y: clamp(p.y, ic(0), ic(N)) } : { x: clamp(p.x, ic(0), ic(N)), y: ic(J) };
+    q.nodes = vert ? [[I, Math.floor(fi(q.y))], [I, Math.ceil(fi(q.y))]] : [[Math.floor(fi(q.x)), J], [Math.ceil(fi(q.x)), J]]; q.vert = vert; q.road = vert ? I : J; return q;
+  }
+  function routeFrom() { return atHome && homePlace() ? homePlace() : inside ? club.door : target(); }
+  function routeCalc() {
+    const a = routeFrom(), sa = snapRoad(a), sb = snapRoad(WP), D = (p, q) => Math.abs(p.x - q.x) + Math.abs(p.y - q.y);
+    if (sa.vert === sb.vert && sa.road === sb.road && sa.nodes[0][0] === sb.nodes[0][0] && sa.nodes[0][1] === sb.nodes[0][1]) return [a, sa, sb, WP];   // same stretch of street
+    let best = null, bl = 1e12;
+    for (const na of sa.nodes) for (const nb of sb.nodes) {
+      const A = { x: ic(na[0]), y: ic(na[1]) }, B = { x: ic(nb[0]), y: ic(nb[1]) };
+      for (const corner of [{ x: B.x, y: A.y }, { x: A.x, y: B.y }]) { const len = D(sa, A) + D(A, corner) + D(corner, B) + D(B, sb); if (len < bl) { bl = len; best = [a, sa, A, corner, B, sb, WP]; } }
+    }
+    return best;
+  }
+  function setWaypoint(p) { WP = p; routeT = -9; $('wpClear').hidden = !WP; if (WP) { sfx.take(); toast('Նշված է · հետևիր նարնջագույն գծին'); } }
+  function strokeRoute(g, pts, w) { if (pts.length < 2) return; g.lineJoin = 'round'; g.lineCap = 'round'; for (const [c, lw] of [['rgba(14,12,18,0.85)', w + 4], ['#ff9f1c', w]]) { g.strokeStyle = c; g.lineWidth = lw; g.beginPath(); pts.forEach((p, n) => n ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke(); } }
+  function bigMapClick(e) {
+    const cv2 = $('bigCv'), r = cv2.getBoundingClientRect(), S = cv2.width, k = S / WS, px = (e.clientX - r.left) / r.width * S, py = (e.clientY - r.top) / r.height * S;
+    if (WP && Math.hypot(WP.x * k - px, WP.y * k - py) < 28) return setWaypoint(null);
+    for (const it of mapItems()) if (it.kind !== 'wp' && Math.hypot(it.x * k - px, it.y * k - py) < 30) return setWaypoint({ x: it.x, y: it.y });
+    const s = snapRoad({ x: px / k, y: py / k }); setWaypoint({ x: s.x, y: s.y });
   }
 
   // ---------- home: a door with a porch on the street, and a flat inside to walk round ----------
@@ -2265,7 +2306,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const sv = readSave(); if (sv) { cash = sv.cash; vipTable = !!sv.vipTable; } savedCash = cash; savedTable = vipTable;
     Object.assign(PROG, PROG0(), (sv && sv.prog) || {}); ACT = null; ownedCar = null; closePanel(); for (const pl of PLACES) pl.arm = false;
     const home = PLACES.find((q) => q.id === 'home'), dealer = PLACES.find((q) => q.id === 'dealer');
-    atHome = false; MAP.open = false; $('bigmap').hidden = true;
+    atHome = false; MAP.open = false; $('bigmap').hidden = true; setWaypoint(null);
     if (PROG.home && home && !startAtClub) { atHome = true; homeArm = false; player.x = HX - 112; player.y = HY; player.a = 0; }
     if (PROG.car) spawnOwned((PROG.home && home ? home : dealer).park);
     if (AV.ready) { scene.remove(playerMesh); playerMesh = playerModel(); scene.add(playerMesh); }
@@ -2282,6 +2323,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   $('startBtn').addEventListener('click', () => startGame(false));
   $('shopClose').addEventListener('click', closePanel);
   $('map').addEventListener('click', toggleMap); $('bmClose').addEventListener('click', toggleMap);
+  $('bigCv').addEventListener('click', bigMapClick); $('wpClear').addEventListener('click', () => setWaypoint(null));
   $('richBtn').addEventListener('click', () => { // testing aid: puts a million in the save, keeping everything else
     const d = readSave() || {}; d.cash = 1000000; try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); } catch (e) {}
     showSave(); $('richBtn').textContent = 'Ավելացված է՝ սեղմիր «Սկսել»';
