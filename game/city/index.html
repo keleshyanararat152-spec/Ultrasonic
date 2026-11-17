@@ -445,10 +445,27 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (c.chase || hit) { c.slow = Math.abs(c.v) < 12 ? c.slow + dt : 0; if (c.slow > 1.2) { c.rev = 0.9; c.slow = 0; } }
   }
 
+  function pushOffCars(p) { // a walker is a solid body: cars are boxes you cannot pass through
+    for (const c of cars) {
+      const dx = p.x - c.x, dy = p.y - c.y; if (Math.abs(dx) > 42 || Math.abs(dy) > 42) continue;
+      const ca = Math.cos(c.a), sa = Math.sin(c.a), lx = dx * ca + dy * sa, ly = -dx * sa + dy * ca, hx = 26 + 6, hy = 11.5 + 6;
+      if (Math.abs(lx) >= hx || Math.abs(ly) >= hy) continue;
+      let nx = lx, ny = ly; if (hx - Math.abs(lx) < hy - Math.abs(ly)) nx = (lx < 0 ? -1 : 1) * hx; else ny = (ly < 0 ? -1 : 1) * hy;
+      p.x = c.x + nx * ca - ny * sa; p.y = c.y + nx * sa + ny * ca;
+    }
+  }
+  function freeBench() { // the nearest empty bench within reach
+    if (!SQ.benches || inside || atHome) return null;
+    let best = null, bd = 30; for (const b of SQ.benches) { const d = Math.hypot(b.x - player.x, b.y - player.y); if (d < bd && !b.taken) { bd = d; best = b; } } return best;
+  }
+  function sitDown(b) { player.sit = b; player.x = b.x; player.y = b.y; player.a = b.a; camA = b.a; camO = 0; idleT = 0; }
+  function standUp() { const b = player.sit; player.sit = null; if (b) { player.x = b.x + Math.cos(b.a) * 14; player.y = b.y + Math.sin(b.a) * 14; player.a = b.a; } }
   function enterExit() {
     if (mode !== 'play' || paused) return;
     if (atHome) { for (const r of HRINGS) if (Math.hypot(player.x - r.x, player.y - r.y) < 34) { homeArm = false; r.go(); break; } return; }
     if (clubDoor()) return;
+    if (!player.car && player.sit) { standUp(); return; }
+    if (!player.car) { const bn = freeBench(); if (bn) { sitDown(bn); return; } }
     if (player.car) {
       const c = player.car; if (Math.abs(c.v) > 45) return;
       const p = { x: c.x + Math.sin(c.a) * 28, y: c.y - Math.cos(c.a) * 28 }; pushOut(p, 7);
@@ -489,8 +506,10 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       player.x = c.x; player.y = c.y;
     } else if (playing) {
       if (jm > 0.22) { ix = joy.dx; iy = joy.dy; }
-      player.a += ix * 2.8 * dt; idleT = Math.abs(ix) > 0.1 || Math.abs(iy) > 0.1 ? 0 : idleT + dt;
-      if (Math.abs(iy) > 0.1) { const s = -iy * (iy < 0 ? 150 : 80); player.x += Math.cos(player.a) * s * dt; player.y += Math.sin(player.a) * s * dt; player.walk += dt * 10; pushOut(player, 7); }
+      if (player.sit && Math.abs(iy) > 0.1) standUp();
+      if (!player.sit) player.a += ix * 2.8 * dt; idleT = Math.abs(ix) > 0.1 || Math.abs(iy) > 0.1 ? 0 : idleT + dt;
+      if (!player.sit && Math.abs(iy) > 0.1) { const s = -iy * (iy < 0 ? 150 : 80); player.x += Math.cos(player.a) * s * dt; player.y += Math.sin(player.a) * s * dt; player.walk += dt * 10; pushOut(player, 7); }
+      if (!player.sit) { pushOffCars(player); pushOut(player, 7); }
     }
 
     if (playing && !player.car) { // walking into the pink ring at the club door goes in
@@ -1779,6 +1798,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     playerMesh.rotation.y = -player.a;
     const inY = inside && club.model && !vip ? (player.fy || 0) : 0;
     if (inside && danceFx > 0) playerMesh.position.set(player.x, inY - dancePose(playerMesh, playerMesh.userData, time / (STEP * 4), 1, 1) * 1.35, player.y);   // a hit on the beat: dance
+    else if (player.sit) { const b = player.sit, u = playerMesh.userData; talkPose(u, time * 0.6, true); if (u.joints) rigApply(u); playerMesh.position.set(b.x + Math.cos(b.a + Math.PI) * 2, groundY(b.x, b.y) + 6.9 - 10 * 1.32 * 0.98, b.y + Math.sin(b.a + Math.PI) * 2); playerMesh.rotation.y = -b.a; }
     else { walkPose(playerMesh.userData, player.walk * 0.85, walkAmp); playerMesh.position.set(player.x, inside ? inY : groundY(player.x, player.y), player.y); }
     if (playerMesh.userData.photoHead) { // keep the photo head on the avatar's neck
       playerMesh.updateMatrixWorld(true); const hp = playerMesh.worldToLocal(playerMesh.userData.headBone.getWorldPosition(new T.Vector3()));
@@ -1875,6 +1895,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (play && atHome) { for (const r of HRINGS) if (Math.hypot(player.x - r.x, player.y - r.y) < 34) hint = r.hint; }
     else if (play && inside) { for (const r of clubRings()) if (Math.hypot(player.x - r.x, player.y - r.y) < 34) hint = r.hint; }
     else if (play && !player.car && Math.hypot(player.x - club.door.x, player.y - club.door.y) < 30) hint = 'մտնել ակումբ (' + (FEE ? money(FEE) : 'անվճար') + ')';
+    else if (play && !player.car && player.sit) hint = 'վեր կենալ';
+    else if (play && !player.car && freeBench()) hint = 'նստել նստարանին';
     else if (play && !touch) {
       if (player.car) { if (Math.abs(player.car.v) < 45) hint = 'իջնել'; }
       else for (const c of cars) if (c.kind !== 'police' && Math.hypot(c.x - player.x, c.y - player.y) < 58) { hint = 'նստել մեքենան'; break; }
@@ -2410,11 +2432,11 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (!SQ.people && (AV.ready || time > 20)) {
       SQ.people = [];
       for (let k = 0; k < 9; k++) { const w = k % 2 === 0, m = AV.ready ? avatarMesh(nextAvatar(w)) : humanMesh(randomLook(w)); m.scale.setScalar(1.32); scene.add(m); SQ.people.push({ m: m, a: Math.random() * 6.28, r: k < 5 ? 1 : 1.42, sp: rnd(0.12, 0.2) * (k % 3 ? 1 : -1), ph: Math.random() * 9 }); }
-      SQ.benches.slice(0, 4).forEach((bn, k) => { const m = AV.ready ? avatarMesh(nextAvatar(k % 2 === 1)) : humanMesh(randomLook(k % 2 === 1)); m.scale.setScalar(1.32); scene.add(m); SQ.people.push({ m: m, sit: bn, ph: Math.random() * 9 }); });
+      SQ.benches.slice(0, 4).forEach((bn, k) => { bn.taken = true; const m = AV.ready ? avatarMesh(nextAvatar(k % 2 === 1)) : humanMesh(randomLook(k % 2 === 1)); m.scale.setScalar(1.32); scene.add(m); SQ.people.push({ m: m, sit: bn, ph: Math.random() * 9 }); });
     }
     if (SQ.people) for (const p of SQ.people) {
       const u = p.m.userData;
-      if (p.sit) { talkPose(u, time + p.ph, true); p.m.position.set(p.sit.x + Math.cos(p.sit.a + Math.PI) * 2, gy + 6.9 - 10 * 1.32 * 0.98, p.sit.y + Math.sin(p.sit.a + Math.PI) * 2); p.m.rotation.y = -p.sit.a; continue; }
+      if (p.sit) { talkPose(u, time + p.ph, true); if (u.joints) rigApply(u); p.m.position.set(p.sit.x + Math.cos(p.sit.a + Math.PI) * 2, gy + 6.9 - 10 * 1.32 * 0.98, p.sit.y + Math.sin(p.sit.a + Math.PI) * 2); p.m.rotation.y = -p.sit.a; continue; }
       p.a += p.sp * dt; const sg = p.sp > 0 ? 1 : -1, x = C.x + Math.cos(p.a) * 92 * p.r, y = C.y + Math.sin(p.a) * 70 * p.r, face = Math.atan2(Math.cos(p.a) * 70 * sg, -Math.sin(p.a) * 92 * sg);
       p.m.position.set(x, gy, y); p.m.rotation.y = -face; walkPose(u, time * 9 + p.ph, 1);
     }
@@ -2524,7 +2546,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const sv = readSave(); if (sv) { cash = sv.cash; vipTable = !!sv.vipTable; } savedCash = cash; savedTable = vipTable;
     Object.assign(PROG, PROG0(), (sv && sv.prog) || {}); ACT = null; ownedCar = null; closePanel(); for (const pl of PLACES) pl.arm = false;
     const home = PLACES.find((q) => q.id === 'home'), dealer = PLACES.find((q) => q.id === 'dealer');
-    atHome = false; MAP.open = false; $('bigmap').hidden = true; setWaypoint(null); RB.cars = []; RB.t = 0; HELI.on = false; HELI.m.visible = false; HELI.spot.visible = false; HELI.sees = false;
+    player.sit = null; atHome = false; MAP.open = false; $('bigmap').hidden = true; setWaypoint(null); RB.cars = []; RB.t = 0; HELI.on = false; HELI.m.visible = false; HELI.spot.visible = false; HELI.sees = false;
     if (PROG.home && home && !startAtClub) { atHome = true; homeArm = false; player.x = HX - 112; player.y = HY; player.a = 0; }
     if (PROG.car) spawnOwned((PROG.home && home ? home : dealer).park);
     if (AV.ready) { scene.remove(playerMesh); playerMesh = playerModel(); scene.add(playerMesh); }
