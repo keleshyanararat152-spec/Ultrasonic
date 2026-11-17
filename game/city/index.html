@@ -1835,7 +1835,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       playerMesh.updateMatrixWorld(true); const hp = playerMesh.worldToLocal(playerMesh.userData.headBone.getWorldPosition(new T.Vector3()));
       playerMesh.userData.photoHead.position.set(hp.x + 0.25, hp.y + 1.25, hp.z);
     }
-    const gol = goal(); marker.visible = play && !!gol && !!gol.p && !inside && !atHome; clubFrame();
+    const gol = goal(); marker.visible = play && !!gol && !!gol.p && !inside && !atHome && !TALK; clubFrame();
     if (marker.visible) { marker.position.set(gol.p.x, 210, gol.p.y); marker.material.color.set(gcol(gol)); const s = 1 + Math.sin(time * 5) * 0.08; marker.scale.set(s, 1, s); }
 
     // camera: behind the car or the walker; a slow circle over the square on the title screen
@@ -2175,11 +2175,11 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   // A chapter starts when you walk up to its character (the pink speech badge on the map). Its steps run as ACT.kind 'story';
   // a failed step sends you back to the character to try the chapter again. Progress is PROG.story (chapters done).
   const CAST = {
-    gurgen: { name: 'Գուրգեն քեռի', nom: 'Գուրգեն քեռին', av: 'm02', w: false, col: '#ffcf4a' },
-    nare: { name: 'Նարե', nom: 'Նարեն', av: 'f05', w: true, col: '#ff8fb8' },
-    rubo: { name: 'Ռուբո', nom: 'Ռուբոն', av: 'm04', w: false, col: '#ff5a5f' },
-    levon: { name: 'Լևոն', nom: 'Լևոնը', av: 'm17', w: false, col: '#35d6e6' },
-    lilit: { name: 'Լիլիթ', nom: 'Լիլիթը', av: 'f13', w: true, col: '#b48cff' },
+    gurgen: { gen: 'Գուրգեն քեռու', name: 'Գուրգեն քեռի', nom: 'Գուրգեն քեռին', av: 'm02', w: false, col: '#ffcf4a' },
+    nare: { gen: 'Նարեի', name: 'Նարե', nom: 'Նարեն', av: 'f05', w: true, col: '#ff8fb8' },
+    rubo: { gen: 'Ռուբոյի', name: 'Ռուբո', nom: 'Ռուբոն', av: 'm04', w: false, col: '#ff5a5f' },
+    levon: { gen: 'Լևոնի', name: 'Լևոն', nom: 'Լևոնը', av: 'm17', w: false, col: '#35d6e6' },
+    lilit: { gen: 'Լիլիթի', name: 'Լիլիթ', nom: 'Լիլիթը', av: 'f13', w: true, col: '#b48cff' },
     you: { name: 'Դու', col: '#f1ede6' } };
   const SCOL = '#ff4fa3', SP = {}, NPCM = {};
   const ST = { arm: true, failed: false, chainT: 0, beam: null };
@@ -2329,7 +2329,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   }
   function storyFail(msg) {
     const ch = CHS[ACT.ch]; ACT = null; storyClean(); ST.failed = true; ST.arm = true; sfx.fail();
-    toast(msg + ' · վերադարձիր ' + CAST[ch.who].name + '-ի մոտ', 4);
+    toast(msg + ' · վերադարձիր ' + CAST[ch.who].gen + ' մոտ', 4);
   }
   function storyClean() { cars = cars.filter((c) => !c.story || c === player.car); if (TALK) { TALK = null; $('talk').hidden = true; } }
   function nearTalk(p, rFoot) { const t = target(); return !!p && Math.hypot(p.x - t.x, p.y - t.y) < (player.car ? 50 : rFoot || 26) && (!player.car || Math.abs(player.car.v) < 50); }
@@ -2412,18 +2412,18 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
         if (player.car) player.car.v *= Math.pow(0.05, dt);
         if (now !== before && now > 0) { toast(String(now), 1); tone(440, 440, 0.15, 'square', 0.1); }
         if (ACT.cd <= 1) { // go: checkpoints start at the crossroads east of the start
-          ACT.phase = 'go'; ACT.cps = raceCps(6, 5); ACT.k = 0; toast('Գնա՛', 1.2); tone(880, 880, 0.3, 'square', 0.12);
+          ACT.phase = 'go'; ACT.cps = raceCps(6, 5); ACT.ci = 0; toast('Գնա՛', 1.2); tone(880, 880, 0.3, 'square', 0.12);
           const pts = [{ x: ic(6), y: ic(5) }]; let pi = 6, pj = 5;
           for (const q of ACT.cps) { if (q.i !== pi && q.j !== pj) pts.push({ x: ic(q.i), y: ic(pj) }); pts.push({ x: q.x, y: q.y }); pi = q.i; pj = q.j; }
           r.path = pts; r.pk = 0; r.ck = 0;
         }
       } else {
         if (!player.car) return storyFail('Իջար մեքենայից');
-        const c = ACT.cps[ACT.k]; G.p = c; G.stage = 'race';
+        const c = ACT.cps[ACT.ci]; G.p = c; G.stage = 'race';
         const rc = ACT.cps[r.ck]; if (rc && Math.hypot(rc.x - r.x, rc.y - r.y) < 45) { r.ck++; if (r.ck >= ACT.cps.length) return storyFail('Լևոնը հաղթեց'); }
         if (Math.hypot(c.x - tg.x, c.y - tg.y) < 55) {
-          ACT.k++; tone(880, 1320, 0.12, 'triangle', 0.12);
-          if (ACT.k >= ACT.cps.length) {
+          ACT.ci++; tone(880, 1320, 0.12, 'triangle', 0.12);
+          if (ACT.ci >= ACT.cps.length) {
             const L = ACT.cps[ACT.cps.length - 1], sx = L.i >= N ? -1 : 1, sy = L.j >= N ? -1 : 1; ACT.finish = { x: L.x + sx * 70, y: L.y + sy * 70 };
             r.path = [{ x: L.x + sx * 40, y: L.y }]; r.pk = 0; ACT.cps = null; toast('Հաղթեցիր', 2); return storyNext();
           }
@@ -2437,8 +2437,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (s.t === 'multi') return s.label + ' · ' + ACT.m + '/' + SP.lav.length;
     if (s.t === 'tail') return !ACT.go ? 'Նստիր մեքենա, Ռուբոն շուտով կշարժվի' : ACT.dist < 100 ? 'Շատ մոտ ես, հետ մնա' : ACT.dist > 400 ? 'Կորցնում ես նրան, մոտեցիր' : 'Հետևիր Ռուբոյին հեռվից';
     if (s.t === 'chase') return !ACT.go ? 'Նստիր մեքենա, սուրհանդակը դուրս է գալիս' : 'Բռնիր սուրհանդակին · մնա կողքին ' + Math.min(100, Math.round(ACT.hold / 2 * 100)) + '%';
-    if (s.t === 'race') return ACT.phase === 'ready' ? 'Մեքենայով կանգնիր Լևոնի կողքին' : ACT.phase === 'count' ? 'Պատրաստվիր…' : 'Մրցարշավ · դու ' + ACT.k + '/6 · Լևոն ' + ACT.rival.ck + '/6';
-    if (s.t === 'talk') return s.label ? (heat > 0 && s.noHeat ? 'Կորցրու ոստիկաններին, հետո ' + s.label[0].toLowerCase() + s.label.slice(1) : s.label) : (heat > 0 && s.noHeat ? 'Կորցրու ոստիկաններին, հետո գնա ' + CAST[s.who].name + '-ի մոտ' : 'Գնա ' + CAST[s.who].name + '-ի մոտ');
+    if (s.t === 'race') return ACT.phase === 'ready' ? 'Մեքենայով կանգնիր Լևոնի կողքին' : ACT.phase === 'count' ? 'Պատրաստվիր…' : 'Մրցարշավ · դու ' + ACT.ci + '/6 · Լևոն ' + ACT.rival.ck + '/6';
+    if (s.t === 'talk') return s.label ? (heat > 0 && s.noHeat ? 'Կորցրու ոստիկաններին, հետո ' + s.label[0].toLowerCase() + s.label.slice(1) : s.label) : (heat > 0 && s.noHeat ? 'Կորցրու ոստիկաններին, հետո գնա ' + CAST[s.who].gen + ' մոտ' : 'Գնա ' + CAST[s.who].gen + ' մոտ');
     return s.label || '';
   }
   function storyCast() { // who stands where right now
@@ -2526,7 +2526,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (ST.beam && !storyOn() && !storyDone()) { const ch = CHS[PROG.story], p = spos(ch.at); out.push({ kind: 'story', x: p.x, y: p.y, name: CAST[ch.who].name, big: true }); }
     if (storyOn() && ACT.rival && ACT.phase === 'go') out.push({ kind: 'rival', x: ACT.rival.x, y: ACT.rival.y });
     const g = goal();
-    if (ACT && ACT.cps && g.p) out.push({ kind: 'cp', x: g.p.x, y: g.p.y, n: ACT.k + 1, big: true });
+    if (ACT && ACT.cps && g.p) out.push({ kind: 'cp', x: g.p.x, y: g.p.y, n: (ACT.kind === 'story' ? ACT.ci : ACT.k) + 1, big: true });
     else if (g && g.p) out.push({ kind: g.stage === 'story' ? 'story' : g.stage === 'pickup' ? 'pickup' : 'deliver', x: g.p.x, y: g.p.y, big: true });
     if (WP) out.push({ kind: 'wp', x: WP.x, y: WP.y, big: true });
     return out;
@@ -2556,7 +2556,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     g.clearRect(0, 0, S, S); if (MAP.base) g.drawImage(MAP.base, 0, 0, S, S * (1024 / 1024));
     for (const c of cars) if (c.kind === 'police' && c.chase) { g.fillStyle = flash ? K.alert : K.cop; g.beginPath(); g.arc(c.x * k, c.y * k, 9, 0, 6.2832); g.fill(); }
     if (WP && ROUTE) strokeRoute(g, ROUTE.map((p) => [p.x * k, p.y * k]), 9);
-    if (ACT && ACT.cps) ACT.cps.forEach((p, n) => { if (n > ACT.k) badge(g, 'cp', p.x * k, p.y * k, 14, n + 1); });
+    if (ACT && ACT.cps) ACT.cps.forEach((p, n) => { if (n > (ACT.kind === 'story' ? ACT.ci : ACT.k)) badge(g, 'cp', p.x * k, p.y * k, 14, n + 1); });
     g.font = '700 17px "Noto Sans Armenian", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'top'; g.lineWidth = 4; g.strokeStyle = 'rgba(14,12,18,0.9)'; g.fillStyle = '#ffffff';
     for (const it of mapItems()) { badge(g, it.kind, it.x * k, it.y * k, it.big ? 22 : 18, it.n); if (it.name) { g.strokeText(it.name, it.x * k, it.y * k + 25); g.fillText(it.name, it.x * k, it.y * k + 25); } }
     const me = atHome && homePlace() ? homePlace() : inside ? club.door : target(); youArrow(g, me.x * k, me.y * k, player.car ? player.car.a : player.a, 20);
