@@ -500,6 +500,11 @@ func _test_tick() -> void:
 	if not _test.on: return
 	touch_ui.touched = true
 	_frame += 1
+	if _frame > 30:   # script time per frame, for comparing speed-ups
+		_test.proc = _test.get("proc", 0.0) + Performance.get_monitor(Performance.TIME_PROCESS) * 1000
+		_test.phys = _test.get("phys", 0.0) + Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000
+	if _frame == _test.get("frames", 120) and _frame > 30:
+		print("PROF ms/frame process %.2f physics %.2f" % [_test.proc / (_frame - 30), _test.phys / (_frame - 30)])
 	if _test.get("drive", false):
 		if _frame == 5: me.x = cars[0].x - 20; me.y = cars[0].y - 40; act()
 		if _frame > 5 and _frame < 60: touch_ui.pedals = { 99: "gas" }
