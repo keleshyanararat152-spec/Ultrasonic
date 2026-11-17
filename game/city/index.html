@@ -140,6 +140,30 @@ h1 span { color: var(--tuff); }
 .go { align-self: flex-start; border: 0; border-radius: 10px; padding: 12px 28px; background: var(--tuff); color: var(--ink); font: 800 16px var(--font-text); cursor: pointer; }
 .go:hover { filter: brightness(1.08); }
 button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.job.story .dot { background: #ff4fa3; }
+.talk { position: absolute; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; z-index: 15;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.tk-card { width: min(680px, 100%); background: rgba(20, 16, 26, 0.92); border: 1px solid rgba(255, 79, 163, 0.45); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; backdrop-filter: blur(8px); }
+.tk-card.in { animation: tkin 220ms ease-out; }
+@keyframes tkin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.tk-who { font-weight: 800; font-size: 15px; letter-spacing: 0.02em; }
+.tk-text { margin: 0; font-size: 17px; line-height: 1.55; color: var(--fg); text-wrap: pretty; }
+.tk-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.tk-btn { border: 1px solid var(--line); background: rgba(241, 237, 230, 0.06); color: var(--fg); border-radius: 10px; padding: 9px 14px; font: 600 15px var(--font-text); cursor: pointer; text-align: left; }
+.tk-btn:hover { background: rgba(241, 237, 230, 0.12); }
+.tk-btn.next { background: #ff4fa3; border-color: #ff4fa3; color: var(--ink); font-weight: 800; }
+.tk-btn kbd { font-family: var(--font-data); background: var(--fg); color: var(--ink); border-radius: 5px; padding: 0 6px; margin-right: 8px; font-size: 12px; }
+.chap { position: absolute; left: 50%; top: 17%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; text-align: center; opacity: 0; z-index: 14; width: max-content; max-width: calc(100% - 32px); }
+.chap small { font: 700 13px var(--font-data); letter-spacing: 0.2em; text-transform: uppercase; color: var(--fg); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
+.chap b { font-size: clamp(30px, 7vw, 54px); font-weight: 800; color: #ff4fa3; line-height: 1.05; text-shadow: 0 3px 18px rgba(0, 0, 0, 0.55); text-wrap: balance; }
+.chap.run { animation: chap 4.2s ease forwards; }
+@keyframes chap { 0% { opacity: 0; transform: translate(-50%, 10px); } 12%, 78% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tk-card.in { animation: none; } }
+.st-h { margin: 4px 0 0; font-size: 17px; }
+.story-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.story-list li.done { color: var(--go); }
+.story-list li.cur { color: var(--fg); font-weight: 600; }
+.story-list small { display: block; margin: 2px 0 0 18px; font-weight: 400; color: #ff8fc4; }
 </style>
 
 <div class="stage" id="stage">
@@ -165,6 +189,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   </div>
 
   <div class="toast out" id="toast"></div>
+  <div class="chap" id="chap" hidden><small id="chapN"></small><b id="chapT"></b></div>
+  <div class="talk" id="talk" hidden><div class="tk-card" id="tkCard"><div class="tk-who" id="tkWho"></div><p class="tk-text" id="tkText"></p><div class="tk-acts" id="tkActs"></div></div></div>
   <div class="hint" id="hint" hidden></div>
 
   <button class="dance" id="danceBtn" type="button" hidden>Պարել</button>
@@ -194,6 +220,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     <div class="card">
       <h1><span>Դադար</span></h1>
       <p>Խաղը կանգնած է։ Փողդ, աստղերն ու պատվերը մնում են տեղում։</p>
+      <h2 class="st-h">Պատմություն</h2>
+      <ul class="story-list" id="storyList"></ul>
       <button class="go" id="resumeBtn" type="button">Շարունակել</button>
     </div>
   </div>
@@ -203,6 +231,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       <h1><span>Վարդագույն</span> քաղաք</h1>
       <p>Բաց քաղաք՝ վարդագույն տուֆից։ Նստիր ցանկացած մեքենա, պատվերներ հասցրու, փող աշխատիր ու մի բռնվիր ոստիկաններին։</p>
       <ul class="how">
+        <li><b>Պատմություն՝</b> 5 գլուխ՝ կերպարներով, երկխոսություններով ու ընտրություններով։ Գնա քարտեզի վարդագույն խոսքի նշանի մոտ. Գուրգեն քեռին սպասում է քեզ հրապարակում</li>
         <li><b>Գնալ՝</b> W և S, <b>թեքվել՝</b> A և D (կամ սլաքներ)։ Հեռախոսով՝ մատով քաշիր էկրանի վրա</li>
         <li><b>Նստել կամ իջնել՝</b> E</li>
         <li><b>Ձեռքի արգելակ՝</b> Space</li>
@@ -347,6 +376,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (c.ai.d >= 0 && opts.length > 1) opts = opts.filter((d) => d !== (c.ai.d + 2) % 4);
     let d;
     if (c.chase) { const t = target(); let best = 1e12; for (const o of opts) { const q = Math.hypot(ic(I + DV[o][0]) - t.x, ic(J + DV[o][1]) - t.y); if (q < best) { best = q; d = o; } } }
+    else if (c.flee) { const t = target(); let best = -1; for (const o of opts) { const q = Math.hypot(ic(I + DV[o][0]) - t.x, ic(J + DV[o][1]) - t.y) + rnd(0, 320); if (q > best) { best = q; d = o; } } }
     else d = pick(opts);
     const r = DV[(d + 1) % 4];
     c.ai.i = I; c.ai.j = J; c.ai.d = d; c.ai.stage = 1;
@@ -382,7 +412,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   }
   function newOffer() { if (player && player.car && player.car.taxi) { job = { kind: 'taxi', stage: 'pickup', p: roadPoint(), label: 'ուղևոր' }; return; } job = { stage: 'pickup', p: roadPoint(), label: pick(['լավաշ', 'ծաղիկներ', 'ծանրոց', 'խորոված', 'ուղևոր', 'դեղորայք', 'ծիրան']) }; }
 
-  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.remove('out'); toastT = 2.2; }
+  function toast(msg, dur) { const t = $('toast'); t.textContent = msg; t.classList.remove('out'); toastT = dur || 2.2; }
   function addHeat(n) { heat = Math.min(5, heat + n); evadeT = 0; }
 
   // ---------- driving ----------
@@ -413,21 +443,21 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       const a = c.ai, d = DV[a.d < 0 ? 0 : a.d];
       if (a.stage === 2) nextLeg(c, a.i, a.j);
       else if (a.stage === 1) { const r = DV[(a.d + 1) % 4]; a.stage = 0; a.wx = ic(a.i + d[0]) - d[0] * 85 + r[0] * LANE; a.wy = ic(a.j + d[1]) - d[1] * 85 + r[1] * LANE; }
-      else { const st = lightAt(a.i + d[0], a.j + d[1], a.d); if (!c.chase && (st === 'r' || (st === 'y' && c.v < 60))) c.redStop = true; else { c.redStop = false; nextLeg(c, a.i + d[0], a.j + d[1]); } }
+      else { const st = lightAt(a.i + d[0], a.j + d[1], a.d); if (!(c.chase || c.flee) && (st === 'r' || (st === 'y' && c.v < 60))) c.redStop = true; else { c.redStop = false; nextLeg(c, a.i + d[0], a.j + d[1]); } }
       tx = c.ai.wx; ty = c.ai.wy;
     }
     const diff = ad(Math.atan2(ty - c.y, tx - c.x) - c.a);
     let steer = clamp(diff * 2.2, -1, 1), tv = c.chase ? 285 : c.cruise;
     if (Math.abs(diff) > 0.6) tv = Math.min(tv, 75);
-    if (!c.chase && c.ai.stage === 1) tv = Math.min(tv, 85);
-    if (!c.chase && c.ai.stage === 0 && c.ai.d >= 0) { // slow for a red or amber at the next crossroads
+    if (!(c.chase || c.flee) && c.ai.stage === 1) tv = Math.min(tv, 85);
+    if (!(c.chase || c.flee) && c.ai.stage === 0 && c.ai.d >= 0) { // slow for a red or amber at the next crossroads
       const a = c.ai, d = DV[a.d], st = lightAt(a.i + d[0], a.j + d[1], a.d), dw = Math.hypot(a.wx - c.x, a.wy - c.y);
       if (st === 'g') c.redStop = false;
       else if (dw < 120 && !(st === 'y' && dw < 45 && c.v > 60)) { tv = Math.min(tv, dw < 36 ? 0 : (dw - 30) * 1.4); if (dw < 40) c.redStop = true; }
     }
     if (c.redStop) tv = 0;
     const fx = Math.cos(c.a), fy = Math.sin(c.a);
-    if (!c.chase) {
+    if (!(c.chase || c.flee)) {
       let blocked = false;
       const ahead = (o) => { const rx = o.x - c.x, ry = o.y - c.y, f = rx * fx + ry * fy; return f > 8 && f < 76 && Math.abs(rx * fy - ry * fx) < 18; };
       let bc = null; for (const o of cars) if (o !== c && ahead(o)) { blocked = true; bc = o; break; }
@@ -440,9 +470,9 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     let thr = 0;
     if (c.rev > 0) { c.rev -= dt; thr = -1; steer = -steer; }
     else if (tv === 0) { if (c.v > 5) thr = -1; else c.v = 0; }
-    else if (c.v < tv) thr = c.chase ? 1 : 0.6; else if (c.v > tv + 15) thr = -0.6;
+    else if (c.v < tv) thr = c.chase || c.flee ? 1 : 0.6; else if (c.v > tv + 15) thr = -0.6;
     const hit = carStep(c, thr, steer, false, dt);
-    if (c.chase || hit) { c.slow = Math.abs(c.v) < 12 ? c.slow + dt : 0; if (c.slow > 1.2) { c.rev = 0.9; c.slow = 0; } }
+    if (c.chase || c.flee || hit) { c.slow = Math.abs(c.v) < 12 ? c.slow + dt : 0; if (c.slow > 1.2) { c.rev = 0.9; c.slow = 0; } }
   }
 
   function pushOffCars(p) { // a walker is a solid body: cars are boxes you cannot pass through
@@ -461,7 +491,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   function sitDown(b) { player.sit = b; player.x = b.x; player.y = b.y; player.a = b.a; camA = b.a; camO = 0; idleT = 0; }
   function standUp() { const b = player.sit; player.sit = null; if (b) { player.x = b.x + Math.cos(b.a) * 14; player.y = b.y + Math.sin(b.a) * 14; player.a = b.a; } }
   function enterExit() {
-    if (mode !== 'play' || paused) return;
+    if (mode !== 'play' || paused || TALK) return;
     if (atHome) { for (const r of HRINGS) if (Math.hypot(player.x - r.x, player.y - r.y) < 34) { homeArm = false; r.go(); break; } return; }
     if (clubDoor()) return;
     if (!player.car && player.sit) { standUp(); return; }
@@ -486,6 +516,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     player.x = ic(3) + 96; player.y = ic(3) + 76;
     for (const c of cars) if (c.kind === 'police') c.chase = false;
     if (job && job.stage === 'deliver') newOffer();
+    if (storyOn()) { storyFail(fine ? 'Բռնվեցիր, տուգանք ' + money(fine) : 'Բռնվեցիր'); return; }
     sfx.fail(); toast((ACT ? 'Առաջադրանքը ձախողվեց. ' : '') + (fine ? 'Բռնվեցիր, տուգանք ' + money(fine) : 'Բռնվեցիր')); ACT = null;
   }
 
@@ -517,7 +548,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       if (dd > 26) clubArm = true; else if (dd < 13 && clubArm) { clubArm = false; clubDoor(); if (inside) return; }
     }
     // traffic and police
-    for (const c of cars) { if (c.ai) aiDrive(c, dt); else if (c !== player.car) c.v -= c.v * 3 * dt, carStep(c, 0, 0, false, dt); }
+    for (const c of cars) { if (c.path) pathDrive(c, dt); else if (c.ai) aiDrive(c, dt); else if (c !== player.car) c.v -= c.v * 3 * dt, carStep(c, 0, 0, false, dt); }
     for (let a = 0; a < cars.length; a++) for (let b = a + 1; b < cars.length; b++) {
       const p = cars[a], q = cars[b], dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);
       if (d >= 36 || d < 0.01) continue;
@@ -567,7 +598,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     }
 
     // jobs
-    actUpdate(dt); placeCheck();
+    actUpdate(dt); storyIdle(dt); placeCheck();
     if (WP && Math.hypot(WP.x - tg.x, WP.y - tg.y) < 45) { setWaypoint(null); toast('Հասար նշված տեղը'); }
     if (job && !ACT) {
       const d = Math.hypot(job.p.x - tg.x, job.p.y - tg.y);
@@ -1831,7 +1862,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     dayNight(paused || LD.hold ? 0 : lastDt); smokeFrame(paused || LD.hold ? 0 : lastDt);
     const SU = CITY.SUN; sun.position.set(fx + SU.x * 1000, SU.y * 1000, fz + SU.z * 1000); sun.target.position.set(fx, 0, fz); sun.target.updateMatrixWorld();
     sky.position.copy(cam3.position); sunDisc.position.set(cam3.position.x + SU.x * 3600, cam3.position.y + SU.y * 3600, cam3.position.z + SU.z * 3600);
-    streamCity(); paintLights(); squareFrame();
+    streamCity(); paintLights(); squareFrame(); storyFrame();
     renderer.render(scene, cam3);
 
     // overlay: compass arrow to the job, touch stick
@@ -1884,11 +1915,12 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (showJob) {
       const del = !!ACT || gj.stage === 'deliver', taxi = gj.kind === 'taxi';
       if (cache.del !== del) { cache.del = del; $('job').classList.toggle('deliver', del); }
-      put('jobText', ACT ? (ACT.kind === 'race' ? 'Մրցարշավ · ստուգակետ ' + Math.min(ACT.k + 1, ACT.cps.length) + '/' + ACT.cps.length : 'Փախուստ · կորիր ոստիկաններից')
+      const sto = storyOn(); if (cache.sto !== sto) { cache.sto = sto; $('job').classList.toggle('story', sto); }
+      put('jobText', ACT ? (sto ? storyLabel() : ACT.kind === 'race' ? 'Մրցարշավ · ստուգակետ ' + Math.min(ACT.k + 1, ACT.cps.length) + '/' + ACT.cps.length : 'Փախուստ · կորիր ոստիկաններից')
         : taxi ? (del ? 'Տար ուղևորին · ' + money(Math.round(gj.pay * (1 - 0.2 * (gj.hits || 0)) / 100) * 100) + (gj.hits ? ' · վթար ' + gj.hits + '/4' : '') : 'Տաքսի՝ վերցրու ուղևորին')
         : del ? 'Հասցրու՝ ' + gj.label + ' · ' + money(gj.pay) : 'Վերցրու պատվերը՝ ' + gj.label);
       const tl = del ? Math.max(0, Math.ceil(ACT ? ACT.time : gj.time)) : -1;
-      put('jobTime', del ? Math.floor(tl / 60) + ':' + String(tl % 60).padStart(2, '0') : '');
+      put('jobTime', del && isFinite(tl) ? Math.floor(tl / 60) + ':' + String(tl % 60).padStart(2, '0') : '');
       const late = del && tl <= 8; if (cache.late !== late) { cache.late = late; $('job').classList.toggle('late', late); }
     }
     let hint = '';
@@ -1908,6 +1940,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'hand' };
   window.addEventListener('keydown', (e) => {
     if (mode !== 'play') return;
+    if (TALK && !paused) { if (/^Digit[1-9]$/.test(e.code) && TALK.choice) talkPick(+e.code.slice(5) - 1); else if (['Enter', 'NumpadEnter', 'Space', 'KeyE'].includes(e.code) && !e.repeat && !TALK.choice) talkNext(); e.preventDefault(); return; }
     if (MAP.open) { if (e.code === 'KeyM' || e.code === 'Escape') toggleMap(); e.preventDefault(); return; }
     if (e.code === 'KeyM' && !e.repeat && !uiOpen) { toggleMap(); e.preventDefault(); return; }
     if (uiOpen) { if (e.code === 'Escape') closePanel(); e.preventDefault(); return; }
@@ -1943,7 +1976,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   ['pointerup', 'pointercancel', 'pointerleave'].forEach((n) => bb.addEventListener(n, () => { padBrake = false; }));
   function setPause(v) {
     if (mode !== 'play' || paused === v) return;
-    paused = v; $('pause').hidden = !v; $('pauseBtn').textContent = v ? '▶' : 'Ⅱ';
+    paused = v; if (v) storyList(); $('pause').hidden = !v; $('pauseBtn').textContent = v ? '▶' : 'Ⅱ';
     for (const k in keys) keys[k] = false; joy.id = null; joy.dx = joy.dy = 0; padBrake = false;
     if (actx) master.gain.setTargetAtTime(v || !soundOn ? 0 : 1, actx.currentTime, 0.03);
     if (v) $('resumeBtn').focus(); else $('resumeBtn').blur();
@@ -1962,10 +1995,10 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   const OUTFITS = [{ id: 'm07', name: 'Մուգ բաճկոն', price: 0 }, { id: 'm02', name: 'Բեժ սվիտեր', price: 1500 }, { id: 'm06', name: 'Կարմիր վերնաշապիկ', price: 1500 },
     { id: 'm08', name: 'Կապույտ վերնաշապիկ', price: 2000 }, { id: 'm16', name: 'Մուգ կապույտ շապիկ', price: 2000 }, { id: 'm10', name: 'Բորդո բաճկոն', price: 2500 },
     { id: 'm12', name: 'Ջինսե բաճկոն', price: 3000 }, { id: 'm04', name: 'Սև կապյուշոն', price: 3000 }, { id: 'm17', name: 'Մարզական բաճկոն', price: 3500 }, { id: 'm03', name: 'Կոստյում', price: 6000 }];
-  const HOME_PRICE = 20000, PLACES = [], PROG0 = () => ({ cars: [], car: null, outfit: 'm07', outfits: ['m07'], home: false, raceBest: 0 }), PROG = PROG0();
+  const HOME_PRICE = 20000, PLACES = [], PROG0 = () => ({ cars: [], car: null, outfit: 'm07', outfits: ['m07'], home: false, raceBest: 0, story: 0, kind: false }), PROG = PROG0();
   let ACT = null, uiOpen = false, ownedCar = null;
   const goal = () => ACT ? (ACT.goal || { stage: 'escape' }) : job;
-  const gcol = (g) => g.stage === 'pickup' ? K.gold : g.stage === 'race' ? '#35d6e6' : g.stage === 'escape' ? K.alert : K.go;
+  const gcol = (g) => g.stage === 'story' ? SCOL : g.stage === 'pickup' ? K.gold : g.stage === 'race' ? '#35d6e6' : g.stage === 'escape' ? K.alert : K.go;
   const fmtT = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
   function buildPlaces() {
     const defs = [{ id: 'dealer', name: 'ԱՎՏՈՍՐԱՀ', col: '#4d8dff', b: [1, 2], car: false, open: openDealer },
@@ -2118,6 +2151,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   function actUpdate(dt) {
     if (!ACT) return;
     ACT.time -= dt;
+    if (ACT.kind === 'story') return storyStep(dt);
     if (ACT.kind === 'race') {
       if (!player.car) return actEnd(false, 'Մրցարշավը ընդհատվեց՝ իջար մեքենայից');
       const c = ACT.cps[ACT.k], tg = target();
@@ -2137,9 +2171,313 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     }
   }
 
+  // ---------- story: five chapters with characters, dialogue and missions built from the city's own pieces ----------
+  // A chapter starts when you walk up to its character (the pink speech badge on the map). Its steps run as ACT.kind 'story';
+  // a failed step sends you back to the character to try the chapter again. Progress is PROG.story (chapters done).
+  const CAST = {
+    gurgen: { name: 'Գուրգեն քեռի', nom: 'Գուրգեն քեռին', av: 'm02', w: false, col: '#ffcf4a' },
+    nare: { name: 'Նարե', nom: 'Նարեն', av: 'f05', w: true, col: '#ff8fb8' },
+    rubo: { name: 'Ռուբո', nom: 'Ռուբոն', av: 'm04', w: false, col: '#ff5a5f' },
+    levon: { name: 'Լևոն', nom: 'Լևոնը', av: 'm17', w: false, col: '#35d6e6' },
+    lilit: { name: 'Լիլիթ', nom: 'Լիլիթը', av: 'f13', w: true, col: '#b48cff' },
+    you: { name: 'Դու', col: '#f1ede6' } };
+  const SCOL = '#ff4fa3', SP = {}, NPCM = {};
+  const ST = { arm: true, failed: false, chainT: 0, beam: null };
+  let TALK = null;
+  const CHS = [
+    { title: 'Վերադարձ', who: 'gurgen', at: 'square', reward: 1500,
+      intro: [['gurgen', 'Վա՜յ, ո՞վ եմ տեսնում։ Եկա՞ր, տղաս։ Տասը տարի է՝ քեզ չեմ տեսել։'],
+        ['you', 'Բարև, Գուրգեն քեռի։ Զանգել էիր, ասում էիր՝ օգնություն է պետք։'],
+        ['gurgen', 'Պետք է, պետք է։ Բայց նախ մի փոքր գործ։ Իմ հին տաքսին կանգնած է հարավում՝ մի բակի մոտ։ Տղաները նորոգել են, պետք է բերել արհեստանոց։'],
+        { choice: [['Հեշտ բան է, քեռի', [['gurgen', 'Միայն զգույշ, լա՞վ։ Նա ինձնից էլ է ծեր։ Ոչ մի տեղ չխփես։']]],
+          ['Էդ մեքենան դեռ քշո՞ւմ է', [['gurgen', 'Քշում է, ու քեզնից լավ։ Բայց ոչ մի տեղ չխփես, նա ինձնից էլ է ծեր։']]]] }],
+      retry: [['gurgen', 'Ոչինչ, տղաս, պատահում է։ Տղաները տաքսին նորից տեղն են դրել, գնա բեր։']],
+      steps: [
+        { t: 'getcar', label: 'Գտիր Գուրգենի հին դեղին տաքսին' },
+        { t: 'drive', to: 'garageCar', time: 150, hits: 3, label: 'Տար տաքսին Գուրգենի արհեստանոց' },
+        { t: 'talk', who: 'gurgen', at: 'garage', lines: [['gurgen', 'Ամբողջական է։ Ապրես, տղաս։'],
+          ['gurgen', 'Հիմա լսիր, թե ինչու եմ քեզ կանչել։ «Ոսկե աշտարակ» ընկերությունը ուզում է քանդել մեր ամբողջ թաղը՝ արհեստանոցս, փռերը, հրապարակի կրպակները, ու տեղը ապակե աշտարակ կառուցել։'],
+          ['you', 'Իսկ դուք համաձա՞յն չեք։'],
+          ['gurgen', 'Ո՞վ է համաձայն։ Բայց Սարգիս Ոսկանյանը «ոչ» չի ընդունում։ Նրա մարդիկ ամեն օր գալիս են ու ստիպում ստորագրել։'],
+          ['gurgen', 'Գնա Նարեի մոտ՝ իմ աղջկա։ Արևելքում փուռ ունի։ Նրան էլ են նեղացնում, բայց ինձ չի ասում, որ չանհանգստանամ։']] }] },
+    { title: 'Լավաշ ու սպառնալիք', who: 'nare', at: 'bakery', reward: 2000,
+      intro: [['nare', 'Դու ես, չէ՞, հայրիկիս ասած հյուրը։ Լավ ժամանակին ես եկել։'],
+        ['nare', 'Առաքիչս այսօր հրաժարվեց, ասում է՝ իրեն սպառնացել են։ Իսկ ես երեք պատվեր ունեմ, ու լավաշը սառչում է։'],
+        ['you', 'Տուր, ես կտանեմ։'],
+        ['nare', 'Իսկական փրկիչ ես։ Երեք հասցե, իրար հետևից։ Մեքենայով արագ կլինի։']],
+      retry: [['nare', 'Ոչինչ, նոր խմորից թխեցի։ Նույն երեք հասցեն են, արի նորից փորձենք։']],
+      steps: [
+        { t: 'multi', time: 170, label: 'Հասցրու տաք լավաշը' },
+        { t: 'talk', who: 'nare', at: 'bakery', lines: [['nare', 'Բոլորը գոհ են, տաք-տաք հասավ։ Բայց տես, թե ինչ արեցին մինչ դու գնացել էիր…'],
+          ['you', 'Ապակի՞ն… Ո՞վ է արել։'],
+          ['nare', 'Ռուբոն։ Ոսկանյանի մարդն է։ Ասաց՝ եթե մինչև շաբաթվա վերջ չստորագրենք, փուռը կփակվի։ Միայն հայրիկին չասես, խնդրում եմ։'],
+          ['nare', 'Վերցրու, սա քո աշխատածն է։'],
+          { choice: [['Շնորհակալություն', [['nare', 'Արժանի ես։']]],
+            ['Պահիր, ապակին նորոգիր', [() => { PROG.kind = true; }, ['nare', 'Դու լավ մարդ ես։ Չեմ մոռանա։']]]] },
+          ['nare', 'Ռուբոյի սև մեքենան հենց հիմա կանգնած է փողոցում։ Հետևիր նրան, տես՝ ուր է գնում։ Միայն թե չմոտենաս, թե չէ կնկատի։']] }] },
+    { title: 'Ստվեր', who: 'nare', at: 'bakery', reward: 3000, chain: true,
+      intro: [['nare', 'Ռուբոն դեռ այնտեղ է։ Նստիր մեքենա ու հեռվից հետևիր։']],
+      retry: [['nare', 'Ռուբոն նորից մոտակայքում է։ Այս անգամ ավելի զգույշ։']],
+      steps: [
+        { t: 'tail', dur: 55 },
+        { t: 'talk', who: 'rubo', at: () => ACT && ACT.rubo, lines: [['rubo', 'Էս ո՞վ է։ Ամբողջ ճանապարհին հետևիցս էիր գալիս, կարծում էիր չե՞մ տեսնում։'],
+          ['you', 'Թողեք Գուրգենին ու Նարեին հանգիստ։'],
+          ['rubo', 'Ես պատվեր եմ կատարում, ընկեր ջան։ Իսկ դու հիմա իսկական խնդիր ունես։'],
+          ['rubo', 'Ալո՞… Այո, պարոն լեյտենանտ։ Մի կասկածելի տիպ է այստեղ, մեքենաներ է ջարդում։ Արագ եկեք։']] },
+        { t: 'escape', heat: 3, time: 150, label: 'Կորիր ոստիկաններից' },
+        { t: 'talk', who: 'gurgen', at: 'garage', noHeat: true, lines: [['gurgen', 'Ոստիկանությո՞ւն էլ են կանչում… Ոսկանյանը կես քաղաքը գնել է։'],
+          ['gurgen', 'Բայց մի մարդ կա, որ կարող է օգնել՝ Լևոնը։ Գիշերային մրցարշավներ է անում։ Փողոցներում ինչ կատարվում է, նա գիտի։'],
+          ['gurgen', 'Ժամանակին մեքենան եմ նորոգել, պարտք է ինձ։ Գնա, նա հարավ-արևելքում է, մրցարշավի օղակի մոտ։']] }] },
+    { title: 'Լևոնի խաղը', who: 'levon', at: 'levon', reward: 4000,
+      intro: [['levon', 'Գուրգենի տղա՞ն։ Լսել եմ քո մասին։ Ասում են՝ ոստիկաններից էլ ես փախել։'],
+        ['you', 'Ինձ պետք է իմանալ, թե ինչպես կանգնեցնել Ոսկանյանին։'],
+        ['levon', 'Մի բան գիտեմ։ Բայց այս փողոցներում ոչինչ ձրի չէ։ Հաղթիր ինձ մրցարշավում, ու կասեմ։'],
+        { choice: [['Համաձայն եմ', [['levon', 'Լավ։ Վեց ստուգակետ։ Ով առաջինը հասնի վերջինին, նա է հաղթել։ Մեքենա նստիր ու կանգնիր կողքիս։']]],
+          ['Իսկ եթե պարտվե՞մ', [['levon', 'Կփորձես նորից։ Ես համբերատար եմ։ Վեց ստուգակետ, ով առաջինը։ Մեքենա նստիր ու կանգնիր կողքիս։']]]] }],
+      retry: [['levon', 'Ռևանշի՞ ես եկել։ Լավ, մեկ էլ։ Մեքենա նստիր ու կանգնիր կողքիս։']],
+      steps: [
+        { t: 'race' },
+        { t: 'talk', who: 'levon', at: () => ACT && ACT.finish, lines: [['levon', 'Վա՜հ։ Վաղուց ինձ ոչ ոք չէր հաղթել։ Խոսքս խոսք է։'],
+          ['levon', 'Ամեն գիշեր Ոսկանյանի սուրհանդակը մոխրագույն մեքենայով մի թղթապանակ է տանում Նեոն ակումբից։ Այնտեղ են կեղծ ստորագրություններն ու կաշառքների ցուցակը։'],
+          ['levon', 'Լիլիթը՝ լրագրողը, վաղուց է որսում այդ թղթապանակը։ Նա քեզ կսպասի ակումբի դռան մոտ։']] }] },
+    { title: 'Թղթապանակը', who: 'lilit', at: 'lilit', reward: 10000,
+      intro: [['lilit', 'Դու երևի Լևոնի ասած մարդն ես։ Ես Լիլիթն եմ՝ «Քաղաքի ձայն» թերթից։'],
+        ['lilit', 'Երկու տարի է՝ գրում եմ Ոսկանյանի մասին, բայց առանց ապացույցի ոչ ոք չի հավատում։ Այսօր ամեն ինչ կարող է փոխվել։'],
+        ['lilit', 'Սուրհանդակը հիմա դուրս կգա։ Մոխրագույն մեքենան է։ Կանգնեցրու նրան, միայն մարդկանց չվնասես, լա՞վ։'],
+        { choice: [['Նա չի փախչի', [['lilit', 'Թղթապանակը բեր հրապարակ, ես այնտեղ կսպասեմ։ Հաջողություն։']]],
+          ['Ինչո՞ւ ես այդքան ռիսկի դիմում', [['lilit', 'Որովհետև սա իմ քաղաքն էլ է։ Թղթապանակը բեր հրապարակ, ես այնտեղ կսպասեմ։']]]] }],
+      retry: [['lilit', 'Սուրհանդակը վերադարձավ ակումբ։ Ունենք ևս մեկ հնարավորություն։ Նստիր մեքենա։']],
+      steps: [
+        { t: 'chase', time: 120 },
+        { t: 'talk', who: 'lilit', at: 'finalL', also: [['gurgen', 'finalG'], ['nare', 'finalN']], noHeat: true, label: 'Տար թղթապանակը Լիլիթին հրապարակում',
+          lines: () => [['lilit', 'Սա է։ Կեղծ ստորագրություններ, կաշառքներ, անուններ… Ամեն ինչ այստեղ է։'],
+            ['lilit', 'Վաղը առավոտյան ամբողջ քաղաքը կկարդա։ Ոսկանյանի աշտարակը թղթի վրա էլ չի մնա։'],
+            ['gurgen', 'Տղաս… Դու փրկեցիր մեր թաղը։ Քո պապը քեզնով կհպարտանար։'],
+            PROG.kind ? ['nare', 'Ու իմ փուռը։ Ապակին արդեն նորն է՝ քո չվերցրած փողով։ Ամեն առավոտ տաք լավաշը քեզ համար է։'] : ['nare', 'Ու իմ փուռը։ Ամեն առավոտ տաք լավաշը քեզ համար է։'],
+            ['you', 'Սա բոլորինս է։ Ես միայն մեքենա էի քշում։'],
+            ['lilit', 'Լավ էլ քշում էիր։ Եթե մի օր նոր պատմություն ունենամ, գիտեմ՝ ում զանգել։']] }] }];
+
+  function buildStory() { // places on pavements (north side of a block) and kerbs, worked out once the club is placed
+    const pv = (i, j, dx) => ({ x: i * CELL + dx, y: j * CELL + 131 }), kerb = (i, j, dx) => ({ x: i * CELL + dx, y: j * CELL + 92 });
+    Object.assign(SP, { square: { x: SQ.c.x - 60, y: SQ.c.y - 150 }, garage: pv(1, 3, 330), garageCar: kerb(1, 3, 330), taxi: { x: 2 * CELL + 300, y: ic(5) + 50, a: 0 },
+      bakery: pv(5, 1, 330), lav: [{ x: ic(6), y: CELL + 300 }, { x: 4 * CELL + 300, y: ic(0) }, { x: ic(4), y: 2 * CELL + 330 }], rubo: { x: 5 * CELL + 180, y: ic(1) + 28, a: 0 },
+      levon: pv(5, 5, 430), rival: { x: 5 * CELL + 430, y: ic(5) + 28, a: 0 },
+      lilit: { x: club.door.x + 45, y: club.door.y - 4 }, courier: { x: club.door.x - 150, y: ic(Math.floor(club.rect.y / CELL)) + 28, a: 0 },
+      finalL: { x: SQ.c.x, y: SQ.c.y - 150 }, finalG: { x: SQ.c.x - 26, y: SQ.c.y - 160 }, finalN: { x: SQ.c.x + 26, y: SQ.c.y - 160 } });
+    ST.beam = new T.Mesh(new T.CylinderGeometry(22, 22, 420, 20, 1, true), new T.MeshBasicMaterial({ color: SCOL, transparent: true, opacity: 0.32, side: T.DoubleSide, depthWrite: false, fog: false }));
+    ST.beam.visible = false; scene.add(ST.beam);
+  }
+  const spos = (at) => typeof at === 'function' ? at() : SP[at];
+  const storyOn = () => !!ACT && ACT.kind === 'story';
+  const storyDone = () => PROG.story >= CHS.length;
+
+  // dialogue: lines are [who, text]; { choice: [[label, lines]] } offers replies; a function in the list runs as it is reached
+  function say(lines, done) {
+    TALK = { q: lines.slice(), done: done };
+    for (const k in keys) keys[k] = false; joy.id = null; joy.dx = joy.dy = 0; padBrake = false; if (player.car) player.car.v = 0;
+    $('talk').hidden = false; talkNext();
+  }
+  function talkNext() {
+    if (!TALK) return;
+    let L = TALK.q.shift();
+    while (typeof L === 'function') { L(); L = TALK.q.shift(); }
+    const acts = $('tkActs'); acts.textContent = '';
+    if (!L) { const d = TALK.done; TALK = null; $('talk').hidden = true; if (d) d(); return; }
+    const card = $('tkCard'); card.classList.remove('in'); void card.offsetWidth; card.classList.add('in');
+    if (L.choice) {
+      TALK.choice = L.choice; $('tkWho').textContent = CAST.you.name; $('tkWho').style.color = CAST.you.col; $('tkText').textContent = 'Ի՞նչ ես պատասխանում';
+      L.choice.forEach((o, n) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'tk-btn'; b.innerHTML = '<kbd>' + (n + 1) + '</kbd>'; b.append(o[0]); b.addEventListener('click', () => talkPick(n)); acts.appendChild(b); });
+      return;
+    }
+    TALK.choice = null; const c = CAST[L[0]]; $('tkWho').textContent = c.name; $('tkWho').style.color = c.col; $('tkText').textContent = L[1];
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'tk-btn next'; b.textContent = TALK.q.length ? 'Շարունակել ›' : 'Լավ'; b.addEventListener('click', talkNext); acts.appendChild(b);
+    tone(L[0] === 'you' ? 660 : 520, L[0] === 'you' ? 700 : 560, 0.05, 'triangle', 0.05);
+  }
+  function talkPick(n) { const o = TALK && TALK.choice && TALK.choice[n]; if (!o) return; TALK.q.unshift(['you', o[0]], ...o[1]); talkNext(); }
+  function chapCard(kick, title) { const el = $('chap'); $('chapN').textContent = kick; $('chapT').textContent = title; el.hidden = false; el.classList.remove('run'); void el.offsetWidth; el.classList.add('run'); }
+
+  function beginChapter() {
+    const n = PROG.story, ch = CHS[n]; ST.arm = false;
+    chapCard('Գլուխ ' + (n + 1) + ' / ' + CHS.length, ch.title); sfx.take();
+    say(ST.failed && ch.retry ? ch.retry : ch.intro, () => { ST.failed = false; ACT = { kind: 'story', ch: n, k: -1, time: Infinity, goal: null }; storyNext(); });
+  }
+  function storyNext() {
+    const ch = CHS[ACT.ch]; ACT.k++;
+    if (ACT.k >= ch.steps.length) return chapterDone();
+    const s = ACT.s = ch.steps[ACT.k]; ACT.time = s.time || Infinity; ACT.goal = { p: null, stage: 'story' }; ACT.cps = null;
+    if (s.t === 'getcar') {
+      const c = makeCar(SP.taxi.x, SP.taxi.y, SP.taxi.a, 'civ'); Object.assign(c, { taxi: false, color: '#e8b923', type: 'sedan', max: 300, gurgen: true }); cars.push(c); ACT.car = c;
+    } else if (s.t === 'drive') ACT.dmg0 = (ACT.car && ACT.car.dmg) || 0;
+    else if (s.t === 'multi') ACT.m = 0;
+    else if (s.t === 'tail' || s.t === 'chase') {
+      const P = s.t === 'tail' ? SP.rubo : SP.courier, c = makeCar(P.x, P.y, P.a, 'civ');
+      Object.assign(c, s.t === 'tail' ? { color: '#15171c', type: 'suv', max: 300, cruise: 112 } : { color: '#7d838c', type: 'sedan', max: 305, cruise: 235 }, { taxi: false, driver: true, story: true, ai: null });
+      cars.push(c); ACT.car = c; ACT.go = false; ACT.wait = 25; ACT.far = 0; ACT.near = 0; ACT.hold = 0; ACT.time = Infinity;
+    } else if (s.t === 'escape') { heat = Math.max(heat, s.heat); evadeT = 0; sfx.fail(); }
+    else if (s.t === 'race') {
+      const c = makeCar(SP.rival.x, SP.rival.y, SP.rival.a, 'civ'); Object.assign(c, { taxi: false, color: '#35d6e6', type: 'hatch', max: 315, acc: 1.2, story: true, ai: null, rival: true, ck: 0 }); cars.push(c);
+      ACT.rival = c; ACT.phase = 'ready'; ACT.cd = 0;
+    }
+    if (s.label && s.t !== 'talk') toast(s.label, 3);
+  }
+  function chapterDone() {
+    const n = ACT.ch, ch = CHS[n], got = n === 1 && PROG.kind ? 0 : ch.reward;
+    ACT = null; storyClean(); cash += got; PROG.story = n + 1; writeSave(); sfx.coin();
+    if (storyDone()) { chapCard('Պատմության վերջը', 'Քաղաքը քոնն է'); toast('Դու ավարտեցիր պատմությունը  +' + money(got), 4); return; }
+    toast('Գլուխ ' + (n + 1) + '-ն ավարտվեց' + (got ? '  +' + money(got) : ''), 3.5);
+    const nx = CHS[n + 1]; if (nx.chain) ST.chainT = 1.8; else ST.arm = true;
+  }
+  function storyFail(msg) {
+    const ch = CHS[ACT.ch]; ACT = null; storyClean(); ST.failed = true; ST.arm = true; sfx.fail();
+    toast(msg + ' · վերադարձիր ' + CAST[ch.who].name + '-ի մոտ', 4);
+  }
+  function storyClean() { cars = cars.filter((c) => !c.story || c === player.car); if (TALK) { TALK = null; $('talk').hidden = true; } }
+  function nearTalk(p, rFoot) { const t = target(); return !!p && Math.hypot(p.x - t.x, p.y - t.y) < (player.car ? 50 : rFoot || 26) && (!player.car || Math.abs(player.car.v) < 50); }
+
+  function storyIdle(dt) { // waiting for you to walk up to the next chapter's character
+    if (ACT || TALK || storyDone()) return;
+    if (ST.chainT > 0) { ST.chainT -= dt; if (ST.chainT <= 0) beginChapter(); return; }
+    const ch = CHS[PROG.story], p = spos(ch.at), d = Math.hypot(p.x - target().x, p.y - target().y);
+    if (d > 70) ST.arm = true;
+    else if (ST.arm && nearTalk(p)) { if (heat > 0) { ST.arm = false; toast('Նախ կորցրու ոստիկաններին'); } else beginChapter(); }
+  }
+  function raceCps(I, J) {
+    const cps = []; for (let k = 0; k < 6; k++) {
+      let ni = I, nj = J;
+      for (let tries = 0; tries < 60; tries++) { ni = clamp(I + Math.round(rnd(-3, 3)), 0, N); nj = clamp(J + Math.round(rnd(-3, 3)), 0, N); if (Math.abs(ni - I) + Math.abs(nj - J) >= 2 && !cps.some((q) => q.i === ni && q.j === nj)) break; }
+      I = ni; J = nj; cps.push({ x: ic(I), y: ic(J), i: I, j: J });
+    }
+    return cps;
+  }
+  function pathDrive(c, dt) { // the rival: full throttle along a list of street points, slowing for the corners
+    const w = c.path[c.pk];
+    if (!w) { carStep(c, c.v > 5 ? -1 : 0, 0, false, dt); return; }
+    const dx = w.x - c.x, dy = w.y - c.y, d = Math.hypot(dx, dy);
+    if (d < 36) { c.pk++; return; }
+    const hd = Math.atan2(dy, dx), diff = ad(hd - c.a); let steer = clamp(diff * 2.4, -1, 1), tv = c.max;
+    if (Math.abs(diff) > 0.5) tv = 80;
+    else { const nx = c.path[c.pk + 1]; if (nx && Math.abs(ad(Math.atan2(nx.y - w.y, nx.x - w.x) - hd)) > 0.5) tv = Math.min(tv, 85 + d * 0.9); }
+    let thr = c.v < tv ? 1 : -0.7;
+    if (c.rev > 0) { c.rev -= dt; thr = -1; steer = -steer; }
+    carStep(c, thr, steer, false, dt);
+    c.slow = Math.abs(c.v) < 12 ? (c.slow || 0) + dt : 0; if (c.slow > 1.2) { c.rev = 0.8; c.slow = 0; }
+  }
+  function storyStep(dt) {
+    const s = ACT.s, tg = target(), G = ACT.goal;
+    if (s.t === 'talk') {
+      G.p = spos(s.at);
+      if (nearTalk(G.p, 30)) { if (s.noHeat && heat > 0) { if (!ACT.warned) { ACT.warned = true; toast('Նախ կորցրու ոստիկաններին'); } } else { ACT.warned = false; const L = typeof s.lines === 'function' ? s.lines() : s.lines; say(L, storyNext); } }
+    } else if (s.t === 'getcar') {
+      G.p = ACT.car; if (!cars.includes(ACT.car)) return storyFail('Տաքսին կորավ');
+      if (player.car === ACT.car) storyNext();
+    } else if (s.t === 'drive') {
+      G.p = SP[s.to]; const c = ACT.car, hits = (c.dmg || 0) - ACT.dmg0; ACT.hits = hits;
+      if (hits >= s.hits) return storyFail('Տաքսին ջարդվեց');
+      if (player.car === c && Math.hypot(G.p.x - c.x, G.p.y - c.y) < 42) return storyNext();
+      if (ACT.time <= 0) return storyFail('Ուշացար');
+    } else if (s.t === 'multi') {
+      G.p = SP.lav[ACT.m];
+      if (Math.hypot(G.p.x - tg.x, G.p.y - tg.y) < 40) { ACT.m++; tone(880, 1320, 0.12, 'triangle', 0.12); if (ACT.m >= SP.lav.length) return storyNext(); toast('Հասցված է · ' + ACT.m + '/' + SP.lav.length); }
+      if (ACT.time <= 0) return storyFail('Լավաշը սառեց');
+    } else if (s.t === 'tail' || s.t === 'chase') {
+      const c = ACT.car; G.p = c; if (!cars.includes(c)) return storyFail('Մեքենան կորավ');
+      if (player.car === c) return storyFail(s.t === 'tail' ? 'Ռուբոն տեսավ, որ մեքենան ես վերցնում' : 'Սուրհանդակը փախավ');
+      const d = Math.hypot(c.x - tg.x, c.y - tg.y); ACT.dist = d;
+      if (!ACT.go) {
+        ACT.wait -= dt;
+        if (player.car || ACT.wait <= 0) { ACT.go = true; c.flee = s.t === 'chase'; resync(c); ACT.time = s.t === 'tail' ? s.dur : s.time; toast(s.t === 'tail' ? 'Ռուբոն շարժվեց' : 'Սուրհանդակը փախչում է', 2.5); }
+        return;
+      }
+      if (s.t === 'tail') {
+        ACT.far = d > 520 ? ACT.far + dt : Math.max(0, ACT.far - dt); if (ACT.far > 6) return storyFail('Ռուբոն կորավ');
+        ACT.near = d < 62 ? ACT.near + dt : Math.max(0, ACT.near - dt * 0.5); if (ACT.near > 2.5) return storyFail('Ռուբոն քեզ նկատեց');
+        if (ACT.time <= 0) { // he stops and gets out
+          c.ai = null; c.driver = false; const p = { x: c.x + Math.sin(c.a) * 30, y: c.y - Math.cos(c.a) * 30 }; pushOut(p, 7); ACT.rubo = p; toast('Ռուբոն կանգնեց ու իջավ', 2.5); return storyNext();
+        }
+      } else {
+        if (d < 55) ACT.hold += dt; if (d > 1500) return storyFail('Սուրհանդակը կորավ');
+        if (ACT.hold >= 2) { c.flee = false; c.ai = null; c.driver = false; heat = Math.max(heat, 2); evadeT = 0; sfx.coin(); toast('Թղթապանակը քոնն է։ Ոսկանյանի մարդիկ ոստիկանություն կանչեցին', 3.5); return storyNext(); }
+        if (ACT.time <= 0) return storyFail('Սուրհանդակը փախավ');
+      }
+    } else if (s.t === 'escape') {
+      G.p = null; if (heat <= 0) { toast('Փախար', 2); return storyNext(); }
+      if (ACT.time <= 0) return storyFail('Չհասցրիր փախչել');
+    } else if (s.t === 'race') {
+      const r = ACT.rival; if (!cars.includes(r)) return storyFail('Լևոնը գնաց');
+      if (ACT.phase === 'ready') {
+        G.p = SP.rival; if (player.car === r) return storyFail('Լևոնի մեքենան չես կարող վերցնել');
+        if (player.car && Math.hypot(SP.rival.x - tg.x, SP.rival.y - tg.y) < 110) { ACT.phase = 'count'; ACT.cd = 3.99; toast('3', 1); tone(440, 440, 0.15, 'square', 0.1); }
+      } else if (ACT.phase === 'count') {
+        const before = Math.ceil(ACT.cd - 0.99); ACT.cd -= dt; const now = Math.ceil(ACT.cd - 0.99);
+        if (player.car) player.car.v *= Math.pow(0.05, dt);
+        if (now !== before && now > 0) { toast(String(now), 1); tone(440, 440, 0.15, 'square', 0.1); }
+        if (ACT.cd <= 1) { // go: checkpoints start at the crossroads east of the start
+          ACT.phase = 'go'; ACT.cps = raceCps(6, 5); ACT.k = 0; toast('Գնա՛', 1.2); tone(880, 880, 0.3, 'square', 0.12);
+          const pts = [{ x: ic(6), y: ic(5) }]; let pi = 6, pj = 5;
+          for (const q of ACT.cps) { if (q.i !== pi && q.j !== pj) pts.push({ x: ic(q.i), y: ic(pj) }); pts.push({ x: q.x, y: q.y }); pi = q.i; pj = q.j; }
+          r.path = pts; r.pk = 0; r.ck = 0;
+        }
+      } else {
+        if (!player.car) return storyFail('Իջար մեքենայից');
+        const c = ACT.cps[ACT.k]; G.p = c; G.stage = 'race';
+        const rc = ACT.cps[r.ck]; if (rc && Math.hypot(rc.x - r.x, rc.y - r.y) < 45) { r.ck++; if (r.ck >= ACT.cps.length) return storyFail('Լևոնը հաղթեց'); }
+        if (Math.hypot(c.x - tg.x, c.y - tg.y) < 55) {
+          ACT.k++; tone(880, 1320, 0.12, 'triangle', 0.12);
+          if (ACT.k >= ACT.cps.length) {
+            const L = ACT.cps[ACT.cps.length - 1], sx = L.i >= N ? -1 : 1, sy = L.j >= N ? -1 : 1; ACT.finish = { x: L.x + sx * 70, y: L.y + sy * 70 };
+            r.path = [{ x: L.x + sx * 40, y: L.y }]; r.pk = 0; ACT.cps = null; toast('Հաղթեցիր', 2); return storyNext();
+          }
+        }
+      }
+    }
+  }
+  function storyLabel() {
+    const s = ACT.s; if (!s) return '';
+    if (s.t === 'drive') return s.label + ' · վթար ' + (ACT.hits || 0) + '/' + s.hits;
+    if (s.t === 'multi') return s.label + ' · ' + ACT.m + '/' + SP.lav.length;
+    if (s.t === 'tail') return !ACT.go ? 'Նստիր մեքենա, Ռուբոն շուտով կշարժվի' : ACT.dist < 100 ? 'Շատ մոտ ես, հետ մնա' : ACT.dist > 400 ? 'Կորցնում ես նրան, մոտեցիր' : 'Հետևիր Ռուբոյին հեռվից';
+    if (s.t === 'chase') return !ACT.go ? 'Նստիր մեքենա, սուրհանդակը դուրս է գալիս' : 'Բռնիր սուրհանդակին · մնա կողքին ' + Math.min(100, Math.round(ACT.hold / 2 * 100)) + '%';
+    if (s.t === 'race') return ACT.phase === 'ready' ? 'Մեքենայով կանգնիր Լևոնի կողքին' : ACT.phase === 'count' ? 'Պատրաստվիր…' : 'Մրցարշավ · դու ' + ACT.k + '/6 · Լևոն ' + ACT.rival.ck + '/6';
+    if (s.t === 'talk') return s.label ? (heat > 0 && s.noHeat ? 'Կորցրու ոստիկաններին, հետո ' + s.label[0].toLowerCase() + s.label.slice(1) : s.label) : (heat > 0 && s.noHeat ? 'Կորցրու ոստիկաններին, հետո գնա ' + CAST[s.who].name + '-ի մոտ' : 'Գնա ' + CAST[s.who].name + '-ի մոտ');
+    return s.label || '';
+  }
+  function storyCast() { // who stands where right now
+    if (storyDone()) return [['gurgen', SP.garage], ['nare', SP.bakery]];
+    if (!storyOn()) { const ch = CHS[PROG.story]; return [[ch.who, spos(ch.at)]]; }
+    const steps = CHS[ACT.ch].steps;
+    for (let k = ACT.k; k < steps.length; k++) if (steps[k].t === 'talk') { const s = steps[k]; return [[s.who, spos(s.at)]].concat((s.also || []).map((a) => [a[0], spos(a[1])])); }
+    return [];
+  }
+  function storyFrame() { // the characters, the pink beam over the next one, and a little life in how they stand
+    if (!ST.beam) return;
+    const play = mode === 'play', want = play && !inside && !atHome ? storyCast().filter((a) => a[1]) : [], seen = {};
+    for (const [id, p] of want) {
+      let m = NPCM[id];
+      if (m && AV.ready && !m.userData.avatar) { scene.remove(m); m = null; }
+      if (!m) { const c = CAST[id]; m = AV.ready ? avatarMesh(c.av) : humanMesh(randomLook(c.w)); m.scale.setScalar(1.32); scene.add(m); NPCM[id] = m; }
+      seen[id] = true; m.visible = true;
+      const t = target(), d = Math.hypot(t.x - p.x, t.y - p.y), face = d < 160 ? Math.atan2(t.y - p.y, t.x - p.x) : -Math.PI / 2;
+      m.position.set(p.x, groundY(p.x, p.y), p.y); m.rotation.y = -face;
+      const u = m.userData; talkPose(u, time + id.length, false); if (u.joints) rigApply(u);
+    }
+    for (const id in NPCM) if (!seen[id]) NPCM[id].visible = false;
+    const giver = play && !inside && !atHome && !storyOn() && !storyDone() && !TALK ? spos(CHS[PROG.story].at) : null;
+    ST.beam.visible = !!giver;
+    if (giver) { ST.beam.position.set(giver.x, 210, giver.y); const s = 1 + Math.sin(time * 4) * 0.1; ST.beam.scale.set(s, 1, s); }
+  }
+  function storyList() { // the chapter list on the pause screen
+    const L = $('storyList'); L.textContent = '';
+    CHS.forEach((ch, n) => {
+      const li = document.createElement('li'), done = n < PROG.story, cur = n === PROG.story; li.className = done ? 'done' : cur ? 'cur' : '';
+      li.textContent = (done ? '✓ ' : cur ? '▸ ' : '· ') + 'Գլուխ ' + (n + 1) + ' · ' + ch.title; if (cur) { const sm = document.createElement('small'); sm.textContent = storyOn() ? storyLabel() : CAST[ch.who].nom + ' սպասում է քեզ (վարդագույն նշանը քարտեզին)'; li.appendChild(sm); }
+      L.appendChild(li);
+    });
+    if (storyDone()) { const li = document.createElement('li'); li.className = 'cur'; li.textContent = 'Պատմությունն ավարտված է'; L.appendChild(li); }
+  }
+
   // ---------- map: a round radar that turns with the camera, and a full map (M, or tap the radar) with a legend ----------
   const MAP = { base: null, open: false };
-  const ICON = { club: '#ff4fa3', dealer: '#4d8dff', clothes: '#b48cff', home: '#58d68d', race: '#35d6e6', escape: '#ff5a5f', pickup: '#ffcf4a', deliver: '#58d68d', cp: '#35d6e6', mycar: '#f1ede6', wp: '#ff9f1c', square: '#4f9fc0' };
+  const ICON = { club: '#ff4fa3', dealer: '#4d8dff', clothes: '#b48cff', home: '#58d68d', race: '#35d6e6', escape: '#ff5a5f', pickup: '#ffcf4a', deliver: '#58d68d', cp: '#35d6e6', mycar: '#f1ede6', wp: '#ff9f1c', square: '#4f9fc0', story: '#ff4fa3', rival: '#35d6e6' };
   const PLACE_NAME = { square: 'Հրապարակ', club: 'Նեոն ակումբ', dealer: 'Ավտոսրահ', clothes: 'Հագուստ', home: 'Տուն', race: 'Մրցարշավ', escape: 'Փախուստ' };
   function badge(g, kind, x, y, r, n) { // an original set of symbols, each on its own colour
     const col = ICON[kind], fg = kind === 'mycar' ? '#1d1e22' : '#ffffff', u = r / 10;
@@ -2149,7 +2487,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     g.fillStyle = fg; g.strokeStyle = fg; g.lineWidth = 1.6 * u; g.lineCap = 'round'; g.lineJoin = 'round';
     const poly = (pts) => { g.beginPath(); pts.forEach((p, k) => k ? g.lineTo(p[0] * u, p[1] * u) : g.moveTo(p[0] * u, p[1] * u)); g.closePath(); g.fill(); };
     if (kind === 'club') { g.beginPath(); g.ellipse(-2 * u, 4 * u, 3 * u, 2.3 * u, -0.4, 0, 6.2832); g.fill(); g.fillRect(0.4 * u, -6 * u, 1.7 * u, 10 * u); g.beginPath(); g.moveTo(1.6 * u, -6 * u); g.quadraticCurveTo(6.5 * u, -4.5 * u, 5 * u, -0.5 * u); g.stroke(); }
-    else if (kind === 'dealer' || kind === 'mycar') {
+    else if (kind === 'dealer' || kind === 'mycar' || kind === 'rival') {
       poly([[-7.5, 2.5], [-7.5, -1], [-4, -1.8], [-2, -5.4], [3, -5.4], [5.2, -1.8], [7.5, -1], [7.5, 2.5]]);
       for (const wx of [-4, 4]) { g.fillStyle = col; g.beginPath(); g.arc(wx * u, 2.8 * u, 2.4 * u, 0, 6.2832); g.fill(); g.fillStyle = fg; g.beginPath(); g.arc(wx * u, 2.8 * u, 1.4 * u, 0, 6.2832); g.fill(); }
     }
@@ -2160,6 +2498,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     else if (kind === 'pickup') { g.fillRect(-5.5 * u, -4.5 * u, 11 * u, 10 * u); g.fillStyle = col; g.fillRect(-5.5 * u, -1.4 * u, 11 * u, 1.6 * u); g.fillRect(-0.8 * u, -4.5 * u, 1.6 * u, 10 * u); }
     else if (kind === 'deliver' || kind === 'wp') { g.beginPath(); g.arc(0, -2 * u, 4.6 * u, Math.PI, 0); g.lineTo(0, 7 * u); g.closePath(); g.fill(); g.fillStyle = col; g.beginPath(); g.arc(0, -2 * u, 1.9 * u, 0, 6.2832); g.fill(); }
     else if (kind === 'square') { g.fillRect(-6.5 * u, 3 * u, 13 * u, 2.4 * u); g.lineWidth = 1.5 * u; for (const s2 of [-1, 0, 1]) { g.beginPath(); g.moveTo(s2 * 1.5 * u, 3 * u); g.quadraticCurveTo(s2 * 3.5 * u, -7 * u, s2 * 6 * u, 1 * u); g.stroke(); } }
+    else if (kind === 'story') { g.beginPath(); g.ellipse(0, -1.4 * u, 7 * u, 5.2 * u, 0, 0, 6.2832); g.fill(); poly([[-3.6, 2], [-5.8, 7], [0.4, 3]]); g.fillStyle = col; for (const bx of [-3.2, 0, 3.2]) { g.beginPath(); g.arc(bx * u, -1.4 * u, 1.2 * u, 0, 6.2832); g.fill(); } }
     else if (kind === 'cp') { g.font = '800 ' + Math.round(11 * u) + 'px "JetBrains Mono", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(n || ''), 0, 0.6 * u); }
     g.restore();
   }
@@ -2184,9 +2523,11 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const out = [{ kind: 'square', x: SQ.c.x, y: SQ.c.y, name: PLACE_NAME.square }, { kind: 'club', x: club.door.x, y: club.door.y, name: PLACE_NAME.club }];
     for (const pl of PLACES) out.push({ kind: pl.id, x: pl.x, y: pl.y, name: PLACE_NAME[pl.id] });
     if (ownedCar && ownedCar !== player.car && cars.includes(ownedCar)) out.push({ kind: 'mycar', x: ownedCar.x, y: ownedCar.y });
+    if (ST.beam && !storyOn() && !storyDone()) { const ch = CHS[PROG.story], p = spos(ch.at); out.push({ kind: 'story', x: p.x, y: p.y, name: CAST[ch.who].name, big: true }); }
+    if (storyOn() && ACT.rival && ACT.phase === 'go') out.push({ kind: 'rival', x: ACT.rival.x, y: ACT.rival.y });
     const g = goal();
-    if (ACT && ACT.kind === 'race') out.push({ kind: 'cp', x: g.p.x, y: g.p.y, n: ACT.k + 1, big: true });
-    else if (g && g.p) out.push({ kind: g.stage === 'pickup' ? 'pickup' : 'deliver', x: g.p.x, y: g.p.y, big: true });
+    if (ACT && ACT.cps && g.p) out.push({ kind: 'cp', x: g.p.x, y: g.p.y, n: ACT.k + 1, big: true });
+    else if (g && g.p) out.push({ kind: g.stage === 'story' ? 'story' : g.stage === 'pickup' ? 'pickup' : 'deliver', x: g.p.x, y: g.p.y, big: true });
     if (WP) out.push({ kind: 'wp', x: WP.x, y: WP.y, big: true });
     return out;
   }
@@ -2215,14 +2556,14 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     g.clearRect(0, 0, S, S); if (MAP.base) g.drawImage(MAP.base, 0, 0, S, S * (1024 / 1024));
     for (const c of cars) if (c.kind === 'police' && c.chase) { g.fillStyle = flash ? K.alert : K.cop; g.beginPath(); g.arc(c.x * k, c.y * k, 9, 0, 6.2832); g.fill(); }
     if (WP && ROUTE) strokeRoute(g, ROUTE.map((p) => [p.x * k, p.y * k]), 9);
-    if (ACT && ACT.kind === 'race') ACT.cps.forEach((p, n) => { if (n > ACT.k) badge(g, 'cp', p.x * k, p.y * k, 14, n + 1); });
+    if (ACT && ACT.cps) ACT.cps.forEach((p, n) => { if (n > ACT.k) badge(g, 'cp', p.x * k, p.y * k, 14, n + 1); });
     g.font = '700 17px "Noto Sans Armenian", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'top'; g.lineWidth = 4; g.strokeStyle = 'rgba(14,12,18,0.9)'; g.fillStyle = '#ffffff';
     for (const it of mapItems()) { badge(g, it.kind, it.x * k, it.y * k, it.big ? 22 : 18, it.n); if (it.name) { g.strokeText(it.name, it.x * k, it.y * k + 25); g.fillText(it.name, it.x * k, it.y * k + 25); } }
     const me = atHome && homePlace() ? homePlace() : inside ? club.door : target(); youArrow(g, me.x * k, me.y * k, player.car ? player.car.a : player.a, 20);
   }
   function buildLegend() {
-    const L = $('bmLegend'), rows = [['you', 'Դու'], ['square', 'Հրապարակ'], ['club', 'Նեոն ակումբ'], ['dealer', 'Ավտոսրահ'], ['clothes', 'Հագուստի խանութ'], ['home', 'Տուն'], ['race', 'Մրցարշավ'], ['escape', 'Փախուստ'],
-      ['pickup', 'Վերցնել պատվերը'], ['deliver', 'Հասցնել պատվերը'], ['cp', 'Մրցարշավի ստուգակետ'], ['mycar', 'Քո մեքենան'], ['wp', 'Քո նշած տեղը'], ['cop', 'Ոստիկան']];
+    const L = $('bmLegend'), rows = [['you', 'Դու'], ['story', 'Պատմություն՝ ով է քեզ սպասում'], ['square', 'Հրապարակ'], ['club', 'Նեոն ակումբ'], ['dealer', 'Ավտոսրահ'], ['clothes', 'Հագուստի խանութ'], ['home', 'Տուն'], ['race', 'Մրցարշավ'], ['escape', 'Փախուստ'],
+      ['pickup', 'Վերցնել պատվերը'], ['deliver', 'Հասցնել պատվերը'], ['cp', 'Մրցարշավի ստուգակետ'], ['rival', 'Մրցակից'], ['mycar', 'Քո մեքենան'], ['wp', 'Քո նշած տեղը'], ['cop', 'Ոստիկան']];
     for (const [kind, text] of rows) {
       const li = document.createElement('li'), c = document.createElement('canvas'), sp = document.createElement('span'); c.width = c.height = 52; const g = c.getContext('2d');
       if (kind === 'you') youArrow(g, 26, 26, -Math.PI / 2, 18); else if (kind === 'cop') { g.fillStyle = K.alert; g.beginPath(); g.arc(18, 26, 9, 0, 6.2832); g.fill(); g.fillStyle = K.cop; g.beginPath(); g.arc(36, 26, 9, 0, 6.2832); g.fill(); } else badge(g, kind, 26, 26, 19, 1);
@@ -2540,11 +2881,11 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   const SAVE_KEY = 'pinkCitySave'; let savedCash = -1, savedTable = false, saveT = 0;
   function readSave() { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return d && typeof d.cash === 'number' ? d : null; } catch (e) { return null; } }
   function writeSave() { savedCash = cash; savedTable = vipTable; try { localStorage.setItem(SAVE_KEY, JSON.stringify({ cash: Math.round(cash), vipTable: vipTable, prog: PROG })); } catch (e) {} }
-  function showSave() { const d = readSave(), has = !!d && (d.cash > 0 || d.vipTable); $('saveRow').hidden = !has; if (has) $('saveText').textContent = 'Պահպանված է՝ ' + money(d.cash) + (d.vipTable ? ' · VIP սեղան' : ''); }
+  function showSave() { const d = readSave(), has = !!d && (d.cash > 0 || d.vipTable || !!(d.prog && d.prog.story)); $('saveRow').hidden = !has; if (has) $('saveText').textContent = 'Պահպանված է՝ ' + money(d.cash) + (d.vipTable ? ' · VIP սեղան' : '') + (d.prog && d.prog.story ? ' · պատմություն ' + d.prog.story + '/' + CHS.length : ''); }
   function startGame(startAtClub) {
     initAudio(); reset(); inside = !!startAtClub; vip = false; clubArm = !startAtClub; combo = 0; drinkT = 0; vipTable = false; seqT = 0;
     const sv = readSave(); if (sv) { cash = sv.cash; vipTable = !!sv.vipTable; } savedCash = cash; savedTable = vipTable;
-    Object.assign(PROG, PROG0(), (sv && sv.prog) || {}); ACT = null; ownedCar = null; closePanel(); for (const pl of PLACES) pl.arm = false;
+    Object.assign(PROG, PROG0(), (sv && sv.prog) || {}); ACT = null; storyClean(); ST.failed = false; ST.arm = true; ST.chainT = 0; ownedCar = null; closePanel(); for (const pl of PLACES) pl.arm = false;
     const home = PLACES.find((q) => q.id === 'home'), dealer = PLACES.find((q) => q.id === 'dealer');
     player.sit = null; atHome = false; MAP.open = false; $('bigmap').hidden = true; setWaypoint(null); RB.cars = []; RB.t = 0; HELI.on = false; HELI.m.visible = false; HELI.spot.visible = false; HELI.sees = false;
     if (PROG.home && home && !startAtClub) { atHome = true; homeArm = false; player.x = HX - 112; player.y = HY; player.a = 0; }
@@ -2556,7 +2897,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       player.car = null;
       player.x = CPOS.spawn.x; player.y = CPOS.spawn.y; player.a = CPOS.spawn.a;
       beatT = 0; beatN = 0; toast('ՆԵՈՆ ԱԿՈՒՄԲ • ոսկեգույն օղակը տանում է VIP սրահ');
-    } else toast('Նստիր մեքենան ու գնա դեղին օղակի մոտ');
+    } else toast(storyDone() ? 'Նստիր մեքենան ու գնա դեղին օղակի մոտ' : CAST[CHS[PROG.story].who].nom + ' սպասում է քեզ · վարդագույն նշանը քարտեզին', 4);
     camA = player.a; camO = 0; idleT = 0;
     $('startBtn').blur(); $('clubStartBtn').blur();
   }
@@ -2575,12 +2916,12 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   window.addEventListener('touchstart', useTouch, { passive: true, once: true });
 
   let last = 0;
-  function frame(t) { const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t; lastDt = dt; if (!paused && !LD.hold && !uiOpen && !MAP.open) update(dt); draw(); hud(); requestAnimationFrame(frame); }
+  function frame(t) { const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t; lastDt = dt; if (!paused && !LD.hold && !uiOpen && !MAP.open && !TALK) update(dt); draw(); hud(); requestAnimationFrame(frame); }
   function boot() {
     try { init3d(); } catch (e) { renderer = null; }
     if (!renderer) { $('startBtn').disabled = true; $('startBtn').textContent = 'Այս սարքում 3D-ն չի աշխատում'; }
     ldTip(); setInterval(() => { if (!$('loading').hidden) ldTip(); }, 4500); setTimeout(ldClose, 30000);   // never wait more than 30 s
-    if (renderer) { buildPlaces(); buildHome(); buildLights(); buildHeli(); buildSquare(); MAP.base = mapBase(); buildLegend(); loadAvatars(); loadCity(); loadExtras(); }
+    if (renderer) { buildPlaces(); buildStory(); buildHome(); buildLights(); buildHeli(); buildSquare(); MAP.base = mapBase(); buildLegend(); loadAvatars(); loadCity(); loadExtras(); }
     if (LD.total === 0) ldClose();
     resize(); reset(); requestAnimationFrame(frame);
   }
