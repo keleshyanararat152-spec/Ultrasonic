@@ -389,7 +389,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   function makeCar(x, y, a, kind) {
     const taxi = kind === 'civ' && Math.random() < 0.12;
     return { x: x, y: y, a: a, v: 0, kind: kind, taxi: taxi, type: pick(['sedan', 'sedan', 'hatch', 'hatch', 'suv']), color: kind === 'police' ? '#f4f4f0' : taxi ? '#f0bd22' : pick(CARPAINT), max: kind === 'police' ? 300 : rnd(290, 350),
-      ai: null, driver: false, chase: false, cruise: rnd(95, 130), stuck: 0, ignore: 0, rev: 0, slow: 0 };
+      ai: null, driver: false, chase: false, cruise: rnd(95, 130), stuck: 0, ignore: 0, rev: 0, slow: 0,
+      model: kind === 'police' ? pick(['policesuv', 'policesuv', 'police_sedan']) : taxi ? 'taxi' : pick(CARX.traffic) };
   }
   function nextLeg(c, I, J) {
     let opts = [0, 1, 2, 3].filter((d) => { const x = I + DV[d][0], y = J + DV[d][1]; return x >= 0 && y >= 0 && x <= N && y <= N; });
@@ -934,6 +935,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     return p;
   }
   function carMesh(c) {
+    if (c.model && CARX.ready[c.model]) return carxMesh(c);
+    if (c.model && CARX.list[c.model]) carxLoad(c.model);
     if (CARM.ready) return carModel(c);
     const type = c.kind === 'police' || c.taxi ? 'sedan' : c.type, p = carParts(type), d = p.d, h = d.hull, n = h.length;
     const paint = G.paints[c.color] || (G.paints[c.color] = new T.MeshPhongMaterial({ color: c.color, envMap: G.env, reflectivity: 0.2, shininess: 90, specular: 0x555555, side: T.DoubleSide }));
@@ -1355,6 +1358,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (CITY.shopMat) CITY.shopMat.emissive.setScalar(0.08 + glow * 0.95);
     if (CITY.glowM) { CITY.glowM.opacity = glow * 0.22; CITY.glowM.visible = glow > 0.02; }
     if (CARM.mats.lights) CARM.mats.lights.emissive.setScalar(glow * 0.9);
+    for (const m of CARX.lit) m.emissive.setScalar(glow * 0.85);
     const on = club ? 0 : glow, hl = CITY.head; hl.visible = false;                    // its geometry and material are shared by every car's beam
     hl.material.opacity = on * 0.42; hl.material.visible = on > 0.02;
     if (CITY.winMats) CITY.winMats.forEach((m) => { m.reflectivity = 0.42 - 0.34 * night; });
@@ -1400,7 +1404,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (dt <= 0) return;
     u.spinA = (u.spinA || 0) + c.v * dt / 4.02;
     const st = clamp(c.steerIn || 0, -1, 1) * 0.42;
-    for (const w of u.wheels) { w.spin.rotation.z = u.spinA; if (w.front) w.steer.rotation.y = -st; }
+    const dir = u.dir || 1; for (const w of u.wheels) { w.spin.rotation.z = u.spinA * dir; if (w.front) w.steer.rotation.y = -st * dir; }
     const yaw = ad(c.a - (u.pa === undefined ? c.a : u.pa)) / dt, acc = (c.v - (u.pv === undefined ? c.v : u.pv)) / dt; u.pa = c.a; u.pv = c.v;
     const roll = clamp(-c.v * yaw * 0.00035, -0.08, 0.08), pitch = clamp(acc * 0.00022, -0.06, 0.06), f = Math.min(1, dt * 6);
     u.roll = (u.roll || 0) + (roll - (u.roll || 0)) * f; u.pitch = (u.pitch || 0) + (pitch - (u.pitch || 0)) * f;
@@ -1662,7 +1666,75 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       CARM.wheels = wheels.map((o) => { const p = mergeByMaterial(sc, (x) => x === o)[0], c = new T.Vector3(); p.geo.computeBoundingBox(); p.geo.boundingBox.getCenter(c); p.geo.translate(-c.x, -c.y, -c.z); return Object.assign(p, { c: c, front: c.x < 0 }); });
       CARM.ready = true;
       for (const [k, m] of meshOf) if (!m.userData.legs) { scene.remove(m); meshOf.delete(k); }
+      carxLoad('policesuv'); carxLoad('police_sedan'); carxLoad('taxi'); for (const n of CARX.traffic) carxLoad(n);
     }, 'մեքենաներ');
+  }
+  // ---------- more car models (see CREDITS.md): each file is one car, forward along x, wheels as WHEEL:* groups ----------
+  // len: real length in metres; flip: the model faces -x. Loaded one at a time in the background; until then a car uses the model above.
+  const CARX = { list: { mclaren: { len: 4.54, flip: 1 }, gclass: { len: 4.82, flip: 1 }, goblin: { len: 4.6, flip: 1 }, revuelto: { len: 4.95 }, policesuv: { len: 4.95 },
+      police_sedan: { len: 5.2, flip: 1 }, taxi: { len: 5.15 }, traffic_compact: { len: 3.6 }, traffic_coupe: { len: 4.5 }, traffic_hatchback: { len: 4.1 }, traffic_minivan: { len: 4.8 },
+      traffic_offroad: { len: 4.2, flip: 1 }, traffic_pickup: { len: 5.3 }, traffic_sedan: { len: 4.6, flip: 1 }, traffic_sport: { len: 4.3, flip: 1 }, traffic_suv: { len: 4.8, flip: 1 }, traffic_wagon: { len: 4.6, flip: 1 } },
+    traffic: ['traffic_compact', 'traffic_coupe', 'traffic_hatchback', 'traffic_minivan', 'traffic_offroad', 'traffic_pickup', 'traffic_sedan', 'traffic_sport', 'traffic_suv', 'traffic_wagon'],
+    ready: {}, asked: {}, queue: [], busy: false, lit: [], U: 10.5 };
+  function carxLoad(name) {
+    if (CARX.asked[name] || !CARX.list[name] || location.protocol === 'file:' || !T.GLTFLoader) return; CARX.asked[name] = true; CARX.queue.push(name); carxNext();
+  }
+  function carxNext() {
+    if (CARX.busy || !CARX.queue.length) return; CARX.busy = true; const name = CARX.queue.shift();
+    const done = () => { CARX.busy = false; setTimeout(carxNext, 30); };
+    fetch('models/cars/' + name + '.txt').then((r) => { if (!r.ok) throw new Error(name); return r.text(); })
+      .then((txt) => new T.GLTFLoader().parse(b64buf(txt), '', (g) => { try { carxPrep(name, g.scene); } catch (e) {} done(); }, done)).catch(done);
+  }
+  function carxPrep(name, root) { // merge the body by material, keep each wheel as its own small group, convert materials to the city's look
+    const spec = CARX.list[name], mats = new Map();
+    const conv = (om) => {
+      if (mats.has(om)) return mats.get(om);
+      const nm = (om.name || '').toLowerCase(); let m;
+      if (om.map) om.map.encoding = T.LinearEncoding; if (om.emissiveMap) om.emissiveMap.encoding = T.LinearEncoding;
+      if (/glass|window|windshield|stekl/.test(nm) && !/light|optic|lamp/.test(nm)) m = new T.MeshPhongMaterial({ color: '#141c24', map: om.map || null, transparent: true, opacity: 0.82, shininess: 120, specular: 0x8899aa, envMap: CITY.env || null, combine: T.MixOperation, reflectivity: 0.35, side: T.DoubleSide });
+      else if (/police_glass_red|police_glass_blue/.test(nm)) m = new T.MeshBasicMaterial({ color: '#9aa3ad' });
+      else {
+        const lit = /light|optic|lamp|headl|tail/.test(nm);
+        m = new T.MeshPhongMaterial({ color: om.color ? om.color.clone() : 0xffffff, map: om.map || null, shininess: lit ? 90 : 55, specular: lit ? 0x888888 : 0x3a3a3a, envMap: !lit && !/tire|tyre|rubber|interior/.test(nm) ? (CITY.env || null) : null, combine: T.MixOperation, reflectivity: 0.12,
+          transparent: om.transparent || om.opacity < 1, opacity: om.opacity, alphaTest: om.alphaTest || 0, side: T.DoubleSide });
+        if (lit) { m.emissiveMap = om.emissiveMap || om.map || null; m.emissive = new T.Color(0x000000); CARX.lit.push(m); }
+      }
+      m.name = nm; mats.set(om, m); return m;
+    };
+    root.updateMatrixWorld(true);
+    const wheelOf = (o) => { for (let p = o; p; p = p.parent) if (p.name && p.name.startsWith('WHEEL')) return p; return null; };
+    const groups = new Map(), wheels = new Map(), v = new T.Vector3(), nm3 = new T.Matrix3();
+    root.traverse((o) => {
+      if (!o.isMesh) return; const w = wheelOf(o), key = w ? w : 'body', M = w ? new T.Matrix4().copy(w.matrixWorld).invert().multiply(o.matrixWorld) : o.matrixWorld;
+      const bag = w ? (wheels.get(w) || wheels.set(w, new Map()).get(w)) : groups, mat = conv(o.material), g = o.geometry.index ? o.geometry : null;
+      let e = bag.get(mat); if (!e) { e = { p: [], n: [], u: [], i: [] }; bag.set(mat, e); }
+      const pos = o.geometry.attributes.position, nor = o.geometry.attributes.normal, uv = o.geometry.attributes.uv, base = e.p.length / 3; nm3.getNormalMatrix(M);
+      for (let a = 0; a < pos.count; a++) { v.fromBufferAttribute(pos, a).applyMatrix4(M); e.p.push(v.x, v.y, v.z); if (nor) { v.fromBufferAttribute(nor, a).applyMatrix3(nm3).normalize(); e.n.push(v.x, v.y, v.z); } else e.n.push(0, 1, 0); e.u.push(uv ? uv.getX(a) : 0, uv ? uv.getY(a) : 0); }
+      if (g) for (let a = 0; a < g.index.count; a++) e.i.push(base + g.index.getX(a)); else for (let a = 0; a < pos.count; a++) e.i.push(base + a);
+    });
+    const bake = (bag) => [...bag].map(([mat, e]) => { const b = new T.BufferGeometry(); b.setAttribute('position', new T.Float32BufferAttribute(e.p, 3)); b.setAttribute('normal', new T.Float32BufferAttribute(e.n, 3)); b.setAttribute('uv', new T.Float32BufferAttribute(e.u, 2)); b.setIndex(e.i); b.computeBoundingSphere(); return { geo: b, mat: mat }; });
+    const parts = bake(groups), box = new T.Box3(); for (const q of parts) { q.geo.computeBoundingBox(); box.union(q.geo.boundingBox); }   // exact, from the body's own vertices
+    const size = box.getSize(new T.Vector3()), k = spec.len * CARX.U / size.x;
+    CARX[name] = { parts: parts, k: k, flip: !!spec.flip, top: box.max.y, len: size.x, width: size.z,
+      wheels: [...wheels].map(([w, bag]) => { const c = w.getWorldPosition(new T.Vector3()), wp = bake(bag), wb = new T.Box3(); for (const q of wp) { q.geo.computeBoundingBox(); wb.union(q.geo.boundingBox); } return { c: c, parts: wp, front: spec.flip ? c.x < 0 : c.x > 0, axle: wb.max.z - wb.min.z > size.z * 0.6 }; }) };
+    CARX.ready[name] = true;
+    for (const [c, m] of meshOf) if (c.model === name && !m.userData.legs) { scene.remove(m); meshOf.delete(c); }
+  }
+  function carxMesh(c) {
+    const t = CARX[c.model], g = new T.Group(), tilt = new T.Group(), inner = new T.Group(), wi = new T.Group();
+    for (const o of [inner, wi]) { o.scale.setScalar(t.k); o.rotation.y = t.flip ? Math.PI : 0; } tilt.add(inner); g.add(tilt); g.add(wi);
+    for (const p of t.parts) {
+      let mat = p.mat; if (c.kind === 'police' && /police_glass_(red|blue)/.test(mat.name)) { mat = mat.clone(); if (/red/.test(mat.name)) g.userData.l1 = { material: mat }; else g.userData.l2 = { material: mat }; }
+      const m = new T.Mesh(p.geo, mat); m.castShadow = !mat.transparent; inner.add(m);
+    }
+    g.userData.wheels = t.wheels.map((w) => { const steer = new T.Group(), spin = new T.Group(); steer.position.copy(w.c); steer.add(spin); for (const p of w.parts) { const m = new T.Mesh(p.geo, p.mat); m.castShadow = true; spin.add(m); } wi.add(steer); return { steer: steer, spin: spin, front: w.front && !w.axle }; });
+    g.userData.tilt = tilt; g.userData.dir = t.flip ? 1 : -1;
+    const beam = new T.Mesh(CITY.head.geometry, CITY.head.material); beam.position.set(t.len * t.k / 2 - 12, 0.35, 0); g.add(beam);
+    if (c.kind === 'police' && !g.userData.l1) { // a light bar on the roof
+      const bx = (sz) => { const e = new T.Mesh(G.box || (G.box = new T.BoxGeometry(1, 1, 1)), new T.MeshBasicMaterial({ color: '#9aa3ad' })); e.scale.set(2.6, 1.6, 4.4); e.position.set(-2, t.top * t.k + 0.6, sz); g.add(e); return e; };
+      g.userData.l1 = bx(-2.8); g.userData.l2 = bx(2.8);
+    }
+    return g;
   }
   function loadLamp() {
     if (location.protocol === 'file:' || !T.GLTFLoader || CITY.lampDone) return; CITY.lampDone = true;
@@ -2088,7 +2160,11 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   const CAR_SHOP = [
     { id: 'sport', name: 'Սպորտ', color: '#c0392b', max: 380, acc: 1.35, grip: 1.1, stars: 2, price: 8000 },
     { id: 'lux', name: 'Լյուքս', color: '#15171c', max: 420, acc: 1.55, grip: 1.15, stars: 3, price: 15000 },
-    { id: 'racer', name: 'Մրցարշավային', color: '#f0b400', max: 480, acc: 1.85, grip: 1.3, stars: 4, price: 30000 }];
+    { id: 'racer', name: 'Մրցարշավային', color: '#f0b400', max: 480, acc: 1.85, grip: 1.3, stars: 4, price: 30000 },
+    { id: 'gclass', model: 'gclass', name: 'Mercedes G-class', color: '#15171c', max: 360, acc: 1.3, grip: 1.05, stars: 2, price: 22000 },
+    { id: 'mclaren', model: 'mclaren', name: 'McLaren 720S', color: '#e0451f', max: 470, acc: 1.8, grip: 1.3, stars: 4, price: 38000 },
+    { id: 'goblin', model: 'goblin', name: 'V12 Goblin', color: '#2f6b3a', max: 490, acc: 1.9, grip: 1.32, stars: 4, price: 45000 },
+    { id: 'revuelto', model: 'revuelto', name: 'Lamborghini Revuelto', color: '#ff6a1a', max: 510, acc: 2.0, grip: 1.35, stars: 4, price: 60000 }];
   const OUTFITS = [{ id: 'm07', name: 'Մուգ բաճկոն', price: 0 }, { id: 'm02', name: 'Բեժ սվիտեր', price: 1500 }, { id: 'm06', name: 'Կարմիր վերնաշապիկ', price: 1500 },
     { id: 'm08', name: 'Կապույտ վերնաշապիկ', price: 2000 }, { id: 'm16', name: 'Մուգ կապույտ շապիկ', price: 2000 }, { id: 'm10', name: 'Բորդո բաճկոն', price: 2500 },
     { id: 'm12', name: 'Ջինսե բաճկոն', price: 3000 }, { id: 'm04', name: 'Սև կապյուշոն', price: 3000 }, { id: 'm17', name: 'Մարզական բաճկոն', price: 3500 }, { id: 'm03', name: 'Կոստյում', price: 6000 }];
@@ -2201,10 +2277,11 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const m = CAR_SHOP.find((q) => q.id === PROG.car); if (!m) return;
     if (ownedCar && ownedCar !== player.car) { const k = cars.indexOf(ownedCar); if (k >= 0) cars.splice(k, 1); }
     const c = makeCar(park.x, park.y, park.a, 'civ');
-    Object.assign(c, { taxi: false, lug: false, color: m.color, clean: true, max: m.max, acc: m.acc, grip: m.grip, mine: true });
+    Object.assign(c, { taxi: false, lug: false, color: m.color, clean: true, max: m.max, acc: m.acc, grip: m.grip, mine: true, model: m.model || null }); if (m.model) carxLoad(m.model);
     cars.push(c); ownedCar = c;
   }
   function openDealer(pl) {
+    for (const m of CAR_SHOP) if (m.model) carxLoad(m.model);
     openPanel('Ավտոսրահ', 'Գնած մեքենան մնում է քոնը։ Կանչիր այն այստեղից կամ բնակարանիցդ։', CAR_SHOP.map((m) => {
       const own = PROG.cars.includes(m.id);
       return { label: m.name, sub: 'Մինչև ' + Math.round(m.max * 0.42) + ' կմ/ժ · արագացում ' + '★'.repeat(m.stars) + '☆'.repeat(4 - m.stars), on: PROG.car === m.id,
@@ -2403,16 +2480,16 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (ACT.k >= ch.steps.length) return chapterDone();
     const s = ACT.s = ch.steps[ACT.k]; ACT.time = s.time || Infinity; ACT.goal = { p: null, stage: 'story' }; ACT.cps = null;
     if (s.t === 'getcar') {
-      const c = makeCar(SP.taxi.x, SP.taxi.y, SP.taxi.a, 'civ'); Object.assign(c, { taxi: false, color: '#e8b923', type: 'sedan', max: 300, gurgen: true }); cars.push(c); ACT.car = c;
+      const c = makeCar(SP.taxi.x, SP.taxi.y, SP.taxi.a, 'civ'); Object.assign(c, { taxi: false, color: '#e8b923', type: 'sedan', max: 300, gurgen: true, model: null }); cars.push(c); ACT.car = c;
     } else if (s.t === 'drive') ACT.dmg0 = (ACT.car && ACT.car.dmg) || 0;
     else if (s.t === 'multi') ACT.m = 0;
     else if (s.t === 'tail' || s.t === 'chase') {
       const P = s.t === 'tail' ? SP.rubo : SP.courier, c = makeCar(P.x, P.y, P.a, 'civ');
-      Object.assign(c, s.t === 'tail' ? { color: '#15171c', type: 'suv', max: 300, cruise: 112 } : { color: '#7d838c', type: 'sedan', max: 305, cruise: 235 }, { taxi: false, driver: true, story: true, ai: null });
+      Object.assign(c, s.t === 'tail' ? { color: '#15171c', type: 'suv', max: 300, cruise: 112, model: 'gclass' } : { color: '#7d838c', type: 'sedan', max: 305, cruise: 235, model: 'traffic_sedan' }, { taxi: false, driver: true, story: true, ai: null });
       cars.push(c); ACT.car = c; ACT.go = false; ACT.wait = 25; ACT.far = 0; ACT.near = 0; ACT.hold = 0; ACT.time = Infinity;
     } else if (s.t === 'escape') { heat = Math.max(heat, s.heat); evadeT = 0; sfx.fail(); }
     else if (s.t === 'race') {
-      const c = makeCar(SP.rival.x, SP.rival.y, SP.rival.a, 'civ'); Object.assign(c, { taxi: false, color: '#35d6e6', type: 'hatch', max: 315, acc: 1.2, story: true, ai: null, rival: true, ck: 0 }); cars.push(c);
+      const c = makeCar(SP.rival.x, SP.rival.y, SP.rival.a, 'civ'); Object.assign(c, { taxi: false, color: '#35d6e6', type: 'hatch', model: 'mclaren', max: 315, acc: 1.2, story: true, ai: null, rival: true, ck: 0 }); cars.push(c);
       ACT.rival = c; ACT.phase = 'ready'; ACT.cd = 0;
     }
     if (s.label && s.t !== 'talk') toast(s.label, 3);
