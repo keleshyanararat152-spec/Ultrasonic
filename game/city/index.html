@@ -201,6 +201,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       <div style="display:flex;gap:9px;flex-wrap:wrap;">
         <button class="go" id="startBtn" type="button">Սկսել քաղաքից</button>
         <button class="go" id="clubStartBtn" type="button" style="background:#fa4e9d;color:#170c16">Սկսել ակումբից</button>
+        <button class="go ghost" id="richBtn" type="button">Թեստ՝ 1 000 000 ֏</button>
       </div>
       <p id="saveRow" hidden style="font-size:13px;color:var(--muted)"><span id="saveText"></span> <button id="wipeBtn" type="button" style="margin-left:8px;background:none;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:4px 10px;font:600 12px var(--font-text);cursor:pointer">Սկսել զրոյից</button></p>
     </div>
@@ -2066,6 +2067,10 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   }
   $('startBtn').addEventListener('click', () => startGame(false));
   $('shopClose').addEventListener('click', closePanel);
+  $('richBtn').addEventListener('click', () => { // testing aid: puts a million in the save, keeping everything else
+    const d = readSave() || {}; d.cash = 1000000; try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); } catch (e) {}
+    showSave(); $('richBtn').textContent = 'Ավելացված է՝ սեղմիր «Սկսել»';
+  });
   $('clubStartBtn').addEventListener('click', () => { if (clubState === 2) return startGame(true); $('clubStartBtn').blur(); holdLoading('Ակումբը բեռնվում է'); ensureClub(() => { releaseLoading(); startGame(true); }); });
   $('wipeBtn').addEventListener('click', () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} showSave(); });
   window.addEventListener('pagehide', () => { if (mode === 'play') writeSave(); });
