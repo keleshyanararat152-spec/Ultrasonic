@@ -84,6 +84,21 @@ body { background: var(--sky); color: var(--fg); font-family: var(--font-text); 
 }
 .pad button.act { width: 76px; height: 76px; border-color: var(--gold); }
 .touch .hint { bottom: calc(120px + env(safe-area-inset-bottom, 0px)); }
+.loading { position: absolute; inset: 0; z-index: 30; display: flex; align-items: flex-end; background: linear-gradient(180deg, rgba(18, 10, 22, 0.55), rgba(18, 10, 22, 0.94) 70%); backdrop-filter: blur(6px); transition: opacity 400ms; }
+.loading.out { opacity: 0; }
+.ld-in { width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 14px; padding-block: 32px calc(36px + env(safe-area-inset-bottom, 0px)); padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+.ld-kicker { margin: 0; font: 700 12px var(--font-data); letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); }
+.ld-title { margin: 0; font-size: clamp(38px, 9vw, 72px); font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--fg); text-wrap: balance; }
+.ld-title span { color: #ff4fa3; }
+.ld-tip { margin: 0; min-height: 3.2em; max-width: 54ch; font-size: 16px; line-height: 1.55; color: var(--fg); transition: opacity 300ms; }
+.ld-tip.fade { opacity: 0; }
+.ld-foot { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.ld-row { display: flex; justify-content: space-between; gap: 12px; font: 600 13px var(--font-data); color: var(--muted); font-variant-numeric: tabular-nums; }
+.ld-track { height: 4px; border-radius: 2px; background: rgba(241, 237, 230, 0.14); overflow: hidden; }
+.ld-track i { display: block; height: 100%; width: 0; background: #ff4fa3; transition: width 250ms; }
+.ld-track i.busy { width: 34% !important; animation: ldbusy 1.1s ease-in-out infinite alternate; }
+@keyframes ldbusy { from { transform: translateX(-10%); } to { transform: translateX(210%); } }
+@media (prefers-reduced-motion: reduce) { .ld-track i.busy { animation: none; width: 100% !important; opacity: 0.6; } .loading, .ld-tip { transition: none; } }
 .dance {
   position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom, 0px));
   min-width: 132px; height: 52px; border-radius: 26px; border: 2px solid #ffd3ea; background: #ff4fa3; color: var(--ink);
@@ -168,6 +183,17 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
         <button class="go" id="clubStartBtn" type="button" style="background:#fa4e9d;color:#170c16">Սկսել ակումբից</button>
       </div>
       <p id="saveRow" hidden style="font-size:13px;color:var(--muted)"><span id="saveText"></span> <button id="wipeBtn" type="button" style="margin-left:8px;background:none;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:4px 10px;font:600 12px var(--font-text);cursor:pointer">Սկսել զրոյից</button></p>
+    </div>
+  </div>
+  <div class="loading" id="loading" role="status" aria-live="polite">
+    <div class="ld-in">
+      <p class="ld-kicker">Բաց քաղաք</p>
+      <h2 class="ld-title"><span>Վարդագույն</span> քաղաք</h2>
+      <p class="ld-tip" id="ldTip"></p>
+      <div class="ld-foot">
+        <div class="ld-row"><span id="ldLabel">Պատրաստվում է</span><span id="ldPct">0%</span></div>
+        <div class="ld-track"><i id="ldBar"></i></div>
+      </div>
     </div>
   </div>
 </div>
@@ -1029,18 +1055,52 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   // The figures above stay as the fallback; once these load, everyone is swapped for a textured, skinned model driven by the same poses.
   const AV = { src: {}, men: ['m02', 'm04', 'm06', 'm07', 'm08', 'm10', 'm12', 'm16'], women: ['f01', 'f02', 'f05', 'f07', 'f08', 'f13', 'f15', 'f17'], extra: ['m03', 'm17'], ready: false, wi: 0, mi: 0, K: 22.3 / 1.8 };
   const AVM = new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), -Math.PI / 2), AVMi = AVM.clone().invert(), _aq = new T.Quaternion();
+  // ---------- loading screen: what the street needs loads behind it; the lanterns follow in the background; the club loads when you come near it ----------
+  const LD = { total: 0, done: 0, closed: false, hold: false, t0: performance.now(), tip: 0 };
+  const TIPS = ['Դեղին օղակում վերցրու պատվերը, կանաչում հասցրու, քանի դեռ ժամանակը չի լրացել։',
+    'Ուրիշի մեքենան վերցնելը աստղ է բերում։ Կորիր ոստիկանների աչքից, ու աստղերը կմարեն։',
+    'Ակումբում պարիր ռիթմի տակ. անընդմեջ ճիշտ հարվածները ավելի շատ փող են տալիս։',
+    'Բարից առած խմիչքը 90 վայրկյան կրկնապատկում է պարի շահույթը։',
+    'Փողդ պահպանվում է նույնիսկ էջը փակելուց հետո։',
+    'C ստեղնով կամ «Դեմք» կոճակով կերպարիդ դեմքը կտեսնես առջևից։',
+    'Ձեռքի արգելակը (Space) օգնում է կտրուկ շրջվել խաչմերուկում։'];
+  function ldTip() { const el = $('ldTip'); el.classList.add('fade'); setTimeout(() => { el.textContent = TIPS[LD.tip++ % TIPS.length]; el.classList.remove('fade'); }, 300); }
+  function ldAdd(n) { LD.total += n; ldPaint(''); }
+  function ldDone(label) { LD.done = Math.min(LD.total, LD.done + 1); ldPaint(label); if (LD.done >= LD.total) ldClose(); }
+  function ldPaint(label) {
+    if (LD.hold) return;
+    const pct = LD.total ? Math.round(LD.done / LD.total * 100) : 100;
+    $('ldBar').style.width = pct + '%'; $('ldPct').textContent = pct + '%'; if (label) $('ldLabel').textContent = 'Բեռնվում է՝ ' + label;
+  }
+  function ldHide() { const el = $('loading'); el.classList.add('out'); setTimeout(() => { if (!LD.hold) { el.hidden = true; el.classList.remove('out'); } }, 400); }
+  function ldClose() {
+    if (LD.closed) return; LD.closed = true;
+    setTimeout(() => { if (!LD.hold) ldHide(); loadLamp(); }, Math.max(0, 1600 - (performance.now() - LD.t0)));
+  }
+  function holdLoading(text) { // a short wait in the middle of play, for the club
+    LD.hold = true; $('ldLabel').textContent = text; $('ldPct').textContent = ''; $('ldBar').classList.add('busy'); ldTip(); const el = $('loading'); el.classList.remove('out'); el.hidden = false;
+  }
+  function releaseLoading() { LD.hold = false; $('ldBar').classList.remove('busy'); ldHide(); }
+  let clubState = 0; const clubWait = [];
+  function ensureClub(cb) { // 0 not asked, 1 loading, 2 ready (or failed, and the plain room stays)
+    if (cb) clubWait.push(cb);
+    const fin = () => { clubState = 2; while (clubWait.length) clubWait.shift()(); };
+    if (clubState === 2) return fin(); if (clubState === 1) return; clubState = 1;
+    if (location.protocol === 'file:' || !T.GLTFLoader) return fin();
+    loadModel('club', (sc) => { setupClub(sc); fin(); }, null, fin);
+  }
   function loadAvatars() {
     if (!T.GLTFLoader || !T.SkeletonUtils || location.protocol === 'file:') return;
-    const all = AV.men.concat(AV.women, AV.extra), loader = new T.GLTFLoader(); let left = all.length, failed = false;
+    const all = AV.men.concat(AV.women, AV.extra), loader = new T.GLTFLoader(); let left = all.length, failed = false; ldAdd(all.length);
     const got = (name, g) => {
       g.scene.traverse((o) => { if (o.isMesh) { const m = o.material; if (m.map) m.map.encoding = T.LinearEncoding; o.material = new T.MeshLambertMaterial({ map: m.map, skinning: true, alphaTest: m.alphaTest || 0, side: m.side }); o.material.name = m.name; o.castShadow = true; } });
-      AV.src[name] = g.scene; if (!--left && !failed) { AV.ready = true; swapPeople(); }
+      AV.src[name] = g.scene; ldDone('մարդիկ'); if (!--left && !failed) { AV.ready = true; swapPeople(); }
     };
     // each model is a binary glTF stored as base64 text
     all.forEach((name) => fetch('models/' + name + '.txt').then((r) => { if (!r.ok) throw new Error(name); return r.text(); }).then((txt) => {
       const bin = atob(txt.trim()), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-      loader.parse(buf.buffer, '', (g) => got(name, g), () => { failed = true; });
-    }).catch(() => { failed = true; }));
+      loader.parse(buf.buffer, '', (g) => got(name, g), () => { failed = true; ldDone('մարդիկ'); });
+    }).catch(() => { failed = true; ldDone('մարդիկ'); }));
   }
   function avatarMesh(name) { // a clone with its own skeleton, turned to face +x and sized like the fallback figure
     const inner = T.SkeletonUtils.clone(AV.src[name]), g = new T.Group(), B = {}; inner.rotation.y = Math.PI / 2; inner.scale.setScalar(AV.K); g.add(inner);
@@ -1112,6 +1172,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     m.traverse((c) => { if (c.isMesh) { if (c.userData.cs === undefined) c.userData.cs = c.castShadow; c.castShadow = c.userData.cs && near; } });
   }
   function streamCity() {
+    if (mode === 'play' && !inside && clubState === 0 && Math.hypot(player.x - club.door.x, player.y - club.door.y) < 600) ensureClub();
     const play = mode === 'play', inCity = !(play && inside), inClub = play && inside;
     if (inCity !== CH.cityOn) { CH.cityOn = inCity; if (inCity) CH.real(CH.city); else scene.remove(CH.city); }
     if (inClub !== CH.clubOn) { CH.clubOn = inClub; if (inClub) CH.real(CH.club); else scene.remove(CH.club); sun.visible = !inClub; }   // no sun indoors, so no shadow pass either
@@ -1137,12 +1198,12 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   function loadCity() {
     if (location.protocol === 'file:' || !T.GLTFLoader) return;
     const names = ['facade1', 'facade2', 'roof', 'asphalt', 'paving', 'curb'], tx = {}, TL = new T.TextureLoader(); let left = names.length + 1, bad = false, tower = null;
-    const done = () => { if (!--left && !bad) upgradeCity(tx, tower); };
-    names.forEach((n) => TL.load('tex/' + n + '.jpg', (t) => { t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 8; tx[n] = t; done(); }, undefined, () => { bad = true; }));
+    ldAdd(left); const done = () => { ldDone('շենքեր ու փողոցներ'); if (!--left && !bad) upgradeCity(tx, tower); };
+    names.forEach((n) => TL.load('tex/' + n + '.jpg', (t) => { t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 8; tx[n] = t; done(); }, undefined, () => { bad = true; done(); }));
     fetch('models/tower.txt').then((r) => { if (!r.ok) throw new Error('tower'); return r.text(); }).then((txt) => {
       const bin = atob(txt.trim()), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-      new T.GLTFLoader().parse(buf.buffer, '', (g) => { g.scene.traverse((o) => { if (o.isMesh) tower = o; }); done(); }, () => { bad = true; });
-    }).catch(() => { bad = true; });
+      new T.GLTFLoader().parse(buf.buffer, '', (g) => { g.scene.traverse((o) => { if (o.isMesh) tower = o; }); done(); }, () => { bad = true; done(); });
+    }).catch(() => { bad = true; done(); });
   }
   function upgradeCity(tx, tower) {
     for (const m of CITY.old) if (m.userData.rect !== club.rect) scene.remove(m);
@@ -1193,7 +1254,12 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const ch = CLUBMAP.d.charCodeAt(iz * CLUBMAP.nx + ix); return ch === 32 ? -1 : (ch - 48) / 10 * SM;
   }
   const b64buf = (txt) => { const bin = atob(txt.trim()), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i); return buf.buffer; };
-  function loadModel(name, cb) { fetch('models/' + name + '.txt').then((r) => { if (!r.ok) throw new Error(name); return r.text(); }).then((txt) => new T.GLTFLoader().parse(b64buf(txt), '', (g) => cb(g.scene), () => {})).catch(() => {}); }
+  function loadModel(name, cb, label, fail) {
+    if (label) ldAdd(1);
+    let ended = false; const bad = () => { if (ended) return; ended = true; if (label) ldDone(label); if (fail) fail(); };
+    fetch('models/' + name + '.txt').then((r) => { if (!r.ok) throw new Error(name); return r.text(); })
+      .then((txt) => new T.GLTFLoader().parse(b64buf(txt), '', (g) => { if (ended) return; ended = true; cb(g.scene); if (label) ldDone(label); }, bad)).catch(bad);
+  }
   function mergeByMaterial(root, filter) { // one geometry per material, in the root's own space
     root.updateMatrixWorld(true); const groups = {}, v = new T.Vector3(), nm = new T.Matrix3();
     root.traverse((o) => {
@@ -1211,7 +1277,10 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       const lug = (o) => /chest|wheel_00[45]|railings/.test(o.name);
       CARM.parts = mergeByMaterial(sc, (o) => !lug(o)); CARM.lug = mergeByMaterial(sc, lug); CARM.ready = true;
       for (const [k, m] of meshOf) if (!m.userData.legs) { scene.remove(m); meshOf.delete(k); }
-    });
+    }, 'մեքենաներ');
+  }
+  function loadLamp() {
+    if (location.protocol === 'file:' || !T.GLTFLoader || CITY.lampDone) return; CITY.lampDone = true;
     loadModel('lamp', (sc) => { // the three-headed lantern replaces the plain lamp posts
       const k = 64 / 382, M4 = new T.Matrix4(), Q = new T.Quaternion(), S = new T.Vector3(k, k, k);
       for (const part of mergeByMaterial(sc, () => true)) {
@@ -1220,7 +1289,6 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       }
       for (const m of CITY.lampOld) m.userData.lod = 'far';      // the plain posts stay as the distant version
     });
-    loadModel('club', setupClub);
   }
   function carModel(c) {
     const g = new T.Group(), inner = new T.Group(), k = 52 / 328; inner.scale.setScalar(k); inner.rotation.y = Math.PI; inner.position.x = 42 * k; g.add(inner);
@@ -1418,7 +1486,9 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   function clubDoor() { // E near the club door outside, or near a ring inside; returns true when it handled the key
     if (inside) { for (const r of clubRings()) if (Math.hypot(player.x - r.x, player.y - r.y) < 34) { clubArm = false; r.go(); break; } return true; }
     if (player.car || Math.hypot(player.x - club.door.x, player.y - club.door.y) > 30) return false;
+    if (LD.hold) return true;
     if (heat > 0) toast('Ոստիկանները հետևիցդ են, հիմա չես կարող մտնել');
+    else if (clubState !== 2) { holdLoading('Ակումբը բեռնվում է'); ensureClub(() => { releaseLoading(); clubDoor(); }); }
     else if (cash < FEE) toast('Մուտքը ' + money(FEE) + ' է, փողդ չի հերիքում');
     else { cash -= FEE; inside = true; vip = false; clubArm = false; player.x = CPOS.spawn.x; player.y = CPOS.spawn.y; player.a = CPOS.spawn.a; camA = player.a; camO = 0; beatT = 0; sfx.coin(); toast(FEE ? 'Բարի գալուստ  −' + money(FEE) : 'Բարի գալուստ Նեոն ակումբ'); }
     return true;
@@ -1621,18 +1691,20 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     $('startBtn').blur(); $('clubStartBtn').blur();
   }
   $('startBtn').addEventListener('click', () => startGame(false));
-  $('clubStartBtn').addEventListener('click', () => startGame(true));
+  $('clubStartBtn').addEventListener('click', () => { if (clubState === 2) return startGame(true); $('clubStartBtn').blur(); holdLoading('Ակումբը բեռնվում է'); ensureClub(() => { releaseLoading(); startGame(true); }); });
   $('wipeBtn').addEventListener('click', () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} showSave(); });
   window.addEventListener('pagehide', () => { if (mode === 'play') writeSave(); });
   showSave();
   window.addEventListener('touchstart', useTouch, { passive: true, once: true });
 
   let last = 0;
-  function frame(t) { const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t; lastDt = dt; if (!paused) update(dt); draw(); hud(); requestAnimationFrame(frame); }
+  function frame(t) { const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t; lastDt = dt; if (!paused && !LD.hold) update(dt); draw(); hud(); requestAnimationFrame(frame); }
   function boot() {
     try { init3d(); } catch (e) { renderer = null; }
     if (!renderer) { $('startBtn').disabled = true; $('startBtn').textContent = 'Այս սարքում 3D-ն չի աշխատում'; }
+    ldTip(); setInterval(() => { if (!$('loading').hidden) ldTip(); }, 4500); setTimeout(ldClose, 30000);   // never wait more than 30 s
     if (renderer) { loadAvatars(); loadCity(); loadExtras(); }
+    if (LD.total === 0) ldClose();
     resize(); reset(); requestAnimationFrame(frame);
   }
   if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(boot); else boot();
