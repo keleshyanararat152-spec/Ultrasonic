@@ -374,9 +374,10 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       const r = DV[(d + 1) % 4], t = rnd(150, 370);
       cars.push(makeCar(ic(I) + DV[d][0] * t + r[0] * 50, ic(J) + DV[d][1] * t + r[1] * 50, d * Math.PI / 2, 'civ'));
     }
-    for (let n = 0; n < 26; n++) cars.push(spawnTraffic('civ'));
+    const lite = window.matchMedia('(pointer: coarse)').matches;
+    for (let n = 0; n < (lite ? 30 : 38); n++) cars.push(spawnTraffic('civ'));
     cars.push(spawnTraffic('police'));
-    for (let n = 0; n < 34; n++) peds.push({ i: Math.floor(rnd(0, N)), j: Math.floor(rnd(0, N)), t: rnd(0, 1512), dir: Math.random() < 0.5 ? 1 : -1, sp: rnd(32, 50), c: pick(PAINTS), down: 0, x: 0, y: 0 });
+    for (let n = 0; n < (lite ? 44 : 56); n++) peds.push({ i: Math.floor(rnd(0, N)), j: Math.floor(rnd(0, N)), t: rnd(0, 1512), dir: Math.random() < 0.5 ? 1 : -1, sp: rnd(32, 50), c: pick(PAINTS), down: 0, x: 0, y: 0 });
     newOffer();
   }
   function newOffer() { if (player && player.car && player.car.taxi) { job = { kind: 'taxi', stage: 'pickup', p: roadPoint(), label: 'ուղևոր' }; return; } job = { stage: 'pickup', p: roadPoint(), label: pick(['լավաշ', 'ծաղիկներ', 'ծանրոց', 'խորոված', 'ուղևոր', 'դեղորայք', 'ծիրան']) }; }
@@ -412,21 +413,29 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       const a = c.ai, d = DV[a.d < 0 ? 0 : a.d];
       if (a.stage === 2) nextLeg(c, a.i, a.j);
       else if (a.stage === 1) { const r = DV[(a.d + 1) % 4]; a.stage = 0; a.wx = ic(a.i + d[0]) - d[0] * 85 + r[0] * LANE; a.wy = ic(a.j + d[1]) - d[1] * 85 + r[1] * LANE; }
-      else nextLeg(c, a.i + d[0], a.j + d[1]);
+      else { const st = lightAt(a.i + d[0], a.j + d[1], a.d); if (!c.chase && (st === 'r' || (st === 'y' && c.v < 60))) c.redStop = true; else { c.redStop = false; nextLeg(c, a.i + d[0], a.j + d[1]); } }
       tx = c.ai.wx; ty = c.ai.wy;
     }
     const diff = ad(Math.atan2(ty - c.y, tx - c.x) - c.a);
     let steer = clamp(diff * 2.2, -1, 1), tv = c.chase ? 285 : c.cruise;
     if (Math.abs(diff) > 0.6) tv = Math.min(tv, 75);
     if (!c.chase && c.ai.stage === 1) tv = Math.min(tv, 85);
+    if (!c.chase && c.ai.stage === 0 && c.ai.d >= 0) { // slow for a red or amber at the next crossroads
+      const a = c.ai, d = DV[a.d], st = lightAt(a.i + d[0], a.j + d[1], a.d), dw = Math.hypot(a.wx - c.x, a.wy - c.y);
+      if (st === 'g') c.redStop = false;
+      else if (dw < 120 && !(st === 'y' && dw < 45 && c.v > 60)) { tv = Math.min(tv, dw < 36 ? 0 : (dw - 30) * 1.4); if (dw < 40) c.redStop = true; }
+    }
+    if (c.redStop) tv = 0;
     const fx = Math.cos(c.a), fy = Math.sin(c.a);
     if (!c.chase) {
       let blocked = false;
       const ahead = (o) => { const rx = o.x - c.x, ry = o.y - c.y, f = rx * fx + ry * fy; return f > 8 && f < 76 && Math.abs(rx * fy - ry * fx) < 18; };
-      for (const o of cars) if (o !== c && ahead(o)) { blocked = true; break; }
+      let bc = null; for (const o of cars) if (o !== c && ahead(o)) { blocked = true; bc = o; break; }
       if (!blocked && !player.car && ahead(player)) blocked = true;
+      if (!blocked) for (const o of peds) if (o.cross && !o.cross.wait && ahead(o)) { blocked = true; break; }
+      c.queued = blocked && !!bc && (bc.redStop || bc.queued);
       c.ignore -= dt;
-      if (blocked && c.ignore <= 0) { tv = 0; c.stuck += dt; if (c.stuck > 4) { c.ignore = 1.5; c.stuck = 0; } } else if (!blocked) c.stuck = 0;
+      if (blocked && c.ignore <= 0) { tv = 0; if (!c.queued) c.stuck += dt; if (c.stuck > 4) { c.ignore = 1.5; c.stuck = 0; } } else if (!blocked) c.stuck = 0;
     }
     let thr = 0;
     if (c.rev > 0) { c.rev -= dt; thr = -1; steer = -steer; }
@@ -448,7 +457,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     let best = null, bd = 58;
     for (const c of cars) { const d = Math.hypot(c.x - player.x, c.y - player.y); if (d < bd && c.kind !== 'police') { bd = d; best = c; } }
     if (!best) return;
-    if (best.driver) { addHeat(1); toast('Ուրիշի մեքենան վերցրիր'); peds.push({ free: true, x: best.x, y: best.y, a: rnd(0, 6.28), sp: 70, c: pick(PAINTS), down: 0, life: 6 }); }
+    if (best.driver) { for (const q of peds) if (Math.abs(q.x - best.x) + Math.abs(q.y - best.y) < 300) panic(q, best); addHeat(1); toast('Ուրիշի մեքենան վերցրիր'); peds.push({ free: true, x: best.x, y: best.y, a: rnd(0, 6.28), sp: 70, c: pick(PAINTS), down: 0, life: 6 }); }
     best.driver = false; best.ai = null; player.car = best; sfx.door();
     if (best.taxi && !(job && (job.kind === 'taxi' || job.stage === 'deliver'))) { newOffer(); toast('Դու տաքսիստ ես. վերցրու ուղևորներին'); }
   }
@@ -508,11 +517,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       const p = peds[n];
       if (p.down > 0) p.down -= dt;
       else if (p.free) { p.x += Math.cos(p.a) * p.sp * dt; p.y += Math.sin(p.a) * p.sp * dt; pushOut(p, 5); p.life -= dt; if (p.life <= 0) { peds.splice(n, 1); continue; } }
-      else {
-        p.t = (p.t + p.dir * p.sp * dt + 1512) % 1512;
-        const ox = p.i * CELL + 131, oy = p.j * CELL + 131, s = Math.floor(p.t / 378), u = p.t - s * 378;
-        p.x = ox + (s === 0 ? u : s === 1 ? 378 : s === 2 ? 378 - u : 0); p.y = oy + (s === 0 ? 0 : s === 1 ? u : s === 2 ? 378 : 378 - u);
-      }
+      else pedStep(p, dt);
+      if (playing && player.car && Math.abs(player.car.v) > 110 && !p.free && p.down <= 0 && !(p.panicT > 0) && Math.abs(p.x - player.car.x) < 120 && Math.abs(p.y - player.car.y) < 120) panic(p, player.car);
       if (p.down <= 0) for (const c of cars) if (Math.abs(c.v) > 50 && Math.abs(c.x - p.x) < 18 && Math.abs(c.y - p.y) < 18) {
         p.down = 2.5; if (c === player.car) { addHeat(0.8); toast('Զգույշ, մարդիկ կան'); } break;
       }
@@ -522,7 +528,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     // stars
     const tg = target(), spd = player.car ? Math.abs(player.car.v) : 0;
     let near = false, close = false, chasing = 0;
-    for (const c of cars) if (c.kind === 'police') {
+    policeExtras(dt, tg);
+    for (const c of cars) if (c.kind === 'police' && !c.rb) {
       if (heat > 0 && !c.chase) { c.chase = true; resync(c); }
       if (heat <= 0 && c.chase) { c.chase = false; if (c.ai.direct) resync(c); }
       if (c.chase) { chasing++; const d = Math.hypot(c.x - tg.x, c.y - tg.y); if (d < 480) near = true; if (d < (player.car ? 75 : 46) && spd < 30) close = true; }
@@ -532,7 +539,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
         const I = Math.floor(rnd(0, N + 1)), J = Math.floor(rnd(0, N + 1)), d = Math.hypot(ic(I) - tg.x, ic(J) - tg.y);
         if (d > 650 && d < 1500) { const c = makeCar(ic(I), ic(J), Math.atan2(tg.y - ic(J), tg.x - ic(I)), 'police'); c.driver = true; c.chase = true; resync(c); cars.push(c); break; }
       }
-      if (near) evadeT = 0; else { evadeT += dt; if (evadeT > 6) { evadeT = 0; heat = Math.max(0, Math.ceil(heat) - 1); if (heat === 0) toast('Աստղերը մարեցին'); } }
+      if (near || HELI.sees) evadeT = 0; else { evadeT += dt; if (evadeT > 6) { evadeT = 0; heat = Math.max(0, Math.ceil(heat) - 1); if (heat === 0) toast('Աստղերը մարեցին'); } }
       bustT = close ? bustT + dt : Math.max(0, bustT - dt);
       if (bustT > 1.5) busted();
     }
@@ -1756,14 +1763,14 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     for (const c of cars) {
       let m = meshOf.get(c); if (!m) { m = carMesh(c); meshOf.set(c, m); scene.add(m); }
       m.userData.s = stamp; m.position.set(c.x, groundY(c.x, c.y), c.y); m.rotation.y = -c.a; { const dc = Math.abs(c.x - cam3.position.x) + Math.abs(c.y - cam3.position.z); m.visible = dc < CH.VIEW; shadowLod(m, dc < 800); if (m.visible && m.userData.wheels && dc < 900) carAnim(c, m.userData, lastDt); }
-      if (m.userData.l1) { m.userData.l1.material.color.set(c.chase ? (flash ? K.alert : K.cop) : '#9aa3ad'); m.userData.l2.material.color.set(c.chase ? (flash ? K.cop : K.alert) : '#9aa3ad'); }
+      if (m.userData.l1) { m.userData.l1.material.color.set(c.chase || c.rb ? (flash ? K.alert : K.cop) : '#9aa3ad'); m.userData.l2.material.color.set(c.chase || c.rb ? (flash ? K.cop : K.alert) : '#9aa3ad'); }
     }
     for (const p of peds) {
       let m = meshOf.get(p); if (!m) { m = pedMesh(p); meshOf.set(p, m); scene.add(m); }
       m.userData.s = stamp; m.position.set(p.x, (p.down > 0 ? 3 : 0) + groundY(p.x, p.y), p.y);
-      m.rotation.set(0, -(p.free ? p.a : Math.floor(p.t / 378) * Math.PI / 2 + (p.dir < 0 ? Math.PI : 0)), p.down > 0 ? Math.PI / 2 : 0);
+      m.rotation.set(0, -((p.free || p.cross) ? p.a : Math.floor(p.t / 378) * Math.PI / 2 + (p.dir < 0 ? Math.PI : 0)), p.down > 0 ? Math.PI / 2 : 0);
       m.visible = !inside && Math.abs(p.x - cam3.position.x) + Math.abs(p.y - cam3.position.z) < 1300;
-      if (m.visible) { walkPose(m.userData, p.down > 0 ? 0 : p.free ? time * 11 : p.t * 0.17, p.down > 0 ? 0 : 1); shadowLod(m, Math.abs(p.x - cam3.position.x) + Math.abs(p.y - cam3.position.z) < 650); }
+      if (m.visible) { walkPose(m.userData, p.down > 0 ? 0 : (p.free || p.cross) ? time * (p.panicT > 0 ? 17 : 11) : p.t * 0.17, p.down > 0 || (p.cross && p.cross.wait) ? 0 : 1); shadowLod(m, Math.abs(p.x - cam3.position.x) + Math.abs(p.y - cam3.position.z) < 650); }
     }
     for (const [k, m] of meshOf) if (m.userData.s !== stamp) { scene.remove(m); meshOf.delete(k); }
     const play = mode === 'play';
@@ -1804,7 +1811,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     dayNight(paused || LD.hold ? 0 : lastDt); smokeFrame(paused || LD.hold ? 0 : lastDt);
     const SU = CITY.SUN; sun.position.set(fx + SU.x * 1000, SU.y * 1000, fz + SU.z * 1000); sun.target.position.set(fx, 0, fz); sun.target.updateMatrixWorld();
     sky.position.copy(cam3.position); sunDisc.position.set(cam3.position.x + SU.x * 3600, cam3.position.y + SU.y * 3600, cam3.position.z + SU.z * 3600);
-    streamCity();
+    streamCity(); paintLights();
     renderer.render(scene, cam3);
 
     // overlay: compass arrow to the job, touch stick
@@ -2205,6 +2212,107 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     for (const k in keys) keys[k] = false; joy.id = null; joy.dx = joy.dy = 0;
   }
 
+  // ---------- a livelier city: traffic lights, pedestrians who cross and flee, police roadblocks and a helicopter ----------
+  const SIG = [], SIGC = { r: new T.Color('#ff3b30'), y: new T.Color('#ffcc00'), g: new T.Color('#34e07a') }; let SIGLAMP = null, sigT = -9, screamT = -9;
+  function lightAt(I, J, d) { // two phases per crossroads, east-west then north-south, each with a short amber; neighbours are out of step
+    const ph = (time + ((I * 7 + J * 3) % 8) * 2) % 16;
+    if (d % 2 === 0) return ph < 6.5 ? 'g' : ph < 8 ? 'y' : 'r';
+    return ph >= 8 && ph < 14.5 ? 'g' : ph >= 14.5 ? 'y' : 'r';
+  }
+  function buildLights() { // one signal on the near right corner of every approach
+    for (let I = 0; I <= N; I++) for (let J = 0; J <= N; J++) {
+      const X = I * CELL, Y = J * CELL, add = (d, ok, x, y) => { if (ok) SIG.push({ I: I, J: J, d: d, x: x, y: y }); };
+      add(0, I > 0, X - 16, Y + 138); add(1, J > 0, X - 16, Y - 18); add(2, I < N, X + 136, Y - 18); add(3, J < N, X + 136, Y + 138);
+    }
+    const M4 = new T.Matrix4(), Q = new T.Quaternion(), V = new T.Vector3(), S1 = new T.Vector3(1, 1, 1);
+    const mk = (geo, mat, y) => { const m = new T.InstancedMesh(geo, mat, SIG.length); SIG.forEach((s, k) => m.setMatrixAt(k, M4.compose(V.set(s.x, CURB + y, s.y), Q, S1))); m.frustumCulled = false; scene.add(m); return m; };
+    mk(new T.CylinderGeometry(0.9, 1.1, 34, 6), lam('#2a2c31'), 17).castShadow = true;
+    mk(new T.BoxGeometry(4.4, 11, 4.4), lam('#1d1e22'), 37).castShadow = true;
+    SIGLAMP = mk(new T.SphereGeometry(2.5, 10, 8), new T.MeshBasicMaterial({ color: '#ffffff' }), 38.5);
+    SIG.forEach((s, k) => SIGLAMP.setColorAt(k, SIGC.r));
+  }
+  function paintLights() { if (!SIGLAMP || time - sigT < 0.2) return; sigT = time; SIG.forEach((s, k) => SIGLAMP.setColorAt(k, SIGC[lightAt(s.I, s.J, s.d)])); SIGLAMP.instanceColor.needsUpdate = true; }
+  function loopPos(i, j, t) { const ox = i * CELL + 131, oy = j * CELL + 131, s = Math.floor(t / 378), u = t - s * 378; return [ox + (s === 0 ? u : s === 1 ? 378 : s === 2 ? 378 - u : 0), oy + (s === 0 ? 0 : s === 1 ? u : s === 2 ? 378 : 378 - u)]; }
+  function startCross(p, k) { // from block corner k, over the zebra to the facing corner of the next block
+    const east = k === 1 || k === 2, south = k >= 2, c0 = loopPos(p.i, p.j, (k % 4) * 378), horiz = Math.random() < 0.5;
+    let ni = p.i, nj = p.j, nk;
+    if (horiz) { ni = p.i + (east ? 1 : -1); nk = east ? (k === 1 ? 0 : 3) : (k === 0 ? 1 : 2); } else { nj = p.j + (south ? 1 : -1); nk = south ? (k === 2 ? 1 : 0) : (k === 0 ? 3 : 2); }
+    if (ni < 0 || nj < 0 || ni >= N || nj >= N) return;
+    const c1 = loopPos(ni, nj, nk * 378);
+    p.t = (k % 4) * 378; p.x = c0[0]; p.y = c0[1]; p.a = Math.atan2(c1[1] - c0[1], c1[0] - c0[0]);
+    p.cross = { x1: c1[0], y1: c1[1], i: ni, j: nj, k: nk, I: east ? p.i + 1 : p.i, J: south ? p.j + 1 : p.j, d: horiz ? 1 : 0, wait: true, waitT: 0 };
+  }
+  function panic(p, from) { // run away from a fast car or a car-jacking
+    if (p.free || p.down > 0) return;
+    p.panicT = 2.2;
+    if (!p.cross) { const a = loopPos(p.i, p.j, (p.t + 6 + 1512) % 1512), b = loopPos(p.i, p.j, (p.t - 6 + 1512) % 1512); p.dir = Math.hypot(a[0] - from.x, a[1] - from.y) > Math.hypot(b[0] - from.x, b[1] - from.y) ? 1 : -1; }
+    else if (p.cross.wait) p.cross.wait = false;
+    if (time - screamT > 1.2 && Math.hypot(p.x - target().x, p.y - target().y) < 260) { screamT = time; tone(rnd(520, 700), rnd(330, 420), 0.24, 'sawtooth', 0.045); }
+  }
+  function pedStep(p, dt) { // a pedestrian on the pavement loop round a block, or crossing a street
+    if (p.panicT > 0) p.panicT -= dt;
+    const run = p.panicT > 0 ? 2.8 : 1;
+    if (p.cross) {
+      const cr = p.cross;
+      if (cr.wait) { cr.waitT += dt; if (lightAt(cr.I, cr.J, cr.d) === 'r' || cr.waitT > 24) cr.wait = false; return; }
+      const dx = cr.x1 - p.x, dy = cr.y1 - p.y, L = Math.hypot(dx, dy), st = p.sp * 1.25 * run * dt; p.a = Math.atan2(dy, dx);
+      if (L <= st) { p.i = cr.i; p.j = cr.j; p.t = (cr.k * 378 + p.dir * 0.5 + 1512) % 1512; p.cross = null; } else { p.x += dx / L * st; p.y += dy / L * st; }
+      return;
+    }
+    const s0 = Math.floor(p.t / 378);
+    p.t = (p.t + p.dir * p.sp * run * dt + 1512) % 1512;
+    const s1 = Math.floor(p.t / 378);
+    if (s1 !== s0 && run === 1 && Math.random() < 0.45) { startCross(p, p.dir > 0 ? s1 : s0); if (p.cross) return; }
+    const q = loopPos(p.i, p.j, p.t); p.x = q[0]; p.y = q[1];
+  }
+  const RB = { t: 0, cars: [] }, HELI = { m: null, rotor: null, tail: null, spot: null, on: false, x: 0, y: 0, h: 420, a: 0, snd: 0, sees: false };
+  function buildHeli() { // an original two-tone police helicopter
+    const g = new T.Group(), body = lam('#1f3b6e'), white = lam('#eef1f4'), dark = lam('#1a1b1f'), glass = new T.MeshPhongMaterial({ color: '#223040', shininess: 90, specular: 0x8899aa });
+    const add = (geo, mat, x, y, z, sx, sy, sz) => { const m = new T.Mesh(geo, mat); m.position.set(x, y, z); if (sx) m.scale.set(sx, sy, sz); m.castShadow = true; g.add(m); return m; };
+    add(new T.SphereGeometry(1, 18, 12), body, 0, 0, 0, 16, 9, 9); add(new T.SphereGeometry(1, 18, 12), white, -1, -2.5, 0, 15, 5.5, 9.2);
+    add(new T.SphereGeometry(1, 14, 10), glass, 9, 1.5, 0, 7.5, 6, 7.4);
+    add(new T.CylinderGeometry(1.4, 2.6, 30, 8), body, -26, 2, 0).rotation.z = Math.PI / 2;
+    add(new T.BoxGeometry(6, 9, 1.2), body, -40, 6, 0); add(new T.BoxGeometry(5, 1, 9), white, -38, 3, 0);
+    for (const s of [-1, 1]) { add(new T.CylinderGeometry(0.7, 0.7, 28, 6), dark, 0, -11, s * 7).rotation.z = Math.PI / 2; for (const sx of [-6, 6]) add(new T.CylinderGeometry(0.5, 0.5, 5, 6), dark, sx, -8.5, s * 6.4); }
+    add(new T.CylinderGeometry(1.2, 1.2, 4, 8), dark, 0, 9.5, 0);
+    HELI.rotor = new T.Group(); HELI.rotor.position.set(0, 11.5, 0); g.add(HELI.rotor);
+    for (const r of [0, Math.PI / 2]) { const b = new T.Mesh(new T.BoxGeometry(70, 0.5, 3), dark); b.rotation.y = r; HELI.rotor.add(b); }
+    HELI.tail = new T.Group(); HELI.tail.position.set(-40, 7, 1.2); g.add(HELI.tail); const tb = new T.Mesh(new T.BoxGeometry(12, 0.4, 1.2), dark); HELI.tail.add(tb);
+    const lt = new T.Mesh(new T.SphereGeometry(1.2, 8, 6), new T.MeshBasicMaterial({ color: '#ff3b30' })); lt.position.set(-1, -8.5, 0); g.add(lt); HELI.blink = lt;
+    g.visible = false; HELI.m = g; scene.add(g);
+    const sc = document.createElement('canvas'); sc.width = sc.height = 64; const sx = sc.getContext('2d'), gr = sx.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(235,245,255,1)'); gr.addColorStop(0.7, 'rgba(235,245,255,0.6)'); gr.addColorStop(1, 'rgba(235,245,255,0)'); sx.fillStyle = gr; sx.fillRect(0, 0, 64, 64);
+    const sg = new T.PlaneGeometry(90, 90); sg.rotateX(-Math.PI / 2);
+    HELI.spot = new T.Mesh(sg, new T.MeshBasicMaterial({ map: new T.CanvasTexture(sc), transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -5 })); HELI.spot.visible = false; scene.add(HELI.spot);
+  }
+  function policeExtras(dt, tg) {
+    // roadblocks at three stars and more: two patrol cars parked across a crossroads ahead of you
+    RB.t -= dt;
+    if (heat >= 3 && player.car && RB.t <= 0 && !RB.cars.length) {
+      const c = player.car, fx = Math.cos(c.a), fy = Math.sin(c.a), I = clamp(Math.round((c.x + fx * 700 - 60) / CELL), 0, N), J = clamp(Math.round((c.y + fy * 700 - 60) / CELL), 0, N), X = ic(I), Y = ic(J);
+      if (Math.hypot(X - c.x, Y - c.y) > 350) {
+        const horiz = Math.abs(fx) > Math.abs(fy);
+        for (const s of [-1, 1]) { const q = makeCar(horiz ? X : X + s * 26, horiz ? Y + s * 26 : Y, horiz ? Math.PI / 2 : 0, 'police'); Object.assign(q, { rb: true, driver: true, ai: null }); cars.push(q); RB.cars.push(q); }
+        RB.t = 30; toast('Ոստիկանները ճանապարհը փակել են');
+      } else RB.t = 2;
+    }
+    if (RB.cars.length && (heat <= 0 || RB.t <= 0)) { for (const q of RB.cars) { const k = cars.indexOf(q); if (k >= 0 && q !== player.car) cars.splice(k, 1); } RB.cars = []; RB.t = heat > 0 ? 12 : 0; }
+    // the helicopter at four stars and more: it circles above you, lights you up and keeps the police on you
+    const want = heat >= 4;
+    if (want && !HELI.on) { HELI.on = true; HELI.x = tg.x - 700; HELI.y = tg.y - 500; HELI.h = 300; HELI.m.visible = true; toast('Ոստիկանական ուղղաթիռ'); }
+    if (HELI.on) {
+      const t2 = time * 0.45, gx = want ? tg.x + Math.cos(t2) * 80 : HELI.x + 600, gy = want ? tg.y + Math.sin(t2) * 80 : HELI.y + 600;
+      const dx = gx - HELI.x, dy = gy - HELI.y, L = Math.hypot(dx, dy), sp = Math.min(L, 340 * dt);
+      if (L > 0.5) { HELI.x += dx / L * sp; HELI.y += dy / L * sp; HELI.a += ad(Math.atan2(dy, dx) - HELI.a) * Math.min(1, dt * 1.6); }
+      HELI.h += ((want ? 165 : 460) - HELI.h) * Math.min(1, dt * 0.7);
+      HELI.sees = want && Math.hypot(HELI.x - tg.x, HELI.y - tg.y) < 280;
+      HELI.m.position.set(HELI.x, HELI.h + Math.sin(time * 1.3) * 3, HELI.y); HELI.m.rotation.set(0, -HELI.a, -clamp(sp / dt / 340, 0, 1) * 0.18);
+      HELI.rotor.rotation.y += dt * 32; HELI.tail.rotation.z += dt * 40; HELI.blink.visible = Math.floor(time * 2) % 2 === 0;
+      HELI.spot.visible = HELI.sees; if (HELI.sees) { HELI.spot.position.set(tg.x, groundY(tg.x, tg.y) + 0.5, tg.y); HELI.spot.material.opacity = 0.18 + (DAY.night || 0) * 0.55; }
+      HELI.snd -= dt; if (HELI.snd <= 0 && actx) { HELI.snd = 0.085; const dd = Math.hypot(HELI.x - tg.x, HELI.y - tg.y) + HELI.h; tone(72, 52, 0.06, 'sawtooth', clamp(0.11 - dd / 9000, 0.008, 0.09)); }
+      if (!want && HELI.h > 440) { HELI.on = false; HELI.m.visible = false; HELI.spot.visible = false; HELI.sees = false; }
+    }
+  }
+
   // ---------- waypoint: tap the full map to mark a place; the way there along the streets is drawn on both maps ----------
   let WP = null, ROUTE = [], routeT = -9;
   function snapRoad(p) { // the nearest point on a street, which road it is on, and the crossroads either side
@@ -2306,7 +2414,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const sv = readSave(); if (sv) { cash = sv.cash; vipTable = !!sv.vipTable; } savedCash = cash; savedTable = vipTable;
     Object.assign(PROG, PROG0(), (sv && sv.prog) || {}); ACT = null; ownedCar = null; closePanel(); for (const pl of PLACES) pl.arm = false;
     const home = PLACES.find((q) => q.id === 'home'), dealer = PLACES.find((q) => q.id === 'dealer');
-    atHome = false; MAP.open = false; $('bigmap').hidden = true; setWaypoint(null);
+    atHome = false; MAP.open = false; $('bigmap').hidden = true; setWaypoint(null); RB.cars = []; RB.t = 0; HELI.on = false; HELI.m.visible = false; HELI.spot.visible = false; HELI.sees = false;
     if (PROG.home && home && !startAtClub) { atHome = true; homeArm = false; player.x = HX - 112; player.y = HY; player.a = 0; }
     if (PROG.car) spawnOwned((PROG.home && home ? home : dealer).park);
     if (AV.ready) { scene.remove(playerMesh); playerMesh = playerModel(); scene.add(playerMesh); }
@@ -2340,7 +2448,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     try { init3d(); } catch (e) { renderer = null; }
     if (!renderer) { $('startBtn').disabled = true; $('startBtn').textContent = 'Այս սարքում 3D-ն չի աշխատում'; }
     ldTip(); setInterval(() => { if (!$('loading').hidden) ldTip(); }, 4500); setTimeout(ldClose, 30000);   // never wait more than 30 s
-    if (renderer) { buildPlaces(); buildHome(); MAP.base = mapBase(); buildLegend(); loadAvatars(); loadCity(); loadExtras(); }
+    if (renderer) { buildPlaces(); buildHome(); buildLights(); buildHeli(); MAP.base = mapBase(); buildLegend(); loadAvatars(); loadCity(); loadExtras(); }
     if (LD.total === 0) ldClose();
     resize(); reset(); requestAnimationFrame(frame);
   }
