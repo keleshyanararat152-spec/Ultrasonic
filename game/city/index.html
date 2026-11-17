@@ -113,6 +113,14 @@ body { background: var(--sky); color: var(--fg); font-family: var(--font-text); 
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
+.shop-list { display: flex; flex-direction: column; gap: 8px; }
+.shop-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: 10px; background: rgba(241, 237, 230, 0.05); color: var(--fg); font: 600 15px var(--font-text); text-align: left; cursor: pointer; }
+.shop-item:hover:not([disabled]) { background: rgba(241, 237, 230, 0.1); }
+.shop-item small { display: block; margin-top: 2px; font-weight: 400; font-size: 12px; color: var(--muted); }
+.shop-item .pr { font-family: var(--font-data); white-space: nowrap; color: var(--gold); }
+.shop-item.on { border-color: var(--gold); }
+.shop-item[disabled] { opacity: 0.45; cursor: default; }
+.go.ghost { background: none; border: 1px solid var(--line); color: var(--fg); }
 .card { width: min(480px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px; backdrop-filter: blur(8px); }
 h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; text-wrap: balance; }
 h1 span { color: var(--tuff); }
@@ -156,6 +164,15 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     <button type="button" id="btnAct" class="act">Մեքենա</button>
   </div>
 
+  <div class="overlay" id="shop" hidden>
+    <div class="card">
+      <h1 id="shopTitle"></h1>
+      <p id="shopText"></p>
+      <div class="shop-list" id="shopList"></div>
+      <button class="go ghost" id="shopClose" type="button">Փակել</button>
+    </div>
+  </div>
+
   <div class="overlay" id="pause" hidden>
     <div class="card">
       <h1><span>Դադար</span></h1>
@@ -174,6 +191,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
         <li><b>Ձեռքի արգելակ՝</b> Space</li>
         <li><b>Դեմքը առջևից տեսնել՝</b> C կամ «Դեմք» կոճակը</li>
         <li><b>Դադար՝</b> P, Esc կամ Ⅱ կոճակը</li>
+        <li><b>Գնումներ՝</b> քարտեզի գունավոր կետերը. կապույտը ավտոսրահն է, մանուշակագույնը՝ հագուստը, կանաչը՝ բնակարանը։ Ոտքով մտիր օղակը</li>
+        <li><b>Առաջադրանքներ՝</b> նստիր դեղին տաքսի ու ուղևորներ տար, կամ մեքենայով մտիր երկնագույն (մրցարշավ) ու կարմիր (փախուստ) օղակները</li>
         <li><b>Ակումբում՝</b> պարահրապարակում սեղմիր «Պարել» (կամ Space) ռիթմի տակ ու փող վաստակիր. բարից խմիչք առ, VIP-ում սեղան վարձիր</li>
         <li><b>Նեոն ակումբ՝</b> քարտեզի վարդագույն կետն է, կամ սեղմիր «Սկսել ակումբից»։ Ներսում 3D բեմական պարուհիներ ու լուսային շոու կան։ Ոսկեգույն օղակը տանում է VIP սրահ։</li>
         <li><b>Դեղին օղակում</b> վերցնում ես պատվերը, <b>կանաչում</b> հասցնում ես, քանի դեռ ժամանակը չի լրացել</li>
@@ -341,19 +360,19 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     for (let n = 0; n < 34; n++) peds.push({ i: Math.floor(rnd(0, N)), j: Math.floor(rnd(0, N)), t: rnd(0, 1512), dir: Math.random() < 0.5 ? 1 : -1, sp: rnd(32, 50), c: pick(PAINTS), down: 0, x: 0, y: 0 });
     newOffer();
   }
-  function newOffer() { job = { stage: 'pickup', p: roadPoint(), label: pick(['լավաշ', 'ծաղիկներ', 'ծանրոց', 'խորոված', 'ուղևոր', 'դեղորայք', 'ծիրան']) }; }
+  function newOffer() { if (player && player.car && player.car.taxi) { job = { kind: 'taxi', stage: 'pickup', p: roadPoint(), label: 'ուղևոր' }; return; } job = { stage: 'pickup', p: roadPoint(), label: pick(['լավաշ', 'ծաղիկներ', 'ծանրոց', 'խորոված', 'ուղևոր', 'դեղորայք', 'ծիրան']) }; }
 
   function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.remove('out'); toastT = 2.2; }
   function addHeat(n) { heat = Math.min(5, heat + n); evadeT = 0; }
 
   // ---------- driving ----------
   function carStep(c, thr, steer, hand, dt) {
-    if (thr > 0) c.v += (c.v < 0 ? 420 : 250) * thr * dt;
+    if (thr > 0) c.v += (c.v < 0 ? 420 : 250 * (c.acc || 1)) * thr * dt;
     else if (thr < 0) c.v += (c.v > 5 ? 430 : 170) * thr * dt;
     else c.v -= c.v * 0.7 * dt;
     if (hand) c.v -= c.v * 2.4 * dt;
     c.v = clamp(c.v, -90, c.max);
-    c.a += steer * (hand ? 3.5 : 2.5) * clamp(c.v / 90, -1, 1) * dt; c.steerIn = steer; c.hand = hand;
+    c.a += steer * (hand ? 3.5 : 2.5) * (c.grip || 1) * clamp(c.v / 90, -1, 1) * dt; c.steerIn = steer; c.hand = hand;
     const fx = Math.cos(c.a), fy = Math.sin(c.a);
     c.x += fx * c.v * dt; c.y += fy * c.v * dt;
     let hit = false;
@@ -404,13 +423,14 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     if (player.car) {
       const c = player.car; if (Math.abs(c.v) > 45) return;
       const p = { x: c.x + Math.sin(c.a) * 28, y: c.y - Math.cos(c.a) * 28 }; pushOut(p, 7);
-      player.x = p.x; player.y = p.y; player.car = null; c.v = 0; sfx.door(); return;
+      player.x = p.x; player.y = p.y; player.car = null; c.v = 0; sfx.door(); if (job && job.kind === 'taxi' && job.stage === 'pickup') newOffer(); return;
     }
     let best = null, bd = 58;
     for (const c of cars) { const d = Math.hypot(c.x - player.x, c.y - player.y); if (d < bd && c.kind !== 'police') { bd = d; best = c; } }
     if (!best) return;
     if (best.driver) { addHeat(1); toast('Ուրիշի մեքենան վերցրիր'); peds.push({ free: true, x: best.x, y: best.y, a: rnd(0, 6.28), sp: 70, c: pick(PAINTS), down: 0, life: 6 }); }
     best.driver = false; best.ai = null; player.car = best; sfx.door();
+    if (best.taxi && !(job && (job.kind === 'taxi' || job.stage === 'deliver'))) { newOffer(); toast('Դու տաքսիստ ես. վերցրու ուղևորներին'); }
   }
 
   function busted() {
@@ -420,7 +440,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     player.x = ic(3) + 96; player.y = ic(3) + 76;
     for (const c of cars) if (c.kind === 'police') c.chase = false;
     if (job && job.stage === 'deliver') newOffer();
-    sfx.fail(); toast(fine ? 'Բռնվեցիր, տուգանք ' + money(fine) : 'Բռնվեցիր');
+    sfx.fail(); toast((ACT ? 'Առաջադրանքը ձախողվեց. ' : '') + (fine ? 'Բռնվեցիր, տուգանք ' + money(fine) : 'Բռնվեցիր')); ACT = null;
   }
 
   function update(dt) {
@@ -500,16 +520,20 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     }
 
     // jobs
-    if (job) {
+    actUpdate(dt); placeCheck();
+    if (job && !ACT) {
       const d = Math.hypot(job.p.x - tg.x, job.p.y - tg.y);
-      if (job.stage === 'pickup' && d < 38) {
+      if (job.stage === 'pickup' && d < 38 && (job.kind !== 'taxi' || (player.car && player.car.taxi && Math.abs(player.car.v) < 140))) {
         let to; do { to = roadPoint(); } while (Math.hypot(to.x - job.p.x, to.y - job.p.y) < 900);
         const len = Math.abs(to.x - job.p.x) + Math.abs(to.y - job.p.y);
         job.stage = 'deliver'; job.p = to; job.time = len / 150 + 12; job.pay = Math.round((len * 1.6 + 600) / 100) * 100;
-        sfx.take(); toast('Վերցված է, շտապիր');
+        sfx.take(); if (job.kind === 'taxi') { job.dmg0 = player.car.dmg || 0; job.time = len / 140 + 20; job.pay = Math.round((len * 1.3 + 500) / 100) * 100; toast('Ուղևորը նստեց. տար զգույշ, առանց վթարի'); } else toast('Վերցված է, շտապիր');
       } else if (job.stage === 'deliver') {
         job.time -= dt;
-        if (d < 38) { const tip = Math.round(job.time * 20 / 100) * 100; cash += job.pay + tip; sfx.coin(); toast('Հասցված է  +' + money(job.pay + tip)); newOffer(); }
+        const hits = job.kind === 'taxi' && player.car ? (player.car.dmg || 0) - job.dmg0 : 0; job.hits = hits;
+        if (job.kind === 'taxi' && (!player.car || !player.car.taxi)) { sfx.fail(); toast('Ուղևորը իջավ'); newOffer(); }
+        else if (hits >= 4) { sfx.fail(); toast('Ուղևորը վախեցավ ու իջավ'); newOffer(); }
+        else if (d < 38) { const tip = Math.round(job.time * 20 / 100) * 100, got = Math.round((job.pay + tip) * (1 - 0.2 * hits) / 100) * 100; cash += got; sfx.coin(); toast((job.kind === 'taxi' ? (hits ? 'Ուղևորը դժգոհ է  +' : 'Ուղևորը գոհ է  +') : 'Հասցված է  +') + money(got)); newOffer(); }
         else if (job.time <= 0) { sfx.fail(); toast('Ուշացար, պատվերը չեղարկվեց'); newOffer(); }
       }
     }
@@ -692,7 +716,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   }
   function playerModel() { // the walker: brown jacket with rolled sleeves over a white T-shirt, cargo trousers, boots, a watch
     if (AV.ready) {
-      const g = avatarMesh('m07'), head = sculptHead(), neck = new T.Mesh(new T.CylinderGeometry(1.75, 2.1, 5, 14), lam('#d6a48f'));
+      const g = avatarMesh(AV.src[PROG.outfit] ? PROG.outfit : 'm07'), head = sculptHead(), neck = new T.Mesh(new T.CylinderGeometry(1.75, 2.1, 5, 14), lam('#d6a48f'));
       g.userData.inner.traverse((o) => { if (o.isMesh && /head|opacity/.test(o.material.name)) o.visible = false; });
       neck.position.y = -6.6; head.add(neck); head.scale.setScalar(0.31); head.traverse((o) => { if (o.isMesh) o.castShadow = true; }); g.add(head); g.userData.photoHead = head;
       g.scale.setScalar(1.32); return g;
@@ -1429,6 +1453,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       const pg = new T.PlaneGeometry(110, 110); pg.rotateX(-Math.PI / 2);
       cellInst(pg, CITY.glowM, CITY.lamps, (p, n, v) => { v.set(p[0], CURB + 0.2, p[1]); }, false).forEach((m) => { m.receiveShadow = false; });
     }
+    for (const pl of PLACES) { if (pl.raised) { pl.ring.position.y = CURB + 0.5; pl.ring.updateMatrix(); pl.ring.updateMatrixWorld(true); } pl.sign.position.y = CURB; pl.sign.updateMatrix(); pl.sign.updateMatrixWorld(true); }
     if (club.ring) { club.ring.position.y = CURB + 0.5; club.ring.updateMatrix(); club.ring.updateMatrixWorld(true); }
     CITY.SUN = { x: -0.36, y: 0.86, z: -0.3 }; CITY.up = true;      // tall blocks: a higher sun keeps the streets lit
   }
@@ -1487,8 +1512,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const g = new T.Group(), tilt = new T.Group(), inner = new T.Group(), wi = new T.Group(), k = 52 / 328;
     for (const o of [inner, wi]) { o.scale.setScalar(k); o.rotation.y = Math.PI; o.position.x = 42 * k; } tilt.add(inner); g.add(tilt); g.add(wi);
     const mat = (p) => {
-      const key = p.name === 'body' ? 'body' + c.color : p.name; if (CARM.mats[key]) return CARM.mats[key];
-      return CARM.mats[key] = p.name === 'lights' ? lam('#ffffff', { map: p.map, emissiveMap: p.map, emissive: 0x000000 }) : p.name === 'body' ? new T.MeshPhongMaterial({ map: p.map, color: c.color, shininess: 45, specular: 0x333333 }) : p.name === 'glass' ? new T.MeshPhongMaterial({ color: '#10161d', shininess: 60, specular: 0x3a4652 }) : p.name === 'rubber' ? lam('#15161a') : lam('#ffffff', { map: p.map });
+      const key = p.name === 'body' ? 'body' + c.color + (c.clean ? 'c' : '') : p.name; if (CARM.mats[key]) return CARM.mats[key];
+      return CARM.mats[key] = p.name === 'lights' ? lam('#ffffff', { map: p.map, emissiveMap: p.map, emissive: 0x000000 }) : p.name === 'body' ? (c.clean ? new T.MeshPhongMaterial({ color: c.color, shininess: 110, specular: 0x8a8a8a, envMap: CITY.env || null, combine: T.MixOperation, reflectivity: 0.2 }) : new T.MeshPhongMaterial({ map: p.map, color: c.color, shininess: 45, specular: 0x333333 })) : p.name === 'glass' ? new T.MeshPhongMaterial({ color: '#10161d', shininess: 60, specular: 0x3a4652 }) : p.name === 'rubber' ? lam('#15161a') : lam('#ffffff', { map: p.map });
     };
     if (c.lug === undefined) c.lug = c.kind === 'civ' && !c.taxi && Math.random() < 0.35;
     for (const p of CARM.parts.concat(c.lug ? CARM.lug : [])) { const m = new T.Mesh(p.geo, mat(p)); m.castShadow = p.name === 'body' || p.name === 'wheels'; inner.add(m); }
@@ -1727,8 +1752,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       playerMesh.updateMatrixWorld(true); const hp = playerMesh.worldToLocal(playerMesh.userData.headBone.getWorldPosition(new T.Vector3()));
       playerMesh.userData.photoHead.position.set(hp.x + 0.25, hp.y + 1.25, hp.z);
     }
-    marker.visible = play && !!job && !inside; clubFrame();
-    if (marker.visible) { marker.position.set(job.p.x, 210, job.p.y); marker.material.color.set(job.stage === 'pickup' ? K.gold : K.go); const s = 1 + Math.sin(time * 5) * 0.08; marker.scale.set(s, 1, s); }
+    const gol = goal(); marker.visible = play && !!gol && !!gol.p && !inside; clubFrame();
+    if (marker.visible) { marker.position.set(gol.p.x, 210, gol.p.y); marker.material.color.set(gcol(gol)); const s = 1 + Math.sin(time * 5) * 0.08; marker.scale.set(s, 1, s); }
 
     // camera: behind the car or the walker; a slow circle over the square on the title screen
     if (play) {
@@ -1765,8 +1790,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       octx.font = '700 15px "JetBrains Mono", monospace'; octx.textAlign = 'center'; octx.lineWidth = 3; octx.strokeStyle = K.ink; octx.fillStyle = K.fg;
       if (danceMsgT > 0) { octx.globalAlpha = Math.min(1, danceMsgT * 2); octx.strokeText(danceMsg, mx, my - 84 - (1 - danceMsgT) * 14); octx.fillText(danceMsg, mx, my - 84 - (1 - danceMsgT) * 14); octx.globalAlpha = 1; }
     }
-    if (play && job && !inside) {
-      const t = target(), dx = job.p.x - t.x, dy = job.p.y - t.y, rel = ad(Math.atan2(dy, dx) - camA - camO), col = job.stage === 'pickup' ? K.gold : K.go;
+    if (play && gol && gol.p && !inside) {
+      const t = target(), dx = gol.p.x - t.x, dy = gol.p.y - t.y, rel = ad(Math.atan2(dy, dx) - camA - camO), col = gcol(gol);
       const ax = W / 2, ay = Math.max(150, H * 0.22);
       octx.save(); octx.translate(ax, ay); octx.rotate(rel);
       octx.fillStyle = col; octx.strokeStyle = K.ink; octx.lineWidth = 2; octx.beginPath(); octx.moveTo(0, -20); octx.lineTo(13, 12); octx.lineTo(0, 5); octx.lineTo(-13, 12); octx.closePath(); octx.fill(); octx.stroke(); octx.restore();
@@ -1785,7 +1810,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const dot = (x, y, c, r) => { mctx.fillStyle = c; mctx.beginPath(); mctx.arc(x * s, y * s, r, 0, 6.2832); mctx.fill(); };
     if (play) {
       dot(club.door.x, club.door.y, '#ff4fa3', 6);
-      if (job) dot(job.p.x, job.p.y, job.stage === 'pickup' ? K.gold : K.go, 8);
+      for (const pl of PLACES) dot(pl.x, pl.y, pl.col, 5);
+      if (gol && gol.p) dot(gol.p.x, gol.p.y, gcol(gol), 8);
       for (const c of cars) if (c.kind === 'police' && c.chase) dot(c.x, c.y, flash ? K.alert : K.cop, 6);
       const t = inside ? club.door : target(); mctx.save(); mctx.translate(t.x * s, t.y * s); mctx.rotate(player.car ? player.car.a : player.a); mctx.fillStyle = K.fg; mctx.beginPath(); mctx.moveTo(12, 0); mctx.lineTo(-8, -8); mctx.lineTo(-8, 8); mctx.closePath(); mctx.fill(); mctx.restore();
     }
@@ -1804,13 +1830,15 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     put('speed', inside ? (drinkT > 0 ? 'խմիչք ×2 · ' + Math.ceil(drinkT) + ' վ' : vip ? 'VIP սրահ' : 'ակումբում') : player.car ? Math.round(Math.abs(player.car.v) * 0.42) + ' կմ/ժ' : 'ոտքով');
     const showDance = play && !paused && onFloor();
     if (cache.dance !== showDance) { cache.dance = showDance; $('danceBtn').hidden = !showDance; }
-    const showJob = play && !!job;
+    const gj = goal(), showJob = play && !!gj;
     if (cache.jobShow !== showJob) { cache.jobShow = showJob; $('job').hidden = !showJob; }
     if (showJob) {
-      const del = job.stage === 'deliver';
+      const del = !!ACT || gj.stage === 'deliver', taxi = gj.kind === 'taxi';
       if (cache.del !== del) { cache.del = del; $('job').classList.toggle('deliver', del); }
-      put('jobText', del ? 'Հասցրու՝ ' + job.label + ' · ' + money(job.pay) : 'Վերցրու պատվերը՝ ' + job.label);
-      const tl = del ? Math.max(0, Math.ceil(job.time)) : -1;
+      put('jobText', ACT ? (ACT.kind === 'race' ? 'Մրցարշավ · ստուգակետ ' + Math.min(ACT.k + 1, ACT.cps.length) + '/' + ACT.cps.length : 'Փախուստ · կորիր ոստիկաններից')
+        : taxi ? (del ? 'Տար ուղևորին · ' + money(Math.round(gj.pay * (1 - 0.2 * (gj.hits || 0)) / 100) * 100) + (gj.hits ? ' · վթար ' + gj.hits + '/4' : '') : 'Տաքսի՝ վերցրու ուղևորին')
+        : del ? 'Հասցրու՝ ' + gj.label + ' · ' + money(gj.pay) : 'Վերցրու պատվերը՝ ' + gj.label);
+      const tl = del ? Math.max(0, Math.ceil(ACT ? ACT.time : gj.time)) : -1;
       put('jobTime', del ? Math.floor(tl / 60) + ':' + String(tl % 60).padStart(2, '0') : '');
       const late = del && tl <= 8; if (cache.late !== late) { cache.late = late; $('job').classList.toggle('late', late); }
     }
@@ -1828,6 +1856,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'hand' };
   window.addEventListener('keydown', (e) => {
     if (mode !== 'play') return;
+    if (uiOpen) { if (e.code === 'Escape') closePanel(); e.preventDefault(); return; }
     if ((e.code === 'KeyP' || e.code === 'Escape') && !e.repeat) { setPause(!paused); e.preventDefault(); return; }
     if (paused) return;
     if (inside && e.code === 'Space') { if (!e.repeat) danceHit(); e.preventDefault(); return; }
@@ -1871,14 +1900,160 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   function toggleFace() { faceCam = !faceCam; $('faceBtn').classList.toggle('on', faceCam); }
   $('faceBtn').addEventListener('click', () => { toggleFace(); $('faceBtn').blur(); });
   $('snd').addEventListener('click', () => { soundOn = !soundOn; $('snd').classList.toggle('off', !soundOn); });
+  // ---------- places to spend money and things to do: a car dealer, a clothes shop, a flat, a race and a police escape ----------
+  const CAR_SHOP = [
+    { id: 'sport', name: 'Սպորտ', color: '#c0392b', max: 380, acc: 1.35, grip: 1.1, stars: 2, price: 8000 },
+    { id: 'lux', name: 'Լյուքս', color: '#15171c', max: 420, acc: 1.55, grip: 1.15, stars: 3, price: 15000 },
+    { id: 'racer', name: 'Մրցարշավային', color: '#f0b400', max: 480, acc: 1.85, grip: 1.3, stars: 4, price: 30000 }];
+  const OUTFITS = [{ id: 'm07', name: 'Մուգ բաճկոն', price: 0 }, { id: 'm02', name: 'Բեժ սվիտեր', price: 1500 }, { id: 'm06', name: 'Կարմիր վերնաշապիկ', price: 1500 },
+    { id: 'm08', name: 'Կապույտ վերնաշապիկ', price: 2000 }, { id: 'm16', name: 'Մուգ կապույտ շապիկ', price: 2000 }, { id: 'm10', name: 'Բորդո բաճկոն', price: 2500 },
+    { id: 'm12', name: 'Ջինսե բաճկոն', price: 3000 }, { id: 'm04', name: 'Սև կապյուշոն', price: 3000 }, { id: 'm17', name: 'Մարզական բաճկոն', price: 3500 }, { id: 'm03', name: 'Կոստյում', price: 6000 }];
+  const HOME_PRICE = 20000, PLACES = [], PROG0 = () => ({ cars: [], car: null, outfit: 'm07', outfits: ['m07'], home: false, raceBest: 0 }), PROG = PROG0();
+  let ACT = null, uiOpen = false, ownedCar = null;
+  const goal = () => ACT ? (ACT.goal || { stage: 'escape' }) : job;
+  const gcol = (g) => g.stage === 'pickup' ? K.gold : g.stage === 'race' ? '#35d6e6' : g.stage === 'escape' ? K.alert : K.go;
+  const fmtT = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+  function buildPlaces() {
+    const defs = [{ id: 'dealer', name: 'ԱՎՏՈՍՐԱՀ', col: '#4d8dff', b: [1, 2], car: false, open: openDealer },
+      { id: 'clothes', name: 'ՀԱԳՈՒՍՏ', col: '#b48cff', b: [2, 4], car: false, open: openClothes },
+      { id: 'home', name: 'ԲՆԱԿԱՐԱՆ', col: '#58d68d', b: [4, 1], car: false, open: openHome },
+      { id: 'race', name: 'ՄՐՑԱՐՇԱՎ', col: '#35d6e6', b: [5, 5], car: true, open: openRace },
+      { id: 'escape', name: 'ՓԱԽՈՒՍՏ', col: '#ff5a5f', b: [1, 5], car: true, open: openEscape }];
+    const ci = Math.floor(club.rect.x / CELL), cj = Math.floor(club.rect.y / CELL);
+    for (const d of defs) {
+      const i = d.b[0], j = d.b[0] === ci && d.b[1] === cj ? (d.b[1] + 1) % N : d.b[1];
+      const x = i * CELL + 270, y = d.car ? j * CELL + 92 : j * CELL + 131;
+      const pl = Object.assign({}, d, { x: x, y: y, arm: false, raised: !d.car, park: { x: x + 80, y: j * CELL + 98, a: 0 } });
+      pl.open = () => d.open(pl);
+      const ring = new T.Mesh(new T.RingGeometry(d.car ? 20 : 9, d.car ? 24 : 12, 32), new T.MeshBasicMaterial({ color: d.col, side: T.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2; ring.position.set(x, d.car ? 0.4 : 0.6, y); scene.add(ring); pl.ring = ring;
+      const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d'), tex = new T.CanvasTexture(c);
+      const paint = () => { g.fillStyle = '#16121c'; g.fillRect(0, 0, 512, 128); g.fillStyle = d.col; g.fillRect(0, 110, 512, 18); g.font = '800 58px "Noto Sans Armenian", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#ffffff'; g.fillText(d.name, 256, 56); tex.needsUpdate = true; };
+      paint(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(paint);
+      const sign = new T.Group(); sign.position.set(x, 0, j * CELL + (d.car ? 128 : 140));
+      const face = new T.Mesh(new T.PlaneGeometry(56, 14), new T.MeshBasicMaterial({ map: tex })); face.position.y = 34; face.rotation.y = Math.PI; sign.add(face);
+      const back = new T.Mesh(new T.PlaneGeometry(56, 14), lam('#2a2c31')); back.position.y = 34; sign.add(back);
+      for (const sx of [-25, 25]) { const post = new T.Mesh(new T.CylinderGeometry(0.8, 0.8, 34, 6), lam('#2a2c31')); post.position.set(sx, 17, 0); post.castShadow = true; sign.add(post); }
+      scene.add(sign); pl.sign = sign; PLACES.push(pl);
+    }
+  }
+  function placeCheck() { // step into a ring to open its place; on foot for shops, by car for the race and the escape
+    if (ACT) return;
+    const t = target();
+    for (const pl of PLACES) {
+      const d = Math.hypot(t.x - pl.x, t.y - pl.y), r = pl.car ? 26 : 13;
+      if (d > r + 22) pl.arm = true;
+      else if (d < r && pl.arm) {
+        pl.arm = false;
+        if (pl.car && !player.car) toast('Այստեղ մեքենայով արի');
+        else if (!pl.car && player.car) toast('Իջիր մեքենայից ու ոտքով մտիր օղակը');
+        else pl.open();
+      }
+    }
+  }
+  function openPanel(title, text, items) {
+    uiOpen = true; $('shopTitle').textContent = title; $('shopText').textContent = text;
+    const L = $('shopList'); L.textContent = '';
+    for (const it of items) {
+      const b = document.createElement('button'), a = document.createElement('span'), pr = document.createElement('span');
+      b.type = 'button'; b.className = 'shop-item' + (it.on ? ' on' : ''); b.disabled = !!it.disabled; a.textContent = it.label;
+      if (it.sub) { const sm = document.createElement('small'); sm.textContent = it.sub; a.appendChild(sm); }
+      pr.className = 'pr'; pr.textContent = it.price || ''; b.append(a, pr); b.addEventListener('click', () => it.go()); L.appendChild(b);
+    }
+    for (const k in keys) keys[k] = false; joy.id = null; joy.dx = joy.dy = 0; if (player.car) player.car.v = 0;
+    $('shop').hidden = false;
+  }
+  function closePanel() { uiOpen = false; $('shop').hidden = true; }
+  function pay(price, ok) {
+    if (cash < price) { toast('Փողդ չի հերիքում. պակասում է ' + money(price - cash)); return; }
+    cash -= price; sfx.coin(); ok(); writeSave();
+  }
+  function spawnOwned(park) { // your car waits at the kerb; only one of your cars is out at a time
+    const m = CAR_SHOP.find((q) => q.id === PROG.car); if (!m) return;
+    if (ownedCar && ownedCar !== player.car) { const k = cars.indexOf(ownedCar); if (k >= 0) cars.splice(k, 1); }
+    const c = makeCar(park.x, park.y, park.a, 'civ');
+    Object.assign(c, { taxi: false, lug: false, color: m.color, clean: true, max: m.max, acc: m.acc, grip: m.grip, mine: true });
+    cars.push(c); ownedCar = c;
+  }
+  function openDealer(pl) {
+    openPanel('Ավտոսրահ', 'Գնած մեքենան մնում է քոնը։ Կանչիր այն այստեղից կամ բնակարանիցդ։', CAR_SHOP.map((m) => {
+      const own = PROG.cars.includes(m.id);
+      return { label: m.name, sub: 'Մինչև ' + Math.round(m.max * 0.42) + ' կմ/ժ · արագացում ' + '★'.repeat(m.stars) + '☆'.repeat(4 - m.stars), on: PROG.car === m.id,
+        price: own ? 'կանչել' : money(m.price),
+        go: () => { const call = (msg) => { PROG.car = m.id; spawnOwned(pl.park); closePanel(); toast(msg); writeSave(); };
+          if (own) call(m.name + '-ը մուտքի մոտ է'); else pay(m.price, () => { PROG.cars.push(m.id); call('Շնորհավոր, ' + m.name + '-ը քոնն է'); }); } };
+    }));
+  }
+  function wearOutfit(id) { PROG.outfit = id; if (AV.ready) { scene.remove(playerMesh); playerMesh = playerModel(); scene.add(playerMesh); } writeSave(); }
+  function openClothes() {
+    openPanel('Հագուստի խանութ', AV.ready ? 'Ընտրիր, թե ինչ ես հագնում։ Գնածը մնում է քոնը։' : 'Հագուստը դեռ բեռնվում է, մի քիչ սպասիր։', OUTFITS.map((o) => {
+      const own = PROG.outfits.includes(o.id);
+      return { label: o.name, on: PROG.outfit === o.id, disabled: !AV.ready, price: PROG.outfit === o.id ? 'հագիդ է' : own ? 'հագնել' : money(o.price),
+        go: () => { if (own) { wearOutfit(o.id); openClothes(); } else pay(o.price, () => { PROG.outfits.push(o.id); wearOutfit(o.id); openClothes(); }); } };
+    }));
+  }
+  function openHome(pl) {
+    if (!PROG.home) return openPanel('Բնակարան', 'Վաճառվում է բնակարան։ Գնելուց հետո խաղը կսկսես այստեղից, կկարողանաս քնել մինչև առավոտ ու կանչել քո մեքենան։',
+      [{ label: 'Գնել բնակարանը', price: money(HOME_PRICE), go: () => pay(HOME_PRICE, () => { PROG.home = true; toast('Բնակարանը քոնն է'); openHome(pl); }) }]);
+    const items = [{ label: 'Քնել մինչև առավոտ', sub: 'Ժամը կդառնա 07:00', go: () => { DAY.t = 1 / 24; writeSave(); closePanel(); toast('Բարի լույս'); } }];
+    if (PROG.car) items.push({ label: 'Կանչել մեքենաս', sub: CAR_SHOP.find((m) => m.id === PROG.car).name, go: () => { spawnOwned(pl.park); closePanel(); toast('Մեքենադ մուտքի մոտ է'); } });
+    items.push({ label: 'Պահպանել', sub: 'Փողդ ու գնածներդ պահվում են նաև ինքնաբերաբար', go: () => { writeSave(); toast('Պահպանված է'); } });
+    openPanel('Քո բնակարանը', 'Խաղը սկսում ես այստեղից։', items);
+  }
+  function openRace(pl) {
+    openPanel('Մրցարշավ', 'Անցիր 6 ստուգակետով ժամանակին։ Մրցանակ՝ 2 500 ֏, գումարած 50 ֏ մնացած ամեն վայրկյանի համար։' + (PROG.raceBest ? ' Ռեկորդդ՝ ' + fmtT(PROG.raceBest) + '։' : ''),
+      [{ label: 'Սկսել', go: () => { closePanel(); startRace(pl); } }]);
+  }
+  function startRace(pl) {
+    const cps = []; let I = clamp(Math.round((pl.x - 60) / CELL), 0, N), J = clamp(Math.round((pl.y - 60) / CELL), 0, N), len = 0, px = pl.x, py = pl.y;
+    for (let k = 0; k < 6; k++) {
+      let ni = I, nj = J;
+      for (let tries = 0; tries < 60; tries++) { ni = clamp(I + Math.round(rnd(-3, 3)), 0, N); nj = clamp(J + Math.round(rnd(-3, 3)), 0, N); if (Math.abs(ni - I) + Math.abs(nj - J) >= 2 && !cps.some((q) => q.i === ni && q.j === nj)) break; }
+      I = ni; J = nj; const p = { x: ic(I), y: ic(J), i: I, j: J }; len += Math.abs(p.x - px) + Math.abs(p.y - py); px = p.x; py = p.y; cps.push(p);
+    }
+    ACT = { kind: 'race', cps: cps, k: 0, time: Math.round(len / 230 + 10), t0: time, goal: { p: cps[0], stage: 'race' } };
+    sfx.take(); toast('Գնա՛ · ' + cps.length + ' ստուգակետ');
+  }
+  function openEscape() {
+    openPanel('Փախուստ', 'Կստանաս 3 աստղ։ Կորիր ոստիկաններից 2 րոպեում ու մի բռնվիր։ Մրցանակ՝ 3 500 ֏։',
+      [{ label: 'Սկսել', go: () => { closePanel(); heat = 3; evadeT = 0; ACT = { kind: 'escape', time: 120, goal: null }; sfx.fail(); toast('Ոստիկանները քո հետևից են'); } }]);
+  }
+  function actEnd(ok, msg) { ACT = null; if (ok) sfx.coin(); else sfx.fail(); toast(msg); }
+  function actUpdate(dt) {
+    if (!ACT) return;
+    ACT.time -= dt;
+    if (ACT.kind === 'race') {
+      if (!player.car) return actEnd(false, 'Մրցարշավը ընդհատվեց՝ իջար մեքենայից');
+      const c = ACT.cps[ACT.k], tg = target();
+      if (Math.hypot(c.x - tg.x, c.y - tg.y) < 55) {
+        ACT.k++; tone(880, 1320, 0.12, 'triangle', 0.12);
+        if (ACT.k >= ACT.cps.length) {
+          const took = time - ACT.t0, prize = 2500 + Math.round(Math.max(0, ACT.time)) * 50, rec = !PROG.raceBest || took < PROG.raceBest;
+          cash += prize; if (rec) PROG.raceBest = took; writeSave();
+          return actEnd(true, 'Ավարտ՝ ' + fmtT(took) + (rec ? ' · նոր ռեկորդ' : '') + '  +' + money(prize));
+        }
+        ACT.goal.p = ACT.cps[ACT.k];
+      }
+      if (ACT.time <= 0) return actEnd(false, 'Ժամանակը սպառվեց');
+    } else if (ACT.kind === 'escape') {
+      if (heat <= 0) { cash += 3500; writeSave(); return actEnd(true, 'Փախար  +' + money(3500)); }
+      if (ACT.time <= 0) return actEnd(false, 'Չհասցրիր փախչել');
+    }
+  }
+
   // ---------- saving: money and the rented VIP table stay in this browser between visits ----------
   const SAVE_KEY = 'pinkCitySave'; let savedCash = -1, savedTable = false, saveT = 0;
   function readSave() { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return d && typeof d.cash === 'number' ? d : null; } catch (e) { return null; } }
-  function writeSave() { savedCash = cash; savedTable = vipTable; try { localStorage.setItem(SAVE_KEY, JSON.stringify({ cash: Math.round(cash), vipTable: vipTable })); } catch (e) {} }
+  function writeSave() { savedCash = cash; savedTable = vipTable; try { localStorage.setItem(SAVE_KEY, JSON.stringify({ cash: Math.round(cash), vipTable: vipTable, prog: PROG })); } catch (e) {} }
   function showSave() { const d = readSave(), has = !!d && (d.cash > 0 || d.vipTable); $('saveRow').hidden = !has; if (has) $('saveText').textContent = 'Պահպանված է՝ ' + money(d.cash) + (d.vipTable ? ' · VIP սեղան' : ''); }
   function startGame(startAtClub) {
     initAudio(); reset(); inside = !!startAtClub; vip = false; clubArm = !startAtClub; combo = 0; drinkT = 0; vipTable = false; seqT = 0;
     const sv = readSave(); if (sv) { cash = sv.cash; vipTable = !!sv.vipTable; } savedCash = cash; savedTable = vipTable;
+    Object.assign(PROG, PROG0(), (sv && sv.prog) || {}); ACT = null; ownedCar = null; closePanel(); for (const pl of PLACES) pl.arm = false;
+    const home = PLACES.find((q) => q.id === 'home'), dealer = PLACES.find((q) => q.id === 'dealer');
+    if (PROG.home && home) { player.x = home.x - 34; player.y = home.y; player.a = Math.PI; }
+    if (PROG.car) spawnOwned((PROG.home && home ? home : dealer).park);
+    if (AV.ready) { scene.remove(playerMesh); playerMesh = playerModel(); scene.add(playerMesh); }
     mode = 'play'; $('menu').hidden = true;
     if (touch) $('pad').hidden = false;
     if (startAtClub) {
@@ -1890,6 +2065,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     $('startBtn').blur(); $('clubStartBtn').blur();
   }
   $('startBtn').addEventListener('click', () => startGame(false));
+  $('shopClose').addEventListener('click', closePanel);
   $('clubStartBtn').addEventListener('click', () => { if (clubState === 2) return startGame(true); $('clubStartBtn').blur(); holdLoading('Ակումբը բեռնվում է'); ensureClub(() => { releaseLoading(); startGame(true); }); });
   $('wipeBtn').addEventListener('click', () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} showSave(); });
   window.addEventListener('pagehide', () => { if (mode === 'play') writeSave(); });
@@ -1897,12 +2073,12 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   window.addEventListener('touchstart', useTouch, { passive: true, once: true });
 
   let last = 0;
-  function frame(t) { const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t; lastDt = dt; if (!paused && !LD.hold) update(dt); draw(); hud(); requestAnimationFrame(frame); }
+  function frame(t) { const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t; lastDt = dt; if (!paused && !LD.hold && !uiOpen) update(dt); draw(); hud(); requestAnimationFrame(frame); }
   function boot() {
     try { init3d(); } catch (e) { renderer = null; }
     if (!renderer) { $('startBtn').disabled = true; $('startBtn').textContent = 'Այս սարքում 3D-ն չի աշխատում'; }
     ldTip(); setInterval(() => { if (!$('loading').hidden) ldTip(); }, 4500); setTimeout(ldClose, 30000);   // never wait more than 30 s
-    if (renderer) { loadAvatars(); loadCity(); loadExtras(); }
+    if (renderer) { buildPlaces(); loadAvatars(); loadCity(); loadExtras(); }
     if (LD.total === 0) ldClose();
     resize(); reset(); requestAnimationFrame(frame);
   }
