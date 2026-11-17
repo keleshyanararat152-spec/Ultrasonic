@@ -1,6 +1,6 @@
-# Builds the Godot port (godot/) into an Android APK on every push to the game branches.
+# Builds the Godot port (godot/) into an Android APK and a Windows .exe on every push to the game branches.
 # Download it from the run's "Artifacts" section on GitHub (Actions tab).
-name: Android APK
+name: Game builds (Android + Windows)
 
 on:
   push:
@@ -33,4 +33,15 @@ jobs:
         with:
           name: pink-city-apk
           path: godot/build/pink-city.apk
+          retention-days: 30
+      - name: Export Windows game
+        working-directory: godot
+        run: |
+          mkdir -p build/windows
+          godot --headless --verbose --export-release "Windows" build/windows/PinkCity.exe
+          ls -la build/windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pink-city-windows
+          path: godot/build/windows/
           retention-days: 30

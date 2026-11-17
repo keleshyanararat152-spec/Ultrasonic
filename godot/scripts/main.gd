@@ -203,6 +203,10 @@ func _hud() -> void:
 	var title := Label.new(); title.text = "Վարդագույն քաղաք"; title.add_theme_font_size_override("font_size", 18); title.add_theme_color_override("font_color", Color("ff7ab8"))
 	hud_speed = Label.new(); hud_speed.add_theme_font_size_override("font_size", 22)
 	box.add_child(title); box.add_child(hud_speed)
+	if not DisplayServer.is_touchscreen_available():   # on a computer: how to drive with the keyboard
+		var keys := Label.new(); keys.add_theme_font_size_override("font_size", 14); keys.add_theme_color_override("font_color", Color("a9a59c"))
+		keys.text = "W / S — գազ, արգելակ\nA / D — ղեկ\nSpace — ձեռքի արգելակ\nC — փոխել մեքենան"
+		box.add_child(keys)
 	layer.add_child(panel)
 	var btn := Button.new(); btn.text = "Փոխել մեքենան"; btn.focus_mode = Control.FOCUS_NONE
 	btn.add_theme_font_size_override("font_size", 18)
