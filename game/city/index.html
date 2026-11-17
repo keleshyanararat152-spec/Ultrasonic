@@ -1,0 +1,1640 @@
+<meta charset="utf-8">
+<title>Վարդագույն քաղաք</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Armenian:wght@400;600;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: the 3D city fills the screen, seen from behind the car; small dark instrument chips sit in
+   the corners (cash and stars left, minimap right, current job as one line under them). */
+:root {
+  color-scheme: dark;
+  --hills: #76866a;
+  --sky: #f0d2b6;
+  --pavement: #b8b0a4;
+  --asphalt: #3b3e47;
+  --paint: #d9d4c7;
+  --park: #6c9659;
+  --tree: #3f6b3a;
+  --plaza: #cdbfae;
+  --water: #6fb5c9;
+  --ink: #14161d;
+  --fg: #f1ede6;
+  --muted: #a9a59c;
+  --panel: rgba(20, 22, 29, 0.82);
+  --line: rgba(241, 237, 230, 0.16);
+  --tuff: #d98f7a;
+  --gold: #ffcf4a;
+  --go: #58d68d;
+  --alert: #ff5a5f;
+  --cop: #4d8dff;
+  --font-text: "Noto Sans Armenian", "Segoe UI", system-ui, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { background: var(--sky); color: var(--fg); font-family: var(--font-text); overflow: hidden; overscroll-behavior: none; }
+.stage { position: relative; height: 100%; width: 100%; overflow: hidden; user-select: none; -webkit-user-select: none; }
+#view, #ov { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#ov { pointer-events: none; }
+
+.hud {
+  position: absolute; inset: 0 0 auto 0; pointer-events: none;
+  display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: start;
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.stats .me { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; border: 2px solid var(--tuff); flex: none; }
+.stats .col { display: flex; flex-direction: column; gap: 4px; }
+.stats { justify-self: start; display: flex; align-items: center; gap: 10px; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.cash { font-size: 18px; font-weight: 700; }
+.stars { letter-spacing: 3px; font-size: 15px; color: var(--muted); }
+.stars b { color: var(--gold); font-weight: 400; }
+.stars.hot b { color: var(--alert); }
+.speed { font-size: 12px; color: var(--muted); }
+.side { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; }
+#map { width: 92px; height: 92px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); display: block; }
+.snd { pointer-events: auto; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font: 600 15px var(--font-data); cursor: pointer; }
+.snd.face { width: auto; padding: 0 10px; font: 600 13px var(--font-text); }
+.snd.on { background: var(--tuff); color: var(--ink); }
+.snd.off { color: var(--muted); text-decoration: line-through; }
+.job { grid-column: 1 / -1; justify-self: center; max-width: 100%; font-size: 14px; font-weight: 600; text-align: center; min-width: 0; }
+.job .t { font-family: var(--font-data); font-variant-numeric: tabular-nums; margin-left: 8px; }
+.job .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; background: var(--gold); }
+.job.deliver .dot { background: var(--go); }
+.job.late .t { color: var(--alert); }
+
+.toast, .hint {
+  position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px;
+  font-weight: 600; font-size: 14px; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis;
+}
+.toast { top: 30%; font-size: 17px; font-weight: 800; transition: opacity 300ms; white-space: normal; text-align: center; width: max-content; }
+.toast.out { opacity: 0; }
+.hint { bottom: calc(22px + env(safe-area-inset-bottom, 0px)); pointer-events: auto; cursor: pointer; }
+.hint kbd { font-family: var(--font-data); background: var(--fg); color: var(--ink); border-radius: 5px; padding: 1px 7px; margin-right: 6px; }
+
+.pad {
+  position: absolute; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  right: max(16px, env(safe-area-inset-right, 0px)); display: flex; gap: 12px; align-items: flex-end;
+}
+.pad button {
+  width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--line); background: var(--panel);
+  color: var(--fg); font: 700 13px var(--font-text); touch-action: none; cursor: pointer;
+}
+.pad button.act { width: 76px; height: 76px; border-color: var(--gold); }
+.touch .hint { bottom: calc(120px + env(safe-area-inset-bottom, 0px)); }
+.dance {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  min-width: 132px; height: 52px; border-radius: 26px; border: 2px solid #ffd3ea; background: #ff4fa3; color: var(--ink);
+  font: 800 17px var(--font-text); cursor: pointer; touch-action: none;
+}
+.touch .dance { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); height: 60px; min-width: 150px; }
+
+.overlay {
+  position: absolute; inset: 0; display: grid; place-items: center; overflow-y: auto;
+  background: rgba(20, 22, 29, 0.45);
+  padding-block: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.card { width: min(480px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px; backdrop-filter: blur(8px); }
+h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; text-wrap: balance; }
+h1 span { color: var(--tuff); }
+.card p { margin: 0; font-size: 15px; line-height: 1.55; }
+.how { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; font-size: 14px; line-height: 1.45; color: var(--muted); }
+.how b { color: var(--fg); font-weight: 600; }
+.go { align-self: flex-start; border: 0; border-radius: 10px; padding: 12px 28px; background: var(--tuff); color: var(--ink); font: 800 16px var(--font-text); cursor: pointer; }
+.go:hover { filter: brightness(1.08); }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+</style>
+
+<div class="stage" id="stage">
+  <canvas id="view" aria-label="Քաղաք"></canvas>
+  <canvas id="ov" aria-hidden="true"></canvas>
+
+  <div class="hud">
+    <div class="chip stats">
+      <div class="col">
+        <span class="cash" id="cash">0 ֏</span>
+        <span class="stars" id="stars">☆☆☆☆☆</span>
+        <span class="speed" id="speed">ոտքով</span>
+      </div>
+    </div>
+    <div class="side">
+      <button class="snd" id="pauseBtn" type="button" aria-label="Դադար">Ⅱ</button>
+      <button class="snd face" id="faceBtn" type="button">Դեմք</button>
+      <button class="snd" id="snd" type="button" aria-label="Ձայն">♪</button>
+      <canvas id="map" width="184" height="184" aria-label="Քարտեզ"></canvas>
+    </div>
+    <div class="chip job" id="job" hidden><span class="dot"></span><span id="jobText"></span><span class="t" id="jobTime"></span></div>
+  </div>
+
+  <div class="toast out" id="toast"></div>
+  <div class="hint" id="hint" hidden></div>
+
+  <button class="dance" id="danceBtn" type="button" hidden>Պարել</button>
+
+  <div class="pad" id="pad" hidden>
+    <button type="button" id="btnBrake">Արգելակ</button>
+    <button type="button" id="btnAct" class="act">Մեքենա</button>
+  </div>
+
+  <div class="overlay" id="pause" hidden>
+    <div class="card">
+      <h1><span>Դադար</span></h1>
+      <p>Խաղը կանգնած է։ Փողդ, աստղերն ու պատվերը մնում են տեղում։</p>
+      <button class="go" id="resumeBtn" type="button">Շարունակել</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="menu">
+    <div class="card">
+      <h1><span>Վարդագույն</span> քաղաք</h1>
+      <p>Բաց քաղաք՝ վարդագույն տուֆից։ Նստիր ցանկացած մեքենա, պատվերներ հասցրու, փող աշխատիր ու մի բռնվիր ոստիկաններին։</p>
+      <ul class="how">
+        <li><b>Գնալ՝</b> W և S, <b>թեքվել՝</b> A և D (կամ սլաքներ)։ Հեռախոսով՝ մատով քաշիր էկրանի վրա</li>
+        <li><b>Նստել կամ իջնել՝</b> E</li>
+        <li><b>Ձեռքի արգելակ՝</b> Space</li>
+        <li><b>Դեմքը առջևից տեսնել՝</b> C կամ «Դեմք» կոճակը</li>
+        <li><b>Դադար՝</b> P, Esc կամ Ⅱ կոճակը</li>
+        <li><b>Ակումբում՝</b> պարահրապարակում սեղմիր «Պարել» (կամ Space) ռիթմի տակ ու փող վաստակիր. բարից խմիչք առ, VIP-ում սեղան վարձիր</li>
+        <li><b>Նեոն ակումբ՝</b> քարտեզի վարդագույն կետն է, կամ սեղմիր «Սկսել ակումբից»։ Ներսում 3D բեմական պարուհիներ ու լուսային շոու կան։ Ոսկեգույն օղակը տանում է VIP սրահ։</li>
+        <li><b>Դեղին օղակում</b> վերցնում ես պատվերը, <b>կանաչում</b> հասցնում ես, քանի դեռ ժամանակը չի լրացել</li>
+        <li><b>Աստղեր՝</b> վթարներն ու ուրիշի մեքենան վերցնելը կանչում են ոստիկաններին։ Կորիր նրանց աչքից, ու աստղերը կմարեն</li>
+      </ul>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;">
+        <button class="go" id="startBtn" type="button">Սկսել քաղաքից</button>
+        <button class="go" id="clubStartBtn" type="button" style="background:#fa4e9d;color:#170c16">Սկսել ակումբից</button>
+      </div>
+      <p id="saveRow" hidden style="font-size:13px;color:var(--muted)"><span id="saveText"></span> <button id="wipeBtn" type="button" style="margin-left:8px;background:none;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:4px 10px;font:600 12px var(--font-text);cursor:pointer">Սկսել զրոյից</button></p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const cv = $('view'), mapCv = $('map'), mctx = mapCv.getContext('2d');
+  const cssv = getComputedStyle(document.documentElement), K = {};
+  ['hills', 'pavement', 'asphalt', 'paint', 'park', 'tree', 'plaza', 'water', 'ink', 'fg', 'gold', 'go', 'alert', 'cop', 'tuff'].forEach((k) => { K[k] = cssv.getPropertyValue('--' + k).trim(); });
+  const TUFF = ['#d98f7a', '#c9755f', '#e0a989', '#b8695a', '#8d5a52', '#a8a39d', '#e6b39a', '#5b5560'];
+  const CARPAINT = ['#f2f2ee', '#c9ccd1', '#c9ccd1', '#1b1d21', '#55595f', '#27405f', '#8f1d1d', '#2f5a43', '#b9a37c', '#3a3f47', '#d8d2c4', '#7a2f2a', '#3d6a8c'];
+  const PAINTS = ['#e8e4dc', '#c0392b', '#2e6f9e', '#e0a321', '#2f3640', '#4f8a5b', '#8e6bb0', '#d96f32', '#9aa3ad'];
+
+  const CELL = 520, N = 7, WS = N * CELL + 120, LANE = 28;
+  const DV = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  const ic = (i) => i * CELL + 60;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const ad = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  const money = (n) => Math.round(n).toLocaleString('en-US').replace(/,/g, ' ') + ' ֏';
+
+  // ---------- map (fixed seed, so the city is the same every time) ----------
+  let seed = 20261116;
+  const srand = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const blocks = [];
+  for (let i = 0; i < N; i++) {
+    blocks.push([]);
+    for (let j = 0; j < N; j++) {
+      const ox = i * CELL + 142, oy = j * CELL + 142, b = { type: 'b', rects: [], trees: [] };
+      const r = srand();
+      if (i === 3 && j === 3) b.type = 'plaza';
+      else if (r < 0.14) { b.type = 'park'; for (let t = 0; t < 11; t++) b.trees.push({ x: ox + 20 + srand() * 316, y: oy + 20 + srand() * 316, r: 14 + srand() * 12 }); }
+      else {
+        const lay = srand(), cells = lay < 0.22 ? [[0, 0, 356, 356]] : lay < 0.42 ? [[0, 0, 170, 356], [186, 0, 170, 356]] : lay < 0.62 ? [[0, 0, 356, 170], [0, 186, 356, 170]] : [[0, 0, 170, 170], [186, 0, 170, 170], [0, 186, 170, 170], [186, 186, 170, 170]];
+        for (const c of cells) {
+          const sx = srand() * 18, sy = srand() * 18, ex = srand() * 18, ey = srand() * 18;
+          b.rects.push({ x: ox + c[0] + sx, y: oy + c[1] + sy, w: c[2] - sx - ex, h: c[3] - sy - ey, c: TUFF[Math.floor(srand() * TUFF.length)], z: 7 + srand() * 10, d: srand() });
+        }
+      }
+      blocks[i].push(b);
+    }
+  }
+
+  function pushOut(p, r) { // keep a circle out of the buildings of its own block
+    const i = Math.floor(p.x / CELL), j = Math.floor(p.y / CELL);
+    let hit = false;
+    if (i >= 0 && j >= 0 && i < N && j < N) for (const b of blocks[i][j].rects) {
+      const cx = clamp(p.x, b.x, b.x + b.w), cy = clamp(p.y, b.y, b.y + b.h), dx = p.x - cx, dy = p.y - cy, d2 = dx * dx + dy * dy;
+      if (d2 >= r * r) continue;
+      hit = true;
+      if (d2 > 0.0001) { const d = Math.sqrt(d2); p.x += dx / d * (r - d); p.y += dy / d * (r - d); }
+      else { const l = p.x - b.x, rr = b.x + b.w - p.x, t = p.y - b.y, bb = b.y + b.h - p.y, m = Math.min(l, rr, t, bb);
+        if (m === l) p.x = b.x - r; else if (m === rr) p.x = b.x + b.w + r; else if (m === t) p.y = b.y - r; else p.y = b.y + b.h + r; }
+    }
+    if (p.x < 8) { p.x = 8; hit = true; } if (p.y < 8) { p.y = 8; hit = true; }
+    if (p.x > WS - 8) { p.x = WS - 8; hit = true; } if (p.y > WS - 8) { p.y = WS - 8; hit = true; }
+    return hit;
+  }
+  function roadPoint() { // a random spot in the middle of a street
+    const k = Math.floor(rnd(0, N + 1)), m = Math.floor(rnd(0, N)), t = ic(m) + rnd(150, 370);
+    return Math.random() < 0.5 ? { x: t, y: ic(k) } : { x: ic(k), y: t };
+  }
+
+  // ---------- sound ----------
+  let actx = null, master = null, engine = null, engGain = null, siren = null, sirGain = null, soundOn = true;
+  function initAudio() {
+    if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+    try {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      master = actx.createGain(); master.gain.value = 1; master.connect(actx.destination);
+      const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+      engine = actx.createOscillator(); engine.type = 'sawtooth'; engGain = actx.createGain(); engGain.gain.value = 0;
+      engine.connect(lp).connect(engGain).connect(master); engine.start();
+      siren = actx.createOscillator(); siren.type = 'square'; sirGain = actx.createGain(); sirGain.gain.value = 0;
+      siren.connect(sirGain).connect(master); siren.start();
+    } catch (e) { actx = null; }
+  }
+  function tone(f0, f1, dur, type, vol, delay) {
+    if (!actx) return;
+    const t = actx.currentTime + (delay || 0), o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.02);
+  }
+  const sfx = {
+    crash: () => { tone(160, 40, 0.3, 'sawtooth', 0.2); tone(90, 30, 0.25, 'square', 0.12); },
+    coin: () => { tone(880, 880, 0.09, 'triangle', 0.14); tone(1320, 1320, 0.16, 'triangle', 0.14, 0.09); },
+    take: () => tone(520, 780, 0.12, 'triangle', 0.12),
+    door: () => tone(140, 90, 0.07, 'square', 0.08),
+    fail: () => tone(300, 120, 0.4, 'triangle', 0.14),
+  };
+
+  // ---------- state ----------
+  let mode = 'menu', W = 1, H = 1, dpr = 1, time = 0;
+  let cars = [], peds = [], player, cash = 0, heat = 0, evadeT = 0, bustT = 0, crashCd = 0, job = null, toastT = 0;
+  const keys = {}, joy = { id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
+  let padBrake = false;
+
+  function makeCar(x, y, a, kind) {
+    const taxi = kind === 'civ' && Math.random() < 0.12;
+    return { x: x, y: y, a: a, v: 0, kind: kind, taxi: taxi, type: pick(['sedan', 'sedan', 'hatch', 'hatch', 'suv']), color: kind === 'police' ? '#f4f4f0' : taxi ? '#f0bd22' : pick(CARPAINT), max: kind === 'police' ? 300 : rnd(290, 350),
+      ai: null, driver: false, chase: false, cruise: rnd(95, 130), stuck: 0, ignore: 0, rev: 0, slow: 0 };
+  }
+  function nextLeg(c, I, J) {
+    let opts = [0, 1, 2, 3].filter((d) => { const x = I + DV[d][0], y = J + DV[d][1]; return x >= 0 && y >= 0 && x <= N && y <= N; });
+    if (c.ai.d >= 0 && opts.length > 1) opts = opts.filter((d) => d !== (c.ai.d + 2) % 4);
+    let d;
+    if (c.chase) { const t = target(); let best = 1e12; for (const o of opts) { const q = Math.hypot(ic(I + DV[o][0]) - t.x, ic(J + DV[o][1]) - t.y); if (q < best) { best = q; d = o; } } }
+    else d = pick(opts);
+    const r = DV[(d + 1) % 4];
+    c.ai.i = I; c.ai.j = J; c.ai.d = d; c.ai.stage = 1;
+    c.ai.wx = ic(I) + DV[d][0] * 85 + r[0] * LANE; c.ai.wy = ic(J) + DV[d][1] * 85 + r[1] * LANE;
+  }
+  function resync(c) { // head for the nearest crossroads, then follow the streets from there
+    const I = clamp(Math.round((c.x - 60) / CELL), 0, N), J = clamp(Math.round((c.y - 60) / CELL), 0, N);
+    c.ai = { i: I, j: J, d: -1, stage: 2, wx: ic(I), wy: ic(J), direct: false };
+  }
+  function spawnTraffic(kind) {
+    const c = makeCar(0, 0, 0, kind); c.driver = true; c.ai = { d: -1 };
+    nextLeg(c, Math.floor(rnd(0, N + 1)), Math.floor(rnd(0, N + 1)));
+    c.x = c.ai.wx; c.y = c.ai.wy; c.a = c.ai.d * Math.PI / 2; c.ai.direct = false;
+    return c;
+  }
+  const target = () => (player.car ? player.car : player);
+
+  function reset() {
+    cars = []; peds = []; cash = 0; heat = 0; evadeT = 0; bustT = 0; job = null;
+    player = { x: ic(3) + 96, y: ic(3) + 76, a: 0, car: null, walk: 0 };
+    cars.push(makeCar(ic(3) + 210, ic(3) + 50, 0, 'civ'));
+    for (let n = 0; n < 16; n++) { // parked along the curb
+      const d = Math.floor(rnd(0, 4)), I = Math.floor(rnd(0, N + 1)), J = Math.floor(rnd(0, N + 1));
+      if (I + DV[d][0] < 0 || J + DV[d][1] < 0 || I + DV[d][0] > N || J + DV[d][1] > N) continue;
+      const r = DV[(d + 1) % 4], t = rnd(150, 370);
+      cars.push(makeCar(ic(I) + DV[d][0] * t + r[0] * 50, ic(J) + DV[d][1] * t + r[1] * 50, d * Math.PI / 2, 'civ'));
+    }
+    for (let n = 0; n < 26; n++) cars.push(spawnTraffic('civ'));
+    cars.push(spawnTraffic('police'));
+    for (let n = 0; n < 34; n++) peds.push({ i: Math.floor(rnd(0, N)), j: Math.floor(rnd(0, N)), t: rnd(0, 1512), dir: Math.random() < 0.5 ? 1 : -1, sp: rnd(32, 50), c: pick(PAINTS), down: 0, x: 0, y: 0 });
+    newOffer();
+  }
+  function newOffer() { job = { stage: 'pickup', p: roadPoint(), label: pick(['լավաշ', 'ծաղիկներ', 'ծանրոց', 'խորոված', 'ուղևոր', 'դեղորայք', 'ծիրան']) }; }
+
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.remove('out'); toastT = 2.2; }
+  function addHeat(n) { heat = Math.min(5, heat + n); evadeT = 0; }
+
+  // ---------- driving ----------
+  function carStep(c, thr, steer, hand, dt) {
+    if (thr > 0) c.v += (c.v < 0 ? 420 : 250) * thr * dt;
+    else if (thr < 0) c.v += (c.v > 5 ? 430 : 170) * thr * dt;
+    else c.v -= c.v * 0.7 * dt;
+    if (hand) c.v -= c.v * 2.4 * dt;
+    c.v = clamp(c.v, -90, c.max);
+    c.a += steer * (hand ? 3.5 : 2.5) * clamp(c.v / 90, -1, 1) * dt;
+    const fx = Math.cos(c.a), fy = Math.sin(c.a);
+    c.x += fx * c.v * dt; c.y += fy * c.v * dt;
+    let hit = false;
+    for (const s of [15, -15]) {
+      const p = { x: c.x + fx * s, y: c.y + fy * s }, x0 = p.x, y0 = p.y;
+      if (pushOut(p, 12)) { hit = true; c.x += p.x - x0; c.y += p.y - y0; }
+    }
+    if (hit) { if (c === player.car && Math.abs(c.v) > 150 && crashCd <= 0) { sfx.crash(); crashCd = 0.5; } c.v *= Math.pow(0.02, dt); }
+    return hit;
+  }
+  function aiDrive(c, dt) {
+    const t = target(), dP = Math.hypot(t.x - c.x, t.y - c.y);
+    let tx = c.ai.wx, ty = c.ai.wy, direct = false;
+    if (c.chase && dP < 280) { tx = t.x; ty = t.y; direct = true; }
+    else if (c.ai.direct) resync(c), tx = c.ai.wx, ty = c.ai.wy;
+    c.ai.direct = direct;
+    if (!direct && Math.hypot(tx - c.x, ty - c.y) < 34) {
+      const a = c.ai, d = DV[a.d < 0 ? 0 : a.d];
+      if (a.stage === 2) nextLeg(c, a.i, a.j);
+      else if (a.stage === 1) { const r = DV[(a.d + 1) % 4]; a.stage = 0; a.wx = ic(a.i + d[0]) - d[0] * 85 + r[0] * LANE; a.wy = ic(a.j + d[1]) - d[1] * 85 + r[1] * LANE; }
+      else nextLeg(c, a.i + d[0], a.j + d[1]);
+      tx = c.ai.wx; ty = c.ai.wy;
+    }
+    const diff = ad(Math.atan2(ty - c.y, tx - c.x) - c.a);
+    let steer = clamp(diff * 2.2, -1, 1), tv = c.chase ? 285 : c.cruise;
+    if (Math.abs(diff) > 0.6) tv = Math.min(tv, 75);
+    if (!c.chase && c.ai.stage === 1) tv = Math.min(tv, 85);
+    const fx = Math.cos(c.a), fy = Math.sin(c.a);
+    if (!c.chase) {
+      let blocked = false;
+      const ahead = (o) => { const rx = o.x - c.x, ry = o.y - c.y, f = rx * fx + ry * fy; return f > 8 && f < 76 && Math.abs(rx * fy - ry * fx) < 18; };
+      for (const o of cars) if (o !== c && ahead(o)) { blocked = true; break; }
+      if (!blocked && !player.car && ahead(player)) blocked = true;
+      c.ignore -= dt;
+      if (blocked && c.ignore <= 0) { tv = 0; c.stuck += dt; if (c.stuck > 4) { c.ignore = 1.5; c.stuck = 0; } } else if (!blocked) c.stuck = 0;
+    }
+    let thr = 0;
+    if (c.rev > 0) { c.rev -= dt; thr = -1; steer = -steer; }
+    else if (tv === 0) { if (c.v > 5) thr = -1; else c.v = 0; }
+    else if (c.v < tv) thr = c.chase ? 1 : 0.6; else if (c.v > tv + 15) thr = -0.6;
+    const hit = carStep(c, thr, steer, false, dt);
+    if (c.chase || hit) { c.slow = Math.abs(c.v) < 12 ? c.slow + dt : 0; if (c.slow > 1.2) { c.rev = 0.9; c.slow = 0; } }
+  }
+
+  function enterExit() {
+    if (mode !== 'play' || paused) return;
+    if (clubDoor()) return;
+    if (player.car) {
+      const c = player.car; if (Math.abs(c.v) > 45) return;
+      const p = { x: c.x + Math.sin(c.a) * 28, y: c.y - Math.cos(c.a) * 28 }; pushOut(p, 7);
+      player.x = p.x; player.y = p.y; player.car = null; c.v = 0; sfx.door(); return;
+    }
+    let best = null, bd = 58;
+    for (const c of cars) { const d = Math.hypot(c.x - player.x, c.y - player.y); if (d < bd && c.kind !== 'police') { bd = d; best = c; } }
+    if (!best) return;
+    if (best.driver) { addHeat(1); toast('Ուրիշի մեքենան վերցրիր'); peds.push({ free: true, x: best.x, y: best.y, a: rnd(0, 6.28), sp: 70, c: pick(PAINTS), down: 0, life: 6 }); }
+    best.driver = false; best.ai = null; player.car = best; sfx.door();
+  }
+
+  function busted() {
+    const fine = Math.round(cash * 0.2 / 100) * 100;
+    cash -= fine; heat = 0; bustT = 0;
+    if (player.car) { player.car.v = 0; player.car = null; }
+    player.x = ic(3) + 96; player.y = ic(3) + 76;
+    for (const c of cars) if (c.kind === 'police') c.chase = false;
+    if (job && job.stage === 'deliver') newOffer();
+    sfx.fail(); toast(fine ? 'Բռնվեցիր, տուգանք ' + money(fine) : 'Բռնվեցիր');
+  }
+
+  function update(dt) {
+    time += dt; crashCd -= dt;
+    if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').classList.add('out'); }
+    const playing = mode === 'play';
+    if (playing && inside) { clubUpdate(dt); return; }
+
+    // input
+    let ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), iy = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+    const jm = Math.hypot(joy.dx, joy.dy);
+    if (playing && player.car) {
+      const c = player.car; let thr = -iy, steer = ix;
+      if (jm > 0.22) { steer = joy.dx; thr = clamp(-joy.dy * 1.4, -1, 1); }
+      carStep(c, thr, steer * 0.8, keys.hand || padBrake, dt);
+      player.x = c.x; player.y = c.y;
+    } else if (playing) {
+      if (jm > 0.22) { ix = joy.dx; iy = joy.dy; }
+      player.a += ix * 2.8 * dt; idleT = Math.abs(ix) > 0.1 || Math.abs(iy) > 0.1 ? 0 : idleT + dt;
+      if (Math.abs(iy) > 0.1) { const s = -iy * (iy < 0 ? 150 : 80); player.x += Math.cos(player.a) * s * dt; player.y += Math.sin(player.a) * s * dt; player.walk += dt * 10; pushOut(player, 7); }
+    }
+
+    if (playing && !player.car) { // walking into the pink ring at the club door goes in
+      const dd = Math.hypot(player.x - club.door.x, player.y - club.door.y);
+      if (dd > 26) clubArm = true; else if (dd < 13 && clubArm) { clubArm = false; clubDoor(); if (inside) return; }
+    }
+    // traffic and police
+    for (const c of cars) { if (c.ai) aiDrive(c, dt); else if (c !== player.car) c.v -= c.v * 3 * dt, carStep(c, 0, 0, false, dt); }
+    for (let a = 0; a < cars.length; a++) for (let b = a + 1; b < cars.length; b++) {
+      const p = cars[a], q = cars[b], dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);
+      if (d >= 36 || d < 0.01) continue;
+      const push = (36 - d) / 2, nx = dx / d, ny = dy / d;
+      p.x -= nx * push; p.y -= ny * push; q.x += nx * push; q.y += ny * push;
+      const rel = Math.hypot(Math.cos(p.a) * p.v - Math.cos(q.a) * q.v, Math.sin(p.a) * p.v - Math.sin(q.a) * q.v);
+      if (playing && (p === player.car || q === player.car) && rel > 95 && crashCd <= 0) {
+        const other = p === player.car ? q : p; crashCd = 0.8; sfx.crash();
+        if (!(other.kind === 'police' && other.chase)) addHeat(other.kind === 'police' ? 1.5 : 0.6);
+      }
+      p.v *= 0.55; q.v *= 0.55;
+    }
+
+    // people on the pavements
+    for (let n = peds.length - 1; n >= 0; n--) {
+      const p = peds[n];
+      if (p.down > 0) p.down -= dt;
+      else if (p.free) { p.x += Math.cos(p.a) * p.sp * dt; p.y += Math.sin(p.a) * p.sp * dt; pushOut(p, 5); p.life -= dt; if (p.life <= 0) { peds.splice(n, 1); continue; } }
+      else {
+        p.t = (p.t + p.dir * p.sp * dt + 1512) % 1512;
+        const ox = p.i * CELL + 131, oy = p.j * CELL + 131, s = Math.floor(p.t / 378), u = p.t - s * 378;
+        p.x = ox + (s === 0 ? u : s === 1 ? 378 : s === 2 ? 378 - u : 0); p.y = oy + (s === 0 ? 0 : s === 1 ? u : s === 2 ? 378 : 378 - u);
+      }
+      if (p.down <= 0) for (const c of cars) if (Math.abs(c.v) > 50 && Math.abs(c.x - p.x) < 18 && Math.abs(c.y - p.y) < 18) {
+        p.down = 2.5; if (c === player.car) { addHeat(0.8); toast('Զգույշ, մարդիկ կան'); } break;
+      }
+    }
+    if (!playing) return;
+
+    // stars
+    const tg = target(), spd = player.car ? Math.abs(player.car.v) : 0;
+    let near = false, close = false, chasing = 0;
+    for (const c of cars) if (c.kind === 'police') {
+      if (heat > 0 && !c.chase) { c.chase = true; resync(c); }
+      if (heat <= 0 && c.chase) { c.chase = false; if (c.ai.direct) resync(c); }
+      if (c.chase) { chasing++; const d = Math.hypot(c.x - tg.x, c.y - tg.y); if (d < 480) near = true; if (d < (player.car ? 75 : 46) && spd < 30) close = true; }
+    }
+    if (heat > 0) {
+      if (chasing < Math.min(4, Math.ceil(heat))) for (let t = 0; t < 20; t++) {
+        const I = Math.floor(rnd(0, N + 1)), J = Math.floor(rnd(0, N + 1)), d = Math.hypot(ic(I) - tg.x, ic(J) - tg.y);
+        if (d > 650 && d < 1500) { const c = makeCar(ic(I), ic(J), Math.atan2(tg.y - ic(J), tg.x - ic(I)), 'police'); c.driver = true; c.chase = true; resync(c); cars.push(c); break; }
+      }
+      if (near) evadeT = 0; else { evadeT += dt; if (evadeT > 6) { evadeT = 0; heat = Math.max(0, Math.ceil(heat) - 1); if (heat === 0) toast('Աստղերը մարեցին'); } }
+      bustT = close ? bustT + dt : Math.max(0, bustT - dt);
+      if (bustT > 1.5) busted();
+    }
+    if (heat === 0) { // let extra patrol cars leave once nobody is looking
+      let cops = 0; for (let n = cars.length - 1; n >= 0; n--) { const c = cars[n]; if (c.kind !== 'police') continue; cops++; if (cops > 2 && Math.hypot(c.x - tg.x, c.y - tg.y) > 900) cars.splice(n, 1); }
+    }
+
+    // jobs
+    if (job) {
+      const d = Math.hypot(job.p.x - tg.x, job.p.y - tg.y);
+      if (job.stage === 'pickup' && d < 38) {
+        let to; do { to = roadPoint(); } while (Math.hypot(to.x - job.p.x, to.y - job.p.y) < 900);
+        const len = Math.abs(to.x - job.p.x) + Math.abs(to.y - job.p.y);
+        job.stage = 'deliver'; job.p = to; job.time = len / 150 + 12; job.pay = Math.round((len * 1.6 + 600) / 100) * 100;
+        sfx.take(); toast('Վերցված է, շտապիր');
+      } else if (job.stage === 'deliver') {
+        job.time -= dt;
+        if (d < 38) { const tip = Math.round(job.time * 20 / 100) * 100; cash += job.pay + tip; sfx.coin(); toast('Հասցված է  +' + money(job.pay + tip)); newOffer(); }
+        else if (job.time <= 0) { sfx.fail(); toast('Ուշացար, պատվերը չեղարկվեց'); newOffer(); }
+      }
+    }
+
+    // engine and siren
+    if (actx) {
+      const now = actx.currentTime;
+      master.gain.setTargetAtTime(soundOn ? 1 : 0, now, 0.05);
+      engGain.gain.setTargetAtTime(player.car ? 0.035 + spd / 330 * 0.05 : 0, now, 0.08);
+      engine.frequency.setTargetAtTime(52 + spd * 0.42, now, 0.06);
+      sirGain.gain.setTargetAtTime(heat > 0 && near ? 0.02 : 0, now, 0.1);
+      siren.frequency.setValueAtTime(Math.floor(time / 0.38) % 2 ? 660 : 880, now);
+    }
+  }
+
+  // ---------- 3D view ----------
+  const T = window.THREE, SKY = '#f0d2b6';
+  let walkAmp = 0, lastWalk = 0;
+  let renderer = null, scene, cam3, marker, playerMesh, sun, sky, sunDisc, paused = false, camA = 0, camO = 0, idleT = 0, faceCam = false, lastDt = 0.016, stamp = 0;
+  const meshOf = new Map(), ov = $('ov'), octx = ov.getContext('2d');
+  const lam = (c, extra) => new T.MeshLambertMaterial(Object.assign({ color: c }, extra || {}));
+  const box = (w, h, d, mat, x, y, z) => { const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); return m; };
+
+  function init3d() {
+    renderer = new T.WebGLRenderer({ canvas: cv, antialias: true });
+    const lite = window.matchMedia('(pointer: coarse)').matches;
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+    scene = new T.Scene(); scene.background = new T.Color(SKY); scene.fog = new T.Fog(SKY, 500, 2600); setupRoots();
+    cam3 = new T.PerspectiveCamera(60, 1, 2, 5000); cam3.add(new T.PointLight(0xfff4e8, 0.22, 160)); scene.add(cam3);
+    scene.add(new T.HemisphereLight(0xdfe9ff, 0x9a8474, 0.62));
+    sun = new T.DirectionalLight(0xffdcb0, 0.9); sun.castShadow = true; scene.add(sun); scene.add(sun.target);
+    sun.shadow.mapSize.set(lite ? 1024 : 2048, lite ? 1024 : 2048); sun.shadow.bias = -0.0012; sun.shadow.normalBias = 1.2;
+    const sc = sun.shadow.camera; sc.left = -430; sc.right = 430; sc.top = 430; sc.bottom = -430; sc.near = 10; sc.far = 1800; sc.updateProjectionMatrix();
+    // sky: blue overhead fading to the warm haze the fog uses, plus a low sun
+    const skC = document.createElement('canvas'); skC.width = 4; skC.height = 256; const sg = skC.getContext('2d'), grad = sg.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#5f9bd1'); grad.addColorStop(0.3, '#a9cbe6'); grad.addColorStop(0.47, SKY); grad.addColorStop(1, SKY); sg.fillStyle = grad; sg.fillRect(0, 0, 4, 256);
+    sky = new T.Mesh(new T.SphereGeometry(4200, 24, 16), new T.MeshBasicMaterial({ map: new T.CanvasTexture(skC), side: T.BackSide, fog: false, depthWrite: false })); scene.add(sky);
+    const sdC = document.createElement('canvas'); sdC.width = sdC.height = 128; const dg = sdC.getContext('2d'), rg = dg.createRadialGradient(64, 64, 4, 64, 64, 64);
+    rg.addColorStop(0, 'rgba(255,250,235,1)'); rg.addColorStop(0.18, 'rgba(255,236,190,0.95)'); rg.addColorStop(0.4, 'rgba(255,214,150,0.25)'); rg.addColorStop(1, 'rgba(255,214,150,0)'); dg.fillStyle = rg; dg.fillRect(0, 0, 128, 128);
+    sunDisc = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(sdC), fog: false, depthWrite: false, transparent: true })); sunDisc.scale.set(900, 900, 1); scene.add(sunDisc);
+    const base = new T.Mesh(new T.PlaneGeometry(14000, 14000), lam(K.hills)); base.rotation.x = -Math.PI / 2; base.position.set(WS / 2, -1, WS / 2); scene.add(base);
+
+    // streets, zebra stripes, parks and the square are painted once onto the ground
+    const size = renderer.capabilities.maxTextureSize >= 4096 && !window.matchMedia('(pointer: coarse)').matches ? 4096 : 2048;
+    const gc = document.createElement('canvas'); gc.width = gc.height = size; const g = gc.getContext('2d'); g.scale(size / WS, size / WS);
+    g.fillStyle = K.pavement; g.fillRect(0, 0, WS, WS);
+    g.fillStyle = K.asphalt; for (let k = 0; k <= N; k++) { g.fillRect(k * CELL, 0, 120, WS); g.fillRect(0, k * CELL, WS, 120); }
+    g.strokeStyle = K.paint; g.lineWidth = 2.5; g.setLineDash([18, 22]); g.globalAlpha = 0.75; g.beginPath();
+    for (let k = 0; k <= N; k++) { g.moveTo(ic(k), 0); g.lineTo(ic(k), WS); g.moveTo(0, ic(k)); g.lineTo(WS, ic(k)); }
+    g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+    for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+      const X = i * CELL, Y = j * CELL;
+      g.fillStyle = K.asphalt; g.fillRect(X - 26, Y, 172, 120); g.fillRect(X, Y - 26, 120, 172);
+      g.fillStyle = K.paint; g.globalAlpha = 0.8;
+      for (let s = 0; s < 6; s++) { const o = 8 + s * 19; g.fillRect(X - 22, Y + o, 16, 9); g.fillRect(X + 126, Y + o, 16, 9); g.fillRect(X + o, Y - 22, 9, 16); g.fillRect(X + o, Y + 126, 9, 16); }
+      g.globalAlpha = 1;
+    }
+    for (let n = 0; n < 26000; n++) { g.fillStyle = n % 2 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)'; g.fillRect(Math.random() * WS, Math.random() * WS, 2 + Math.random() * 3, 2 + Math.random() * 3); }
+    const trunkG = new T.CylinderGeometry(2.5, 3.2, 18, 6), crownG = new T.IcosahedronGeometry(1, 0), trunkM = lam('#6b4a35'), crownM = lam(K.tree, { flatShading: true });
+    const winC = document.createElement('canvas'); winC.width = winC.height = 256; const wg = winC.getContext('2d');
+    wg.fillStyle = '#fff'; wg.fillRect(0, 0, 256, 256);
+    for (let n = 0; n < 900; n++) { wg.fillStyle = 'rgba(0,0,0,' + (0.02 + srand() * 0.05) + ')'; wg.fillRect(srand() * 256, srand() * 256, 6 + srand() * 14, 2); }   // stone courses
+    for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) {
+      const X = a * 64, Y = b * 64, r = srand();
+      wg.fillStyle = '#e9e2d6'; wg.fillRect(X + 15, Y + 11, 34, 42);                                    // frame
+      const gl = wg.createLinearGradient(0, Y + 14, 0, Y + 50); gl.addColorStop(0, r < 0.18 ? '#f2d08a' : '#6f8296'); gl.addColorStop(1, r < 0.18 ? '#d9a95c' : '#2c3644');
+      wg.fillStyle = gl; wg.fillRect(X + 18, Y + 14, 28, 36);
+      if (r > 0.7) { wg.fillStyle = 'rgba(235,228,214,0.55)'; wg.fillRect(X + 18, Y + 14, 28, 9 + srand() * 14); }   // blind
+      wg.fillStyle = '#e9e2d6'; wg.fillRect(X + 31, Y + 14, 2, 36); wg.fillRect(X + 18, Y + 30, 28, 2);
+      wg.fillStyle = 'rgba(0,0,0,0.28)'; wg.fillRect(X + 13, Y + 53, 38, 3);                          // sill shadow
+    }
+    const winT = new T.CanvasTexture(winC); winT.wrapS = winT.wrapT = T.RepeatWrapping; winT.anisotropy = 4;
+    const trimM = lam('#6d5b55'), roofM = lam('#8f8a86'), unitG = new T.BoxGeometry(1, 1, 1);
+    const mats = {};
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const b = blocks[i][j], ox = i * CELL + 142, oy = j * CELL + 142;
+      g.strokeStyle = 'rgba(20,22,29,0.25)'; g.lineWidth = 3; g.strokeRect(i * CELL + 121, j * CELL + 121, 398, 398);
+      if (b.type === 'park') {
+        g.fillStyle = K.park; g.fillRect(ox, oy, 356, 356); g.strokeStyle = K.plaza; g.lineWidth = 10; g.beginPath(); g.moveTo(ox, oy + 178); g.quadraticCurveTo(ox + 178, oy + 90, ox + 356, oy + 200); g.stroke();
+        for (const t of b.trees) {
+          const tr = new T.Mesh(trunkG, trunkM); tr.position.set(t.x, 9, t.y); tr.castShadow = true; scene.add(tr);
+          const cr = new T.Mesh(crownG, crownM); cr.scale.set(t.r, t.r * 1.15, t.r); cr.position.set(t.x, 18 + t.r * 0.8, t.y); cr.rotation.y = t.x; cr.castShadow = true; scene.add(cr);
+        }
+      } else if (b.type === 'plaza') {
+        g.fillStyle = K.plaza; g.fillRect(ox, oy, 356, 356); g.strokeStyle = K.tuff; g.lineWidth = 3;
+        for (const rr of [150, 110]) { g.beginPath(); g.arc(ox + 178, oy + 178, rr, 0, 6.2832); g.stroke(); }
+        const rim = new T.Mesh(new T.CylinderGeometry(58, 60, 5, 28), lam(K.tuff)); rim.position.set(ox + 178, 2.5, oy + 178); scene.add(rim);
+        const water = new T.Mesh(new T.CylinderGeometry(52, 52, 6, 28), lam(K.water)); water.position.set(ox + 178, 3, oy + 178); scene.add(water);
+        const jet = new T.Mesh(new T.ConeGeometry(5, 34, 8), new T.MeshBasicMaterial({ color: '#e8f6fa', transparent: true, opacity: 0.8 })); jet.position.set(ox + 178, 22, oy + 178); scene.add(jet);
+      } else for (const r of b.rects) {
+        const h = Math.round(r.z * 9), geo = new T.BoxGeometry(r.w, h, r.h), uv = geo.attributes.uv;
+        for (let v = 0; v < 24; v++) {
+          const f = Math.floor(v / 4);
+          if (f === 2 || f === 3) uv.setXY(v, 0.03, 0.03);
+          else uv.setXY(v, uv.getX(v) * Math.max(1, Math.round((f < 2 ? r.h : r.w) / 36)) / 4, uv.getY(v) * Math.max(1, Math.round(h / 34)) / 4);
+        }
+        const m = new T.Mesh(geo, mats[r.c] || (mats[r.c] = lam(r.c, { map: winT }))); m.position.set(r.x + r.w / 2, h / 2, r.y + r.h / 2); m.castShadow = m.receiveShadow = true; m.userData.rect = r; CITY.old.push(m); scene.add(m);
+        const cx = r.x + r.w / 2, cz = r.y + r.h / 2, extra = (sx, sy, sz, mat, x, y, z) => { const e = new T.Mesh(unitG, mat); e.scale.set(sx, sy, sz); e.position.set(x, y, z); e.castShadow = e.receiveShadow = true; e.userData.rect = r; CITY.old.push(e); scene.add(e); };
+        extra(r.w + 3, 3.5, r.h + 3, trimM, cx, h + 0.5, cz); extra(r.w - 4, 1, r.h - 4, roofM, cx, h + 2.4, cz);       // cornice and roof deck
+        extra(r.w + 1.5, 7, r.h + 1.5, trimM, cx, 3.5, cz);                                                           // plinth
+        if (r.w > 80 && r.h > 80) extra(22 + r.d * 20, 12, 18, trimM, cx + (r.d - 0.5) * r.w * 0.4, h + 8, cz + (0.5 - r.d) * r.h * 0.4);   // stair head on the roof
+      }
+    }
+    const tex = new T.CanvasTexture(gc); tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const ground = new T.Mesh(new T.PlaneGeometry(WS, WS), lam('#c6c6c6', { map: tex })); ground.rotation.x = -Math.PI / 2; ground.position.set(WS / 2, 0, WS / 2); ground.receiveShadow = true; scene.add(ground); CITY.ground = ground;
+
+    const spots = [], lamps = [], M4 = new T.Matrix4(), Q = new T.Quaternion(), V = new T.Vector3(), SC = new T.Vector3();
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const bx = i * CELL + 120, by = j * CELL + 120;
+      for (const t of [100, 200, 300]) { spots.push([bx + t, by + 6], [bx + t, by + 394], [bx + 6, by + t], [bx + 394, by + t]); }
+      lamps.push([bx + 7, by + 7], [bx + 393, by + 7], [bx + 7, by + 393], [bx + 393, by + 393]);
+    }
+    const inst = (geo, mat, list, fn) => cellInst(geo, mat, list, (p, n, v, sc) => { fn(p, n); v.copy(V); sc.copy(SC); });
+    const sizes = spots.map(() => 9 + srand() * 4);
+    inst(new T.CylinderGeometry(1.3, 2, 44, 6), trunkM, spots, (p) => { V.set(p[0], 22, p[1]); SC.set(1, 1, 1); });
+    inst(new T.IcosahedronGeometry(1, 1), lam('#4f7d45', { flatShading: true }), spots, (p, n) => { V.set(p[0], 42 + sizes[n], p[1]); SC.set(sizes[n] * 1.25, sizes[n], sizes[n] * 1.25); });
+    CITY.lamps = lamps; CITY.lampOld = inst(new T.CylinderGeometry(0.7, 1, 46, 6), lam('#2f3238'), lamps, (p) => { V.set(p[0], 23, p[1]); SC.set(1, 1, 1); });
+    const bulbs = inst(new T.SphereGeometry(2.4, 10, 8), new T.MeshBasicMaterial({ color: '#fff1c9' }), lamps, (p) => { V.set(p[0], 47, p[1]); SC.set(1, 1, 1); }); bulbs.forEach((b) => { b.castShadow = false; }); CITY.lampOld.push(...bulbs);
+
+    buildClub();
+    marker = new T.Mesh(new T.CylinderGeometry(34, 34, 420, 24, 1, true), new T.MeshBasicMaterial({ color: K.gold, transparent: true, opacity: 0.3, side: T.DoubleSide, depthWrite: false, fog: false }));
+    marker.visible = false; scene.add(marker);
+    playerMesh = playerModel(); scene.add(playerMesh);
+  }
+
+  const G = {}, FACE_MAP = 'data:image/jpeg;base64,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';
+  function sculptHead() { // one smooth mesh pushed into shape: long face, full cheeks, heavy jaw, brow ridge, nose, wide lips; forward is +x
+    const g = (v, m, s) => Math.exp(-((v - m) * (v - m)) / (2 * s * s));
+    const ss = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+    const h = new T.Group(), add = (m, x, y, z) => { m.position.set(x, y, z); h.add(m); return m; };
+    const skinM = lam('#d6a48f');
+
+    const geo = new T.SphereGeometry(1, 160, 120), pos = geo.attributes.position, uv = geo.attributes.uv;
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i), dy = pos.getY(i), dz = pos.getZ(i);
+      let x = dx * 3.7, y = dy * (dy < 0 ? 5.6 : 4.9), z = dz * 3.55;
+      z *= 1 + 0.17 * Math.sin(Math.PI * clamp((-dy - 0.05) / 0.8, 0, 1));           // full cheeks, heavy jaw
+      const f = ss(0.1, 0.55, dx), az = Math.abs(z);
+      const sock = g(y, 0.6, 0.36) * g(az, 1.5, 0.62), ck = g(y, -0.9, 1.0) * g(az, 2.05, 0.9);
+      const ul = g(y, -2.5, 0.17) * g(z, 0, 1.15), ll = g(y, -2.98, 0.21) * g(z, 0, 1.0);
+      let b = 0.32 * g(y, 1.3, 0.34) * g(az, 1.3, 1.1) - 0.3 * sock + 0.28 * ck;       // brow ridge, eye sockets, cheeks
+      b += ss(-1.95, -1.5, y) * (1 - ss(0.9, 1.5, y)) * g(z, 0, 0.36) * (0.25 + 1.05 * clamp((1.2 - y) / 2.7, 0, 1)); // long straight nose
+      b += 0.42 * g(y, -1.42, 0.32) * g(z, 0, 0.58) + 0.32 * g(y, -1.52, 0.24) * g(az, 0.7, 0.27);                    // rounded tip, nostrils
+      b += 0.22 * g(y, -2.75, 0.55) * g(z, 0, 1.5) + 0.3 * ul + 0.38 * ll - 0.27 * g(y, -2.74, 0.08) * g(z, 0, 1.3); // wide full mouth
+      b -= 0.1 * g(y, -2.74, 0.2) * g(az, 1.35, 0.2);                                                                // mouth corners
+      b += 0.34 * g(y, -4.7, 0.55) * g(z, 0, 1.15);                                                                  // chin
+      pos.setXYZ(i, x * (1 - 0.06 * f) + b * f, y, z);
+      // the photo is projected straight onto the front; sides and back take its plain skin-coloured edge
+      const front = dx > 0.05;
+      uv.setXY(i, front ? clamp((292 - z * 75) / 585, 0.01, 0.99) : 0.01, front ? clamp(1 - (345 - (y - 0.6) * 79) / 780, 0.01, 0.99) : 0.5);
+    }
+    geo.computeVertexNormals();
+    h.add(new T.Mesh(geo, new T.MeshLambertMaterial({ map: new T.TextureLoader().load(FACE_MAP) })));
+
+    // big dark hair: tall on top, wider than the face, a fringe swept across the forehead down to the brows
+    const hg = new T.SphereGeometry(1, 128, 80), hp = hg.attributes.position, hc = new Float32Array(hp.count * 3);
+    for (let i = 0; i < hp.count; i++) {
+      const dx = hp.getX(i), dy = hp.getY(i), dz = hp.getZ(i), a = Math.atan2(dz, dx), front = ss(0.1, 0.8, dx);
+      const line = (dx > 0 ? 0.06 + 0.36 * Math.pow(dx, 0.8) : 0.06 + 0.55 * dx) + 0.12 * dz * Math.max(0, dx) - 0.12 * g(dx, 0.25, 0.2);
+      const k = ss(line - 0.06, line + 0.1, dy), strand = Math.sin(a * 9 + dy * 10 + dz * 5) * 0.04 + Math.sin(a * 23 + dy * 17) * 0.018;
+      const r = 1 + k * (0.14 + (0.16 + 0.1 * front) * Math.max(0, dy) + strand) - (1 - k) * 0.25;
+      const fr = k * ss(0.3, 0.8, dx) * (1 - ss(line + 0.1, line + 0.5, dy));
+      hp.setXYZ(i, dx * 3.7 * r - 0.15 + 0.5 * fr, dy * 4.9 * r + 0.1 - 0.25 * fr, dz * 3.55 * r * 1.12);
+      const sh = 0.8 + strand * 7; hc[i * 3] = 0.17 * sh; hc[i * 3 + 1] = 0.135 * sh; hc[i * 3 + 2] = 0.12 * sh;
+    }
+    hg.setAttribute('color', new T.BufferAttribute(hc, 3)); hg.computeVertexNormals();
+    h.add(new T.Mesh(hg, new T.MeshLambertMaterial({ vertexColors: true })));
+
+    const ball = (r, mat, sx, sy, sz) => { const m = new T.Mesh(new T.SphereGeometry(r, 20, 14), mat); m.scale.set(sx, sy, sz); return m; };
+    for (const s of [-1, 1]) { const ear = add(ball(1, skinM, 0.5, 1.05, 0.45), -0.3, 0.05, s * 3.7); ear.rotation.y = s * 0.3; }
+    return h;
+  }
+  function playerModel() { // the walker: brown jacket with rolled sleeves over a white T-shirt, cargo trousers, boots, a watch
+    if (AV.ready) {
+      const g = avatarMesh('m07'), head = sculptHead(), neck = new T.Mesh(new T.CylinderGeometry(1.75, 2.1, 5, 14), lam('#d6a48f'));
+      g.userData.inner.traverse((o) => { if (o.isMesh && /head|opacity/.test(o.material.name)) o.visible = false; });
+      neck.position.y = -6.6; head.add(neck); head.scale.setScalar(0.31); head.traverse((o) => { if (o.isMesh) o.castShadow = true; }); g.add(head); g.userData.photoHead = head;
+      g.scale.setScalar(1.32); return g;
+    }
+    const g = humanMesh({ woman: false, noHead: true, skin: '#d6a48f', shirt: '#f2f0ea', jacket: '#8a5a36', rolled: true, pants: '#5a4f46', cargo: true, boots: true, shoe: '#7a4a2c', watch: true });
+    const head = sculptHead(); head.scale.setScalar(0.36); head.position.y = 1.95; head.traverse((o) => { if (o.isMesh) o.castShadow = true; }); g.userData.head.add(head);
+    g.scale.setScalar(1.35); return g;
+  }
+  // Car bodies are lofted from cross-sections along the length: [x, half width, bottom, top]. Forward is +x.
+  const CARS = {
+    sedan: { hull: [[-20, 7.2, 5, 8.4], [-19.4, 8.6, 3.8, 9.8], [-17, 9.2, 3.3, 10.5], [-10, 9.4, 3.2, 10.8], [0, 9.5, 3.2, 10.9], [8, 9.4, 3.2, 10.7], [15, 9.2, 3.3, 10], [18.6, 8.7, 3.6, 9.2], [19.8, 7.4, 4.6, 8]],
+      top: [[-11.5, 8.6, 10.4, 10.6], [-7, 8.5, 10.4, 15.6], [-5, 8.4, 10.4, 16.1], [4, 8.4, 10.4, 16.1], [7, 8.5, 10.4, 15.3], [12.5, 8.6, 10.4, 10.6]], wx: [-12, 12.5], wr: 4.3 },
+    hatch: { hull: [[-18.2, 7.4, 5, 9], [-17.6, 8.7, 3.8, 10.2], [-15, 9.2, 3.3, 10.7], [-8, 9.4, 3.2, 10.8], [0, 9.5, 3.2, 10.9], [8, 9.4, 3.2, 10.7], [14, 9.2, 3.3, 10], [17.2, 8.7, 3.6, 9.2], [18.3, 7.4, 4.6, 8]],
+      top: [[-17.2, 8.5, 10.5, 10.7], [-14.5, 8.4, 10.5, 14.8], [-10, 8.4, 10.5, 16.2], [3, 8.4, 10.5, 16.2], [6.5, 8.5, 10.5, 15.3], [11.5, 8.6, 10.4, 10.6]], wx: [-11.5, 11.5], wr: 4.3 },
+    suv: { hull: [[-20, 7.6, 6, 10.6], [-19.4, 8.9, 4.6, 11.8], [-17, 9.6, 4.2, 12.4], [-8, 9.8, 4.1, 12.6], [0, 9.8, 4.1, 12.6], [9, 9.8, 4.1, 12.4], [15.5, 9.6, 4.2, 11.8], [19, 9, 4.5, 10.8], [20, 7.8, 5.6, 9.6]],
+      top: [[-18.8, 8.9, 12.2, 12.4], [-17, 8.8, 12.2, 17.6], [-12, 8.8, 12.2, 18.8], [3, 8.8, 12.2, 18.8], [6.5, 8.8, 12.2, 17.8], [12, 9, 12.2, 12.4]], wx: [-12.5, 12.5], wr: 5.1 },
+  };
+  function loft(st, exp, tumble, caps) {
+    const R = 32, pos = [], idx = [];
+    for (const s of st) for (let k = 0; k < R; k++) {
+      const a = k / R * 6.2832, c = Math.cos(a), sn = Math.sin(a), ey = Math.sign(sn) * Math.pow(Math.abs(sn), 2 / exp), ez = Math.sign(c) * Math.pow(Math.abs(c), 2 / exp);
+      pos.push(s[0], (s[2] + s[3]) / 2 + ey * (s[3] - s[2]) / 2, ez * s[1] * (1 - tumble * (ey + 1) / 2));
+    }
+    for (let i = 0; i < st.length - 1; i++) for (let k = 0; k < R; k++) { const a = i * R + k, b = i * R + (k + 1) % R, c = a + R, d = b + R; idx.push(a, c, b, b, c, d); }
+    if (caps) for (const e of [0, st.length - 1]) { const s = st[e], n = pos.length / 3; pos.push(s[0], (s[2] + s[3]) / 2, 0); for (let k = 0; k < R; k++) idx.push(n, e * R + k, e * R + (k + 1) % R); }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g;
+  }
+  function carParts(type) {
+    if (G[type]) return G[type];
+    if (!G.env) { // a tiny sky-and-street cube so paint and glass pick up reflections
+      const face = (stops) => { const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'), gr = x.createLinearGradient(0, 0, 0, 32); stops.forEach((s, n) => gr.addColorStop(n / (stops.length - 1), s)); x.fillStyle = gr; x.fillRect(0, 0, 32, 32); return c; };
+      const side = face(['#7fb0da', '#cfe0ee', '#f3dcc6', '#8a7d74', '#4d4a48']);
+      G.env = new T.CubeTexture([side, side, face(['#6fa3d3', '#6fa3d3']), face(['#4d4a48', '#4d4a48']), side, side]); G.env.needsUpdate = true;
+      G.glassM = new T.MeshPhongMaterial({ color: '#141c24', envMap: G.env, reflectivity: 0.7, shininess: 140, specular: 0x8899aa, side: T.DoubleSide });
+      G.tyreM = lam('#141518'); G.darkM = lam('#191b1f'); G.archM = new T.MeshBasicMaterial({ color: '#0c0d10' }); G.plateM = lam('#eceae4');
+      G.headM = new T.MeshBasicMaterial({ color: '#fff6d8' }); G.tailM = new T.MeshBasicMaterial({ color: '#c8281e' }); G.chromeM = new T.MeshPhongMaterial({ color: '#cfd3d8', envMap: G.env, reflectivity: 0.6, shininess: 120 });
+      const rc = document.createElement('canvas'); rc.width = rc.height = 64; const r = rc.getContext('2d');   // alloy wheel face
+      r.fillStyle = '#17181b'; r.fillRect(0, 0, 64, 64); r.translate(32, 32);
+      r.fillStyle = '#c9cdd3'; r.beginPath(); r.arc(0, 0, 30, 0, 6.2832); r.fill(); r.fillStyle = '#23252a';
+      for (let n = 0; n < 5; n++) { r.rotate(6.2832 / 5); r.beginPath(); r.moveTo(5, 8); r.lineTo(12, 26); r.arc(0, 0, 26, 1.12, 0.45, true); r.lineTo(9, 5); r.closePath(); r.fill(); }
+      r.fillStyle = '#8d9299'; r.beginPath(); r.arc(0, 0, 6, 0, 6.2832); r.fill();
+      G.rimM = new T.MeshBasicMaterial({ map: new T.CanvasTexture(rc) });
+      G.paints = {}; G.box = new T.BoxGeometry(1, 1, 1);
+    }
+    const d = CARS[type], t = d.top, zt = t[2][3], xa = t[2][0], xb = t[3][0], w = t[2][1];
+    const p = G[type] = { d: d, hull: loft(d.hull, 5, 0, true), glass: loft(t, 4, 0.18, true), roofY: zt };
+    p.roof = loft([[xa - 1.3, w * 0.8, zt - 0.9, zt - 0.2], [xa, w * 0.86, zt - 0.6, zt + 0.3], [xb, w * 0.86, zt - 0.6, zt + 0.3], [xb + 1.3, w * 0.8, zt - 0.9, zt - 0.2]], 4, 0, true);
+    const xm = (xa + xb) / 2 - 0.5; p.pillar = loft([[xm - 0.6, w + 0.1, t[2][2], zt + 0.08], [xm + 0.6, w + 0.1, t[2][2], zt + 0.08]], 4, 0.18, false);
+    const h = d.hull, mid = h[4]; p.stripe = loft([[-5, mid[1] + 0.08, mid[2] + 2.2, mid[3] - 0.4], [5, mid[1] + 0.08, mid[2] + 2.2, mid[3] - 0.4]], 5, 0, false);
+    p.tyre = new T.CylinderGeometry(d.wr, d.wr, 3.4, 20); p.tyre.rotateX(Math.PI / 2); p.rim = new T.CircleGeometry(d.wr * 0.72, 20); p.arch = new T.CircleGeometry(d.wr + 1.1, 18, 0, Math.PI);
+    return p;
+  }
+  function carMesh(c) {
+    if (CARM.ready) return carModel(c);
+    const type = c.kind === 'police' || c.taxi ? 'sedan' : c.type, p = carParts(type), d = p.d, h = d.hull, n = h.length;
+    const paint = G.paints[c.color] || (G.paints[c.color] = new T.MeshPhongMaterial({ color: c.color, envMap: G.env, reflectivity: 0.2, shininess: 90, specular: 0x555555, side: T.DoubleSide }));
+    const g = new T.Group(), add = (geo, mat, x, y, z) => { const m = new T.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); m.castShadow = true; g.add(m); return m; };
+    const bx = (mat, sx, sy, sz, x, y, z) => { const m = add(G.box, mat, x, y, z); m.scale.set(sx, sy, sz); return m; };
+    add(p.hull, paint); add(p.glass, G.glassM); add(p.roof, paint); add(p.pillar, paint);
+    bx(G.darkM, 34, 1.2, 15, 0, h[4][2] - 0.2, 0);                                                    // underbody
+    for (const wx of d.wx) for (const s of [-1, 1]) {
+      add(p.tyre, G.tyreM, wx, d.wr, s * 8.25);
+      const rim = add(p.rim, G.rimM, wx, d.wr, s * 9.97); rim.castShadow = false; if (s < 0) rim.rotation.y = Math.PI;
+      const arch = add(p.arch, G.archM, wx, d.wr, s * (h[4][1] + 0.06)); arch.castShadow = false; if (s < 0) arch.rotation.y = Math.PI;
+    }
+    const nose = h[n - 2], tail = h[1];
+    for (const s of [-1, 1]) {
+      bx(G.headM, 1.6, 1.5, 4.2, nose[0] + 0.45, nose[3] - 1.5, s * 5.9).castShadow = false;                  // headlights
+      bx(G.tailM, 1.2, 1.5, 4.6, tail[0] - 0.1, tail[3] - 1.6, s * 6).castShadow = false;                     // tail lights
+      bx(paint, 1.8, 1.1, 1.5, d.top[4][0] + 3.2, d.top[4][2] + 1, s * (h[4][1] + 0.7));                      // mirrors
+      for (const dx of [-7.5, 2.5]) bx(G.chromeM, 2, 0.4, 0.3, dx, h[4][3] - 1.9, s * (h[4][1] - 0.05)).castShadow = false;   // door handles
+      for (const dx of [d.top[1][0] - 0.5, (d.top[2][0] + d.top[3][0]) / 2 - 0.5, d.top[4][0] + 2.2]) bx(G.darkM, 0.16, h[4][3] - h[4][2] - 1.8, 0.2, dx, (h[4][3] + h[4][2]) / 2 + 0.3, s * (h[4][1] - 0.02)).castShadow = false;   // door seams
+    }
+    bx(G.darkM, 0.5, 1.7, 8.5, h[n - 1][0] - 0.1, h[n - 1][2] + 1.6, 0); bx(G.chromeM, 0.4, 0.3, 9, h[n - 1][0], h[n - 1][2] + 2.6, 0);   // grille
+    bx(G.plateM, 0.3, 1.5, 5, h[n - 1][0] + 0.12, h[n - 1][2] + 0.4, 0); bx(G.plateM, 0.3, 1.5, 5, h[0][0] - 0.12, h[0][2] + 1.2, 0);       // plates
+    bx(G.darkM, 1, 1.4, 16, h[n - 1][0] - 0.9, h[n - 1][2] - 0.6, 0); bx(G.darkM, 1, 1.4, 16, h[0][0] + 0.9, h[0][2] - 0.7, 0);           // lower bumpers
+    if (c.kind === 'police') {
+      add(p.stripe, lam(K.cop, { side: T.DoubleSide }));
+      bx(G.darkM, 3, 0.8, 11, 0.5, p.roofY + 0.6, 0);
+      g.userData.l1 = bx(new T.MeshBasicMaterial({ color: '#9aa3ad' }), 2.6, 1.6, 4.6, 0.5, p.roofY + 1.6, -2.9); g.userData.l2 = bx(new T.MeshBasicMaterial({ color: '#9aa3ad' }), 2.6, 1.6, 4.6, 0.5, p.roofY + 1.6, 2.9);
+    }
+    if (c.taxi) bx(new T.MeshBasicMaterial({ color: '#fff3b8' }), 2.4, 1.7, 5.5, 0.5, p.roofY + 1.1, 0);
+    return g;
+  }
+  function personMesh(color, scale) {
+    if (!G.torso) { G.torso = new T.BoxGeometry(4.5, 11, 6); G.headG = new T.SphereGeometry(3, 8, 6); G.skin = lam('#f0c9a4'); }
+    const g = new T.Group(), b = new T.Mesh(G.torso, lam(color)), h = new T.Mesh(G.headG, G.skin);
+    b.position.y = 6.5; h.position.y = 15; b.castShadow = h.castShadow = true; g.add(b); g.add(h); g.scale.setScalar(scale || 1); return g;
+  }
+
+  // ---------- night club: a door on one building, and a room kept far outside the city ----------
+  const CX = -3000, CY = 1000, FEE = 0, VX = -3000, VY = 1700, club = { door: { x: 0, y: 0 }, dancers: [], troupe: [], tiles: [], lights: [], ball: null, people: [], decks: [], smoke: [], lasers: [], vipLasers: [], tableSet: null, posed: false };
+  let inside = false, vip = false, beatT = 0, beatN = 0, clubArm = true;
+  // ---------- people: one jointed figure used for dancers, guests, staff and pedestrians (forward is +x, feet at y = 0) ----------
+  const HG = { c: {}, m: {}, t: {}, hair: {}, head: {} }, HK = 0.37;   // HK scales the sculpted head down to body size
+  const gs = (v, m, s) => Math.exp(-((v - m) * (v - m)) / (2 * s * s)), sstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const shade = (c, k) => '#' + new T.Color(c).multiplyScalar(k).getHexString();
+  function headGeo(W) { // a face pushed out of a sphere; vertex colours tint lips, cheeks and eye sockets on top of the skin colour
+    if (HG.head[W]) return HG.head[W];
+    const geo = new T.SphereGeometry(1, 56, 42), pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
+    const LIP = W ? [0.84, 0.56, 0.58] : [0.9, 0.7, 0.7];
+    for (let i = 0; i < pos.count; i++) {
+      const dx = pos.getX(i), dy = pos.getY(i), dz = pos.getZ(i);
+      let x = dx * 3.7, y = dy * 4.9, z = dz * 3.55;
+      z *= 1 + (W ? 0.07 : 0.15) * Math.sin(Math.PI * clamp((-dy - 0.05) / 0.8, 0, 1));
+      if (dy < -0.72) y = -3.53 + (y + 3.53) * (W ? 0.86 : 0.76);
+      const f = sstep(0.1, 0.55, dx), az = Math.abs(z), sock = gs(y, 0.6, 0.36) * gs(az, 1.5, 0.62), ck = gs(y, -0.9, 1.0) * gs(az, 2.05, 0.9);
+      const ul = gs(y, -2.5, 0.17) * gs(z, 0, W ? 0.95 : 1.05), ll = gs(y, -2.98, 0.21) * gs(z, 0, W ? 0.85 : 0.92);
+      let b = (W ? 0.16 : 0.32) * gs(y, 1.3, 0.34) * gs(az, 1.3, 1.1) - 0.3 * sock + 0.22 * ck;
+      b += sstep(-1.75, -1.3, y) * (1 - sstep(0.9, 1.5, y)) * gs(z, 0, W ? 0.3 : 0.36) * (0.22 + (W ? 0.8 : 1.05) * clamp((1.2 - y) / 2.5, 0, 1));
+      b += (W ? 0.32 : 0.42) * gs(y, -1.2, 0.32) * gs(z, 0, 0.55) + (W ? 0.2 : 0.3) * gs(y, -1.32, 0.24) * gs(az, 0.66, 0.26);
+      b += 0.2 * gs(y, -2.75, 0.55) * gs(z, 0, 1.4) + (W ? 0.34 : 0.28) * ul + (W ? 0.42 : 0.36) * ll - 0.26 * gs(y, -2.74, 0.08) * gs(z, 0, 1.2);
+      b += (W ? 0.24 : 0.34) * gs(y, -3.95, 0.5) * gs(z, 0, W ? 0.9 : 1.15);
+      pos.setXYZ(i, (x * (1 - 0.06 * f) + b * f) * HK, y * HK, z * HK);
+      const lipW = sstep(0.42, 0.75, (ul + ll) * 1.15) * f, stub = W ? 0 : 0.1 * sstep(-1.5, -2.6, y) * sstep(-0.2, 0.3, dx);
+      for (let k = 0; k < 3; k++) { let c = 1; c += ([1, 0.86, 0.85][k] - c) * 0.55 * ck * f; c += ([0.86, 0.8, 0.8][k] - c) * (0.45 * sock * f + stub); c += (LIP[k] - c) * lipW; col[i * 3 + k] = c; }
+    }
+    geo.setAttribute('color', new T.BufferAttribute(col, 3)); geo.computeVertexNormals();
+    return HG.head[W] = geo;
+  }
+  function beardGeo() { // the lower face of the male head, lifted a little, with the lips left clear
+    if (HG.beard) return HG.beard;
+    const src = headGeo(false), p = src.attributes.position, idx = src.index.array, keep = [];
+    for (let i = 0; i < idx.length; i += 3) {
+      let ok = true;
+      for (let k = 0; k < 3; k++) { const v = idx[i + k], x = p.getX(v) / HK, y = p.getY(v) / HK, z = Math.abs(p.getZ(v) / HK); if (!(y < -1.55 && x > -0.4) || (z < 1.0 && y > -3.25 && y < -2.3)) ok = false; }
+      if (ok) keep.push(idx[i], idx[i + 1], idx[i + 2]);
+    }
+    const g = new T.BufferGeometry(); g.setAttribute('position', p.clone()); g.setAttribute('normal', src.attributes.normal.clone()); g.setIndex(keep); g.scale(1.035, 1.03, 1.04);
+    return HG.beard = g;
+  }
+  function hairGeo(kind) { // short all over, short sides with a tall front, or a fuller cap for long styles
+    if (HG.hair[kind]) return HG.hair[kind];
+    const geo = new T.SphereGeometry(1, 44, 30), p = geo.attributes.position, col = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const dx = p.getX(i), dy = p.getY(i), dz = p.getZ(i), a = Math.atan2(dz, dx);
+      let line, vol, top;
+      if (kind === 'short') { line = dx > 0 ? 0.14 + 0.42 * Math.pow(dx, 0.8) : 0.14 + 0.4 * dx; vol = 0.06; top = 0.06; }
+      else if (kind === 'quiff') { line = dx > 0 ? 0.12 + 0.46 * Math.pow(dx, 0.8) : 0.12 + 0.42 * dx; vol = 0.035; top = 0.26 * sstep(-0.3, 0.8, dx); }
+      else { line = (dx > 0 ? 0.04 + 0.44 * Math.pow(dx, 0.7) : 0.04 + 0.9 * dx) - 0.16 * gs(dx, 0.2, 0.25) + 0.08 * dz * Math.max(0, dx); vol = 0.1; top = 0.1; }
+      const k = sstep(line - 0.06, line + 0.1, dy), strand = Math.sin(a * 11 + dy * 9 + dz * 4) * 0.03 + Math.sin(a * 27 + dy * 15) * 0.014;
+      const r = 1 + k * (vol + top * Math.max(0, dy) + strand) - (1 - k) * 0.25;
+      p.setXYZ(i, (dx * 3.7 * r - 0.15) * HK, (dy * 4.9 * r + 0.1) * HK, dz * 3.55 * r * 1.05 * HK);
+      const sh = 0.9 + strand * 6; col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = sh;
+    }
+    geo.setAttribute('color', new T.BufferAttribute(col, 3)); geo.computeVertexNormals();
+    return HG.hair[kind] = geo;
+  }
+  function torsoGeo(W, grow, open) { // lofted bottom to top from [height, half width, back, front]; a jacket is the same shape a little larger with the front cut open
+    const key = (W ? 'w' : 'm') + grow + (open ? 'o' : '');
+    if (HG.t[key]) return HG.t[key];
+    let st = W ? [[-0.3, 2.0, -1.25, 1.25], [1.2, 1.85, -1.2, 1.25], [2.6, 1.6, -1.1, 1.15], [4.6, 1.95, -1.25, 1.45], [6.3, 2.3, -1.2, 1.2], [7.1, 1.3, -0.8, 0.8], [7.8, 0.75, -0.7, 0.7]]
+      : [[-0.3, 2.05, -1.3, 1.35], [1.5, 2.05, -1.35, 1.45], [3.6, 2.35, -1.45, 1.6], [5.6, 2.6, -1.45, 1.55], [6.6, 2.75, -1.3, 1.3], [7.3, 1.5, -0.85, 0.85], [7.9, 0.85, -0.75, 0.75]];
+    if (grow) st = st.slice(0, 6).map((s, n) => [n === 0 ? 0.5 : s[0], s[1] + grow, s[2] - grow, s[3] + grow]);
+    let g = loft(st, 3, 0, !grow); g.rotateZ(Math.PI / 2); g.rotateY(Math.PI);          // stand it up with the front on +x
+    if (open) { const p = g.attributes.position, idx = g.index.array, keep = []; for (let i = 0; i < idx.length; i += 3) { let cut = true; for (let k = 0; k < 3; k++) { const v = idx[i + k]; if (!(p.getX(v) > 0.2 && Math.abs(p.getZ(v)) < 0.85)) cut = false; } if (!cut) keep.push(idx[i], idx[i + 1], idx[i + 2]); } g.setIndex(keep); }
+    return HG.t[key] = g;
+  }
+  function humanMesh(o) {
+    if (!HG.s) { HG.s = new T.SphereGeometry(1, 14, 10); HG.box = new T.BoxGeometry(1, 1, 1); HG.collar = new T.TorusGeometry(1.12, 0.3, 6, 16, 4.4); HG.collar.rotateZ(-5.34); HG.collar.rotateX(Math.PI / 2); }
+    const mat = (c, glossy) => { const k = c + (glossy ? 'g' : ''); return HG.m[k] || (HG.m[k] = glossy ? new T.MeshPhongMaterial({ color: c, shininess: 38, specular: 0x2a2a2a, side: T.DoubleSide }) : lam(c, { side: T.DoubleSide })); };
+    const cylG = (a, b, h) => { const k = a + '_' + b + '_' + h; return HG.c[k] || (HG.c[k] = new T.CylinderGeometry(a, b, h, 12)); };
+    const g = new T.Group(), arms = [], elbows = [], legs = [], W = !!o.woman, lod = !!o.lod, sw = W ? 2.3 : 2.75, hipW = W ? 1.2 : 1.15;
+    const add = (to, geo, m, x, y, z, sx, sy, sz, cast) => { const e = new T.Mesh(geo, m); e.position.set(x, y, z); if (sx) e.scale.set(sx, sy, sz); e.castShadow = cast !== false; to.add(e); return e; };
+    const sph = (to, m, x, y, z, sx, sy, sz, cast) => add(to, HG.s, m, x, y, z, sx, sy, sz, cast), cyl = (to, m, a, b, h, x, y, z, cast) => add(to, cylG(a, b, h), m, x, y, z, 0, 0, 0, cast);
+    const skin = mat(o.skin), top = mat(o.shirt), jk = o.jacket ? mat(o.jacket, true) : null, jkDark = o.jacket ? mat(shade(o.jacket, 0.72), true) : null;
+    const lowC = o.skirt ? (o.skirtC || o.shirt) : o.pants, lower = mat(lowC), legM = o.skirt ? skin : lower, shoe = mat(o.shoe || '#1b1a1f', true), sole = mat('#151517');
+    for (const s of [-1, 1]) { // hip -> thigh -> knee -> shin -> shoe
+      const leg = new T.Group(); leg.position.set(0, 10, s * hipW); g.add(leg); legs.push(leg);
+      cyl(leg, legM, W ? 1.12 : 1.1, 0.86, 4.9, 0, -2.45, 0);
+      if (o.cargo && !lod) add(leg, HG.box, mat(shade(lowC, 0.86)), 0, -3.0, s * 0.98, 1.5, 1.9, 0.5, false);
+      const knee = new T.Group(); knee.position.y = -4.85; leg.add(knee); leg.userData.knee = knee;
+      sph(knee, legM, 0, 0, 0, 0.86, 0.84, 0.86, false); cyl(knee, legM, 0.84, o.skirt ? 0.5 : 0.66, 4.3, 0, -2.15, 0);
+      add(knee, HG.box, sole, 0.7, -4.95, 0, 3.15, 0.4, 1.5, false); sph(knee, shoe, 0.75, -4.48, 0, 1.55, 0.62, 0.74);
+      if (o.boots) cyl(knee, shoe, 0.74, 0.86, 1.6, 0, -3.85, 0, false); else sph(knee, shoe, -0.2, -4.3, 0, 0.8, 0.7, 0.72, false);
+    }
+    const body = new T.Group(); body.position.y = 10; g.add(body);
+    add(body, torsoGeo(W, 0, false), top, 0, 0, 0);
+    sph(body, lower, 0, 0.05, 0, 1.38, 1.25, hipW + 0.98);
+    if (o.skirt) cyl(body, lower, 2.0, 3.2, 5.2, 0, -2.3, 0);                        // knee length
+    else if (!lod) { const belt = cyl(body, mat('#3a2a1e', true), 2.12, 2.12, 0.55, 0, 0.35, 0, false); belt.scale.set(0.66, 1, 1); add(body, HG.box, mat('#b9b3a4', true), 1.42, 0.35, 0, 0.2, 0.5, 0.7, false); }
+    if (jk) { // open jacket over the top: body, hem band, collar, lining strips along the opening, chest pockets
+      add(body, torsoGeo(W, 0.24, true), jk, 0, 0, 0);
+      const hem = cyl(body, jkDark, sw - 0.42, sw - 0.42, 0.8, 0, 0.9, 0, false); hem.scale.set(0.72, 1, 1);
+      if (!lod) {
+        const collar = add(body, HG.collar, jk, -0.1, 7.25, 0, 1, 1.5, 1.2, false); collar.rotation.z = -0.22;
+        for (const s of [-1, 1]) { const strip = add(body, HG.box, mat('#6f7072'), 1.6, 3.0, s * 0.9, 0.14, 4.2, 0.24, false); strip.rotation.z = 0.04; add(body, HG.box, jkDark, 1.66, 4.7, s * 1.7, 0.1, 0.6, 0.95, false); }
+      }
+    }
+    for (const s of [-1, 1]) { // shoulder -> upper arm -> elbow -> forearm -> hand
+      const a = new T.Group(); a.position.set(0, 6.5, s * (sw + 0.28)); body.add(a); arms.push(a);
+      const sleeve = jk || top, longS = jk ? !o.rolled : !!o.long;
+      sph(a, sleeve, 0, -0.1, 0, jk ? 0.9 : 0.84, jk ? 0.88 : 0.84, jk ? 0.9 : 0.84, false);
+      if (jk || o.long) cyl(a, sleeve, jk ? 0.86 : 0.76, jk ? 0.76 : 0.66, 3.7, 0, -1.9, 0); else { cyl(a, skin, 0.7, 0.6, 3.7, 0, -1.9, 0); cyl(a, top, 0.8, 0.76, 1.9, 0, -0.95, 0, false); }
+      const e = new T.Group(); e.position.y = -3.75; a.add(e); elbows.push(e);
+      sph(e, longS ? sleeve : skin, 0, 0, 0, longS ? 0.74 : 0.6, longS ? 0.74 : 0.6, longS ? 0.74 : 0.6, false);
+      if (jk && o.rolled) cyl(e, jkDark, 0.84, 0.8, 0.9, 0, 0.1, 0, false);                                     // rolled-up cuff at the elbow
+      cyl(e, longS ? sleeve : skin, longS ? 0.7 : 0.58, longS ? 0.56 : 0.43, 3.2, 0, -1.65, 0);
+      if (longS && !lod) cyl(e, jk ? jkDark : top, 0.6, 0.58, 0.5, 0, -3.05, 0, false);
+      if (o.watch && s > 0 && !lod) cyl(e, mat('#232428', true), 0.52, 0.52, 0.34, 0, -2.95, 0, false);
+      sph(e, skin, 0.04, -3.75, 0, 0.3, 0.52, 0.42, false);
+      if (!lod) { sph(e, skin, 0.1, -4.42, 0, 0.24, 0.46, 0.36, false); sph(e, skin, 0.34, -3.95, -s * 0.05, 0.15, 0.32, 0.16, false); }
+    }
+    cyl(body, skin, 0.72, 0.8, 1.3, 0, 8.2, 0, false);
+    const head = new T.Group(); head.position.y = 8.7; body.add(head);
+    const u = { arms: arms, elbows: elbows, legs: legs, body: body, head: head };
+    if (!o.noHead) {
+      const face = new T.Group(); face.position.y = 1.45; head.add(face);
+      face.add(Object.assign(new T.Mesh(headGeo(W), HG.m['v' + o.skin] || (HG.m['v' + o.skin] = new T.MeshLambertMaterial({ color: o.skin, vertexColors: true }))), { castShadow: true }));
+      const hairM = HG.m['h' + o.hair] || (HG.m['h' + o.hair] = new T.MeshLambertMaterial({ color: o.hair, vertexColors: true })), hairP = mat(o.hair);
+      const style = W ? 'full' : (o.style === 1 ? 'short' : 'quiff');
+      face.add(Object.assign(new T.Mesh(hairGeo(style), hairM), { castShadow: true }));
+      const H = (x, y, z, sx, sy, sz, m) => sph(face, m || hairP, x * HK, y * HK, z * HK, sx * HK, sy * HK, sz * HK, false);
+      if (W && o.style === 1) { H(-4.3, 1.6, 0, 1.5, 1.5, 1.5); H(-5.1, -2.4, 0, 1.0, 4.4, 1.2); }                                  // ponytail
+      else if (W && o.style === 2) { H(-1.7, -1.3, 0, 2.5, 3.5, 3.95); }                                                          // bob
+      else if (W) { H(-2.7, -3.2, 0, 1.6, 5.6, 3.3); for (const s of [-1, 1]) H(-0.2, -2.6, s * 3.45, 1.0, 4.7, 0.85); }          // long
+      if (o.beard && !W) face.add(new T.Mesh(beardGeo(), hairP));
+      for (const s of [-1, 1]) {
+        H(-0.3, 0.05, s * 3.68, 0.5, 1.05, 0.45, skin);
+        if (lod) H(2.62, 0.6, s * 1.5, 0.3, 0.36, 0.5, mat('#2a1d14'));
+        else {
+          H(2.52, 0.6, s * 1.5, 0.52, 0.44, 0.6, mat('#f4efe8')); H(2.94, 0.58, s * 1.5, 0.15, 0.3, 0.3, mat(o.eye || '#4a3324')); H(3.03, 0.58, s * 1.5, 0.07, 0.14, 0.14, mat('#0c0a09'));
+          H(2.66, 0.93, s * 1.5, 0.62, 0.3, 0.84, skin); H(2.6, 0.2, s * 1.5, 0.48, 0.17, 0.66, skin);
+          const brow = add(face, HG.box, hairP, 3.42 * HK, 1.42 * HK, s * 1.5 * HK, (W ? 0.3 : 0.42) * HK, (W ? 0.2 : 0.32) * HK, 1.7 * HK, false); brow.rotation.set(s * 0.1, -s * 0.22, 0);
+        }
+      }
+    }
+    Object.assign(g.userData, u, { woman: W });
+    return g;
+  }
+  const LOOK = { skin: ['#e2b196', '#c98f6f', '#f0c7ad', '#a8704f', '#d9a892', '#8a5a40'], hair: ['#231d1b', '#3b2a20', '#5a3a22', '#b08a4e', '#7a2f2a', '#1b1a1f', '#8a8580'],
+    top: ['#f2f2ee', '#e8e4dc', '#1f2126', '#27405f', '#7d2424', '#55624a', '#9aa0a8', '#c8b38a', '#35506b', '#b85c38'], jacket: ['#8a5a36', '#2b2c30', '#3d4a3a', '#6b3a2a', '#27344a', '#8b7d6b', '#4a2f3a'],
+    pants: ['#5a4f46', '#2c3140', '#1f2126', '#3a4a66', '#6b6455', '#4a4038', '#34373d'], shoe: ['#7a4a2c', '#1b1a1f', '#f2f2ee', '#3a2a1e', '#5b5f6a'] };
+  function randomLook(woman, extra) { // an everyday outfit: often a jacket over a T-shirt, sometimes long sleeves or short, trousers or a knee-length skirt
+    const jacket = Math.random() < 0.55, skirt = woman && Math.random() < 0.3;
+    return Object.assign({ woman: woman, skin: pick(LOOK.skin), hair: pick(LOOK.hair), shirt: pick(LOOK.top), jacket: jacket ? pick(LOOK.jacket) : null, rolled: Math.random() < 0.5, long: Math.random() < 0.45,
+      pants: pick(LOOK.pants), cargo: !woman && Math.random() < 0.4, skirt: skirt, skirtC: pick(LOOK.pants), style: Math.floor(Math.random() * 3), beard: !woman && Math.random() < 0.4, boots: Math.random() < 0.4, shoe: pick(LOOK.shoe), watch: Math.random() < 0.5 }, extra || {});
+  }
+  function pedMesh(p) { const w = Math.random() < 0.5, m = AV.ready ? avatarMesh(nextAvatar(w)) : humanMesh(randomLook(w, { lod: true })); m.scale.setScalar(AV.ready ? 1.32 : 1.3); return m; }
+  function dancerMesh(color, skinC, hairC, woman, dress) { return humanMesh({ woman: true, skin: skinC, hair: hairC, shirt: color, long: !dress, skirt: true, skirtC: dress ? color : '#22202a', style: dress ? 1 : 0, shoe: '#1b1a1f' }); }
+  // poses: rotation.z swings a limb forward, rotation.x lifts it sideways
+  function walkPose(u, ph, amp) {
+    u.legs.forEach((l, k) => { const s = Math.sin(ph + k * Math.PI); l.rotation.set(0, 0, s * 0.55 * amp); l.userData.knee.rotation.z = -Math.max(0, Math.sin(ph + k * Math.PI + 1.0)) * 0.85 * amp; });
+    u.arms.forEach((a, k) => { a.rotation.set(0, 0, -Math.sin(ph + k * Math.PI) * 0.45 * amp); u.elbows[k].rotation.set(0, 0, 0.3 * amp); });
+    u.body.rotation.set(0, Math.sin(ph) * 0.06 * amp, 0);
+    if (u.joints) rigApply(u);
+  }
+  function dancePose(m, u, tt, style, energy) { // tt counts beats; returns how far the hips drop so the feet stay on the floor
+    const b = (0.5 - 0.5 * Math.cos(tt * 6.2832)) * energy, sway = Math.sin(tt * 3.1416);
+    u.legs.forEach((l, k) => { const s = k ? 1 : -1; l.rotation.set(-s * (0.06 + 0.16 * Math.max(0, sway * s)), 0, 0.3 * b); l.userData.knee.rotation.z = -0.6 * b; });
+    u.body.rotation.set(sway * 0.11, Math.sin(tt * 1.5708) * 0.3, 0.05 * b);
+    u.head.rotation.set(-sway * 0.09, Math.sin(tt * 1.5708 + 0.6) * 0.25, Math.sin(tt * 6.2832) * 0.06);
+    u.arms.forEach((a, k) => {
+      const s = k ? 1 : -1, e = u.elbows[k];
+      if (style === 0) { a.rotation.set(-s * (2.3 + 0.25 * Math.sin(tt * 6.2832 + k)), 0, 0.3 * sway); e.rotation.set(-s * 0.5 * (0.5 + 0.5 * Math.sin(tt * 6.2832)), 0, 0.3); }          // hands in the air
+      else if (style === 1) { a.rotation.set(-s * 0.25, 0, Math.sin(tt * 3.1416 + k * Math.PI) * 0.8); e.rotation.set(0, 0, 1.0 + 0.4 * Math.sin(tt * 6.2832)); }                         // swinging step
+      else if (style === 2) { a.rotation.set(-s * (k ? 2.0 + 0.3 * Math.sin(tt * 6.2832) : 0.55), 0, 0.2); e.rotation.set(s * (k ? -0.4 : 1.1), 0, k ? 0.3 : 0.9); }                        // one arm up, one on the hip
+      else { a.rotation.set(-s * (1.2 + 0.5 * Math.sin(tt * 3.1416 + k * Math.PI)), 0, 0.5); e.rotation.set(0, 0, 0.8 + 0.5 * Math.cos(tt * 3.1416 + k * Math.PI)); }                     // rolling arms
+    });
+    if (u.joints) rigApply(u);
+    return b * 1.25;
+  }
+  function talkPose(u, tt, sitting) {
+    u.legs.forEach((l) => { l.rotation.set(0, 0, sitting ? 1.5 : 0); l.userData.knee.rotation.z = sitting ? -1.5 : 0; });
+    u.body.rotation.set(Math.sin(tt * 0.5) * 0.03, 0, sitting ? 0.08 : 0.02);
+    u.head.rotation.set(0, Math.sin(tt * 0.7) * 0.4, Math.sin(tt * 2.3) * 0.07);
+    const talk = Math.sin(tt * 0.35) > 0 ? 1 : 0.2;                                 // gestures come and go
+    u.arms[0].rotation.set(0.15, 0, 0.35 + 0.2 * Math.sin(tt * 2.1) * talk); u.elbows[0].rotation.set(0, 0, 1.25 + 0.35 * Math.sin(tt * 3.3) * talk);
+    u.arms[1].rotation.set(-0.12, 0, sitting ? 0.6 : 0.3); u.elbows[1].rotation.set(0, 0, sitting ? 0.9 : 1.45 + 0.12 * Math.sin(tt * 0.9));
+  }
+
+  function buildClub() {
+    let r = null; for (const [i, j] of [[4, 3], [3, 2], [2, 3], [3, 4], [4, 4], [2, 2], [4, 2]]) if (blocks[i][j].type === 'b') { r = blocks[i][j].rects[0]; break; }
+    club.rect = r;
+    const dx = r.x + r.w / 2; club.door.x = dx; club.door.y = r.y - 10;
+    const basic = (c) => new T.MeshBasicMaterial({ color: c }), put = (m, x, y, z) => { m.position.set(x, y, z); scene.add(m); return m; };
+    put(new T.Mesh(new T.BoxGeometry(18, 26, 2), lam('#120d16')), dx, 13, r.y - 0.4);
+    put(new T.Mesh(new T.BoxGeometry(70, 1.6, 3), basic('#ff4fa3')), dx, 28, r.y - 1.2);
+    const sc = document.createElement('canvas'); sc.width = 512; sc.height = 128; const sx = sc.getContext('2d'), signT = new T.CanvasTexture(sc);
+    const paint = () => { sx.fillStyle = '#170d1c'; sx.fillRect(0, 0, 512, 128); sx.font = '800 64px "Noto Sans Armenian", sans-serif'; sx.textAlign = 'center'; sx.textBaseline = 'middle'; sx.shadowColor = '#ff4fa3'; sx.shadowBlur = 22; sx.fillStyle = '#ffd3ea'; sx.fillText('ՆԵՈՆ ԱԿՈՒՄԲ', 256, 68); sx.fillText('ՆԵՈՆ ԱԿՈՒՄԲ', 256, 68); signT.needsUpdate = true; };
+    paint(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(paint);
+    const sign = put(new T.Mesh(new T.PlaneGeometry(68, 17), new T.MeshBasicMaterial({ map: signT })), dx, 40, r.y - 1.6); sign.rotation.y = Math.PI;
+    const ring = put(new T.Mesh(new T.RingGeometry(9, 12, 28), new T.MeshBasicMaterial({ color: '#ff4fa3', side: T.DoubleSide })), dx, 0.6, club.door.y); ring.rotation.x = -Math.PI / 2; club.ring = ring;
+
+    // the room
+    const wall = new T.Mesh(new T.BoxGeometry(320, 70, 240), lam('#2a1d33', { side: T.BackSide })); wall.castShadow = wall.receiveShadow = true; put(wall, CX, 35, CY);
+    const lid = new T.Mesh(new T.BoxGeometry(340, 4, 260), lam('#120d16')); lid.castShadow = true; put(lid, CX, 73, CY);
+    const floor = new T.Mesh(new T.PlaneGeometry(320, 240), lam('#1d1524')); floor.rotation.x = -Math.PI / 2; put(floor, CX, 0.3, CY);
+    for (let a = 0; a < 6; a++) for (let b = 0; b < 5; b++) { const t = new T.Mesh(new T.PlaneGeometry(27, 27), basic('#ffffff')); t.rotation.x = -Math.PI / 2; put(t, CX - 85 + a * 29, 0.5, CY - 52 + b * 29); club.tiles.push(t); }
+    put(new T.Mesh(new T.BoxGeometry(62, 7, 210), lam('#3d2246')), CX + 126, 3.5, CY);                                    // stage
+    for (let n = 0; n < 7; n++) put(new T.Mesh(new T.BoxGeometry(1.5, 56, 6), basic(n % 2 ? '#ff4fa3' : '#35d6e6')), CX + 158.5, 34, CY - 90 + n * 30);   // neon strips behind the stage
+    put(new T.Mesh(new T.BoxGeometry(130, 13, 14), lam('#6a4630')), CX - 30, 6.5, CY - 106);                                // bar
+    for (let n = 0; n < 14; n++) put(new T.Mesh(new T.BoxGeometry(2, 6, 2), basic(['#7be0c3', '#ffcf4a', '#ff8a5c', '#9db8ff'][n % 4])), CX - 88 + n * 9, 26, CY - 117);
+    put(new T.Mesh(new T.BoxGeometry(124, 1.5, 6), lam('#3a2a22')), CX - 30, 22, CY - 116);
+    put(new T.Mesh(new T.BoxGeometry(1.5, 8, 22), basic('#58d68d')), CX - 159, 34, CY);                                      // exit sign
+    put(new T.Mesh(new T.BoxGeometry(1.5, 28, 18), lam('#120d16')), CX - 159.2, 14, CY);
+    const ringIn = put(new T.Mesh(new T.RingGeometry(9, 12, 28), new T.MeshBasicMaterial({ color: '#58d68d', side: T.DoubleSide })), CX - 142, 0.7, CY); ringIn.rotation.x = -Math.PI / 2;
+    club.ball = put(new T.Mesh(new T.IcosahedronGeometry(7, 1), new T.MeshPhongMaterial({ color: '#dfe6ee', flatShading: true, shininess: 200, specular: 0xffffff })), CX - 12, 58, CY);
+    const outfits = ['#ff4fa3', '#35d6e6', '#ffcf4a', '#b48cff', '#ff8a5c', '#7be0c3', '#f2f2ee', '#e0554f', '#4d8dff'];
+    const skins = ['#e2b196', '#c98f6f', '#f0c7ad', '#a8704f'], hairs = ['#231d1b', '#5a3a22', '#c9a15a', '#7a2f2a'];
+    for (let n = 0; n < 12; n++) { // four stage performers; other adults dance on the floor
+      const onStage = n < 4;
+      const m = dancerMesh(outfits[n % outfits.length], skins[n % skins.length], hairs[(n * 3) % hairs.length], true, n % 3 === 0);
+      m.scale.setScalar(onStage ? 1.38 : 1.29);
+      Object.assign(m.userData, {
+        x: onStage ? CX + 118 : CX - 82 + (n - 4) % 4 * 43,
+        z: onStage ? CY - 68 + n * 45 : CY - 37 + Math.floor((n - 4) / 4) * 66,
+        y: onStage ? 7 : 0,
+        ph: n * 0.81,
+        face: onStage ? Math.PI : (n % 2 ? 0.4 : 2.7),
+        stage: onStage
+      });
+      scene.add(m); club.dancers.push(m);
+    }
+    // Lounge ambience: velvet booths, spotlit steps and LED panels along the dance stage.
+    const ledPink = basic('#f0438d'), ledBlue = basic('#40cee0'), lounge = lam('#391b34');
+    for (let k=0;k<5;k++) {
+      const zz=CY-84+k*41;
+      put(new T.Mesh(new T.BoxGeometry(2,0.85,34),k%2?ledBlue:ledPink),CX+91,8,zz);
+      put(new T.Mesh(new T.BoxGeometry(2,28,3),basic('#8b4074')),CX+158,20,zz);
+    }
+    for (const side of [-1,1]) {
+      put(new T.Mesh(new T.BoxGeometry(64,6,21),lounge),CX-93,3,CY+side*87);
+      put(new T.Mesh(new T.BoxGeometry(64,16,5),lounge),CX-93,12,CY+side*97);
+      put(new T.Mesh(new T.CylinderGeometry(10,10,1.4,18),lam('#221624')),CX-30,10,CY+side*83);
+      put(new T.Mesh(new T.CylinderGeometry(1.1,1.1,9,12),lam('#986b4e')),CX-30,5.5,CY+side*83);
+    }
+    for (let n=0;n<6;n++) {
+      const zz=CY-81+n*32;
+      put(new T.Mesh(new T.BoxGeometry(2.0,15,2.0),n%2?ledPink:ledBlue),CX-158,36,zz);
+    }
+    // VIP room: a round stage with a dance troupe in stage costumes, sofas, low tables, curtains
+    const gold = basic('#ffcf4a'), velvet = lam('#5a1630'), sofa = lam('#3a1626');
+    const vr = put(new T.Mesh(new T.RingGeometry(9, 12, 28), new T.MeshBasicMaterial({ color: '#ffcf4a', side: T.DoubleSide })), CX - 60, 0.7, CY + 100); vr.rotation.x = -Math.PI / 2;
+    put(new T.Mesh(new T.BoxGeometry(26, 9, 1.5), gold), CX - 60, 34, CY + 119);
+    const vw = new T.Mesh(new T.BoxGeometry(230, 70, 170), lam('#2b1220', { side: T.BackSide })); vw.castShadow = vw.receiveShadow = true; put(vw, VX, 35, VY);
+    put(new T.Mesh(new T.BoxGeometry(250, 4, 190), lam('#120d16')), VX, 73, VY).castShadow = true;
+    const vf = new T.Mesh(new T.PlaneGeometry(230, 170), lam('#24101b')); vf.rotation.x = -Math.PI / 2; put(vf, VX, 0.3, VY);
+    put(new T.Mesh(new T.CylinderGeometry(44, 46, 6, 40), lam('#40182c')), VX + 62, 3, VY);
+    put(new T.Mesh(new T.CylinderGeometry(44.5, 44.5, 0.6, 40), gold), VX + 62, 6.1, VY);
+    put(new T.Mesh(new T.CylinderGeometry(40, 40, 0.7, 40), lam('#1d0c16')), VX + 62, 6.2, VY);
+    for (let n = 0; n < 15; n++) put(new T.Mesh(new T.CylinderGeometry(3.4, 3.4, 62, 8), velvet), VX + 112, 33, VY - 77 + n * 11);   // pleated curtain
+    for (const sy of [-1, 1]) { put(new T.Mesh(new T.BoxGeometry(110, 8, 16), sofa), VX - 45, 4, VY + sy * 75); put(new T.Mesh(new T.BoxGeometry(110, 16, 5), sofa), VX - 45, 10, VY + sy * 82); put(new T.Mesh(new T.BoxGeometry(224, 1.2, 1.5), gold), VX, 52, VY + sy * 84); }
+    for (let n = 0; n < 3; n++) for (const sy of [-1, 1]) { put(new T.Mesh(new T.CylinderGeometry(6, 6, 1, 14), lam('#1d0c16')), VX - 85 + n * 40, 9, VY + sy * 52); put(new T.Mesh(new T.CylinderGeometry(1, 1.6, 9, 8), lam('#1d0c16')), VX - 85 + n * 40, 4.5, VY + sy * 52); put(new T.Mesh(new T.SphereGeometry(1.6, 8, 6), basic('#ffe2a0')), VX - 85 + n * 40, 11, VY + sy * 52); }
+    const vx = put(new T.Mesh(new T.RingGeometry(9, 12, 28), new T.MeshBasicMaterial({ color: '#58d68d', side: T.DoubleSide })), VX - 96, 0.7, VY); vx.rotation.x = -Math.PI / 2;
+    // Gold art-deco pillars, indirect glows and a backlit ceiling in the VIP lounge.
+    for (const zy of [-60,60]) {
+      put(new T.Mesh(new T.CylinderGeometry(2.6,3.3,60,16),lam('#5c2a40')), VX+99,32,VY+zy);
+      put(new T.Mesh(new T.CylinderGeometry(3.5,3.5,3,16),gold), VX+99,62,VY+zy);
+      put(new T.Mesh(new T.BoxGeometry(100,1.3,3),gold), VX-34,65,VY+zy);
+    }
+    for (let i=0;i<7;i++) {
+      const lightBar=put(new T.Mesh(new T.BoxGeometry(2,1.5,21),basic(i%2?'#d1a1eb':'#f4a1be')),VX+100,66,VY-63+i*21);
+      lightBar.material.transparent=true;
+    }
+    const goldDown=new T.PointLight(0xffb67f,0.7,150); goldDown.position.set(VX+58,58,VY); scene.add(goldDown);
+    const clubFill=new T.PointLight(0x658aff,0.5,210);clubFill.position.set(CX+84,50,CY);scene.add(clubFill);
+    const sparkle = (c) => new T.MeshPhongMaterial({ color: c, shininess: 160, specular: 0xffffff });
+    ['#cda15c', '#a48adc', '#d7dce3', '#c65779'].forEach((c, n) => {
+      const m = dancerMesh(c, skins[n % skins.length], hairs[(n * 3) % hairs.length], true, true);
+      m.scale.setScalar(1.37);
+      m.userData.ph = n * 1.15;
+      scene.add(m); club.troupe.push(m);
+    });
+    for (const c of [0xff4fa3, 0x35d6e6, 0xffcf4a]) { const l = new T.PointLight(c, 0.65, 300); CH.club.add(l); club.lights.push(l); }
+    clubExtras();
+  }
+  // ---------- ready-made people: Microsoft Rocketbox avatars (MIT licence), loaded from models/*.txt ----------
+  // The figures above stay as the fallback; once these load, everyone is swapped for a textured, skinned model driven by the same poses.
+  const AV = { src: {}, men: ['m02', 'm04', 'm06', 'm07', 'm08', 'm10', 'm12', 'm16'], women: ['f01', 'f02', 'f05', 'f07', 'f08', 'f13', 'f15', 'f17'], extra: ['m03', 'm17'], ready: false, wi: 0, mi: 0, K: 22.3 / 1.8 };
+  const AVM = new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), -Math.PI / 2), AVMi = AVM.clone().invert(), _aq = new T.Quaternion();
+  function loadAvatars() {
+    if (!T.GLTFLoader || !T.SkeletonUtils || location.protocol === 'file:') return;
+    const all = AV.men.concat(AV.women, AV.extra), loader = new T.GLTFLoader(); let left = all.length, failed = false;
+    const got = (name, g) => {
+      g.scene.traverse((o) => { if (o.isMesh) { const m = o.material; if (m.map) m.map.encoding = T.LinearEncoding; o.material = new T.MeshLambertMaterial({ map: m.map, skinning: true, alphaTest: m.alphaTest || 0, side: m.side }); o.material.name = m.name; o.castShadow = true; } });
+      AV.src[name] = g.scene; if (!--left && !failed) { AV.ready = true; swapPeople(); }
+    };
+    // each model is a binary glTF stored as base64 text
+    all.forEach((name) => fetch('models/' + name + '.txt').then((r) => { if (!r.ok) throw new Error(name); return r.text(); }).then((txt) => {
+      const bin = atob(txt.trim()), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      loader.parse(buf.buffer, '', (g) => got(name, g), () => { failed = true; });
+    }).catch(() => { failed = true; }));
+  }
+  function avatarMesh(name) { // a clone with its own skeleton, turned to face +x and sized like the fallback figure
+    const inner = T.SkeletonUtils.clone(AV.src[name]), g = new T.Group(), B = {}; inner.rotation.y = Math.PI / 2; inner.scale.setScalar(AV.K); g.add(inner);
+    inner.traverse((o) => { if (o.isBone) B[o.name] = o; }); g.updateMatrixWorld(true);
+    const rootQi = inner.getWorldQuaternion(new T.Quaternion()).invert(), id = new T.Quaternion(), joints = [];
+    const mq = (b) => rootQi.clone().multiply(b.getWorldQuaternion(new T.Quaternion())), mp = (b) => inner.worldToLocal(b.getWorldPosition(new T.Vector3()));
+    // each joint keeps its rest pose; a pose is given in the figure's own axes and converted into the bone's frame
+    const joint = (b, off, fr) => { const C = mq(b), j = { bone: b, rest: b.quaternion.clone(), C: C, Ci: C.clone().invert(), off: off || id, fr: fr || id, fri: (fr || id).clone().invert(), rotation: new T.Euler(), userData: {} }; joints.push(j); return j; };
+    const arms = [], elbows = [], legs = [];
+    ['L', 'R'].forEach((s, k) => {
+      const ua = B['Bip01_' + s + '_UpperArm'], fa = B['Bip01_' + s + '_Forearm'], hand = B['Bip01_' + s + '_Hand'];
+      const off = new T.Quaternion().setFromUnitVectors(mp(fa).sub(mp(ua)).normalize(), new T.Vector3(k ? -0.13 : 0.13, -1, 0.03).normalize());   // lower the arms from the A-pose
+      arms.push(joint(ua, off)); const e = joint(fa, null, off); e.hand = hand; elbows.push(e);
+      const leg = joint(B['Bip01_' + s + '_Thigh']); leg.userData.knee = joint(B['Bip01_' + s + '_Calf']); legs.push(leg);
+    });
+    Object.assign(g.userData, { arms: arms, elbows: elbows, legs: legs, body: joint(B.Bip01_Spine1), head: joint(B.Bip01_Head), joints: joints, avatar: name, woman: name[0] === 'f', headBone: B.Bip01_Head, inner: inner });
+    rigApply(g.userData);
+    return g;
+  }
+  function rigApply(u) {
+    for (const j of u.joints) {
+      _aq.setFromEuler(j.rotation).premultiply(AVM).multiply(AVMi).premultiply(j.fri).multiply(j.fr).multiply(j.off);
+      j.bone.quaternion.copy(j.rest).multiply(j.Ci).multiply(_aq).multiply(j.C);
+    }
+  }
+  function avatarGlass(m, c) { const h = m.userData.elbows[1].hand, gl = new T.Mesh(new T.CylinderGeometry(0.42, 0.34, 1.5, 8), new T.MeshBasicMaterial({ color: c })); gl.scale.setScalar(1 / AV.K); if (h.children[0]) gl.position.copy(h.children[0].position).multiplyScalar(0.9); h.add(gl); }
+  const nextAvatar = (woman) => woman ? AV.women[AV.wi++ % AV.women.length] : AV.men[AV.mi++ % AV.men.length];
+  function swapPeople() { // replace every fallback figure that is already in the world
+    const swap = (old, name) => { const a = avatarMesh(name); a.position.copy(old.position); a.rotation.copy(old.rotation); a.scale.setScalar(1.32); for (const k of ['x', 'z', 'y', 'ph', 'face', 'stage']) if (k in old.userData) a.userData[k] = old.userData[k]; if (old.userData.glass) avatarGlass(a, old.userData.glass); scene.remove(old); scene.add(a); return a; };
+    club.dancers = club.dancers.map((m) => swap(m, nextAvatar(true))); club.troupe = club.troupe.map((m) => swap(m, nextAvatar(true)));
+    club.people.forEach((p) => { p.m = swap(p.m, p.role === 'guard' ? 'm03' : p.role === 'dj' ? 'm17' : p.role === 'tender' ? 'm08' : nextAvatar(p.m.userData.woman)); p.sc = 1.46; });
+    for (const [k, m] of meshOf) if (m.userData.legs) { scene.remove(m); meshOf.delete(k); }
+    scene.remove(playerMesh); playerMesh = playerModel(); scene.add(playerMesh); club.posed = false;
+  }
+
+  // ---------- streaming: the city is split into cells, and only cells that are near and in view are attached to the scene ----------
+  // The club is a separate root that is attached only while the player is inside it; the city is detached then.
+  const CH = { cells: [], dyn: null, city: null, club: null, real: null, cityOn: true, clubOn: false, VIEW: window.matchMedia('(pointer: coarse)').matches ? 1600 : 2300 };
+  const _fr = new T.Frustum(), _pm = new T.Matrix4(), _sp = new T.Sphere(new T.Vector3(), 950);
+  function setupRoots() {
+    CH.city = new T.Group(); CH.club = new T.Group(); CH.dyn = new T.Group(); CH.city.add(CH.dyn);
+    CH.real = scene.add.bind(scene); CH.drop = scene.remove.bind(scene); CH.real(CH.city);
+    for (let i = 0; i <= N; i++) { CH.cells.push([]); for (let j = 0; j <= N; j++) { const g = new T.Group(); g.userData = { cx: i * CELL + 260, cz: j * CELL + 260, on: true, near: true, fz: 0, manual: [] }; CH.cells[i].push(g); CH.city.add(g); } }
+    scene.add = (o) => { route(o); return scene; };
+    scene.remove = (o) => { if (o.parent === scene) CH.drop(o); else if (o.parent) o.parent.remove(o); return scene; };
+  }
+  function route(o, ci, cj) { // decide where a new object lives: scene, club, a city cell, or the always-on group
+    if (o.isCamera || (o.isLight && !o.isPointLight) || o === playerMesh) return CH.real(o);
+    if (o.position.x < -1500) return CH.club.add(o);
+    if (ci === undefined) {
+      const geo = o.isMesh && o.geometry, big = geo && (geo.boundingSphere || (geo.computeBoundingSphere(), geo.boundingSphere)).radius * Math.max(o.scale.x, o.scale.y, o.scale.z) > 520;
+      if ((o.position.x === 0 && o.position.z === 0) || big || o.userData.legs || o.isSprite || o.isPointLight) return CH.dyn.add(o);
+      ci = clamp(Math.floor(o.position.x / CELL), 0, N); cj = clamp(Math.floor(o.position.z / CELL), 0, N);
+    } else { o.frustumCulled = false; CH.cells[ci][cj].userData.manual.push(o); }
+    CH.cells[ci][cj].add(o);
+  }
+  function cellInst(geo, mat, list, fn, cast) { // one instanced mesh per cell instead of one for the whole city
+    const by = {}, out = [], M4 = new T.Matrix4(), Q = new T.Quaternion(), V = new T.Vector3(), SC = new T.Vector3();
+    list.forEach((p, n) => { const k = clamp(Math.floor(p[0] / CELL), 0, N) + '_' + clamp(Math.floor(p[1] / CELL), 0, N); (by[k] || (by[k] = [])).push(n); });
+    for (const k in by) {
+      const ids = by[k], m = new T.InstancedMesh(geo, mat, ids.length), ij = k.split('_');
+      ids.forEach((n, q) => { SC.set(1, 1, 1); fn(list[n], n, V, SC); M4.compose(V, Q, SC); m.setMatrixAt(q, M4); });
+      m.castShadow = cast !== false; route(m, +ij[0], +ij[1]); out.push(m);
+    }
+    return out;
+  }
+  function shadowLod(m, near) { // far cars and people stop casting shadows
+    if (m.userData.near === near) return; m.userData.near = near;
+    m.traverse((c) => { if (c.isMesh) { if (c.userData.cs === undefined) c.userData.cs = c.castShadow; c.castShadow = c.userData.cs && near; } });
+  }
+  function streamCity() {
+    const play = mode === 'play', inCity = !(play && inside), inClub = play && inside;
+    if (inCity !== CH.cityOn) { CH.cityOn = inCity; if (inCity) CH.real(CH.city); else scene.remove(CH.city); }
+    if (inClub !== CH.clubOn) { CH.clubOn = inClub; if (inClub) CH.real(CH.club); else scene.remove(CH.club); sun.visible = !inClub; }   // no sun indoors, so no shadow pass either
+    if (!inCity) return;
+    const view = play ? CH.VIEW : 4200; scene.fog.far = view * 0.98;
+    cam3.updateMatrixWorld(); _fr.setFromProjectionMatrix(_pm.multiplyMatrices(cam3.projectionMatrix, cam3.matrixWorldInverse));
+    for (const row of CH.cells) for (const g of row) {
+      const u = g.userData, d = Math.hypot(u.cx - cam3.position.x, u.cz - cam3.position.z);
+      const on = d < view && (d < 800 || (_sp.center.set(u.cx, 260, u.cz), _fr.intersectsSphere(_sp)));
+      if (on !== u.on) { u.on = on; if (on) CH.city.add(g); else CH.city.remove(g); }
+      if (!on) continue;
+      if (u.fz !== g.children.length) { u.fz = g.children.length; g.traverse((c) => { if (c !== g && c.matrixAutoUpdate) { c.updateMatrix(); c.matrixAutoUpdate = false; } }); g.updateMatrixWorld(true); }   // static: fix matrices once
+      const close = d < 900; if (close !== u.close) { u.close = close; for (const o of u.manual) if (o.userData.lod) o.visible = (o.userData.lod === 'near') === close; }   // detailed lanterns only up close
+      const near = d < 1100;      // only nearby cells throw shadows
+      if (near !== u.near || u.mz !== u.manual.length) { u.near = near; u.mz = u.manual.length; for (const o of u.manual) { if (o.userData.caster === undefined) o.userData.caster = o.castShadow; o.castShadow = o.userData.caster && near; } }
+    }
+  }
+
+  // ---------- ready-made city pieces: baked apartment facades, a tower model, and road materials (see CREDITS.md) ----------
+  // Loaded after start; until then, and if loading fails, the generated buildings and painted ground stay.
+  const CITY = { old: [], ground: null, up: false, SUN: { x: -0.6, y: 0.62, z: -0.45 } }, CURB = 2.6;
+  const groundY = (x, y) => CITY.up && x > 120 && y > 120 && x < WS && y < WS && x % CELL >= 120 && y % CELL >= 120 ? CURB : 0;   // pavements are raised
+  function loadCity() {
+    if (location.protocol === 'file:' || !T.GLTFLoader) return;
+    const names = ['facade1', 'facade2', 'roof', 'asphalt', 'paving', 'curb'], tx = {}, TL = new T.TextureLoader(); let left = names.length + 1, bad = false, tower = null;
+    const done = () => { if (!--left && !bad) upgradeCity(tx, tower); };
+    names.forEach((n) => TL.load('tex/' + n + '.jpg', (t) => { t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 8; tx[n] = t; done(); }, undefined, () => { bad = true; }));
+    fetch('models/tower.txt').then((r) => { if (!r.ok) throw new Error('tower'); return r.text(); }).then((txt) => {
+      const bin = atob(txt.trim()), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      new T.GLTFLoader().parse(buf.buffer, '', (g) => { g.scene.traverse((o) => { if (o.isMesh) tower = o; }); done(); }, () => { bad = true; });
+    }).catch(() => { bad = true; });
+  }
+  function upgradeCity(tx, tower) {
+    for (const m of CITY.old) if (m.userData.rect !== club.rect) scene.remove(m);
+    // apartment blocks: four walls each showing a window of the baked facade at true scale, merged into one mesh per facade
+    const FULL = 390, WIDE = 562, TINT = [[1, 1, 1], [1, 0.93, 0.86], [1, 0.86, 0.82], [0.9, 0.92, 0.96], [0.97, 0.9, 0.78]];
+    const W = {}, bucket = (i, j, kind) => W[i + '_' + j + '_' + kind] || (W[i + '_' + j + '_' + kind] = { p: [], u: [], c: [], n: [], i: i, j: j, kind: kind }), towers = [];
+    const quad = (o, a, b, c, d, uv, col, nrm) => { for (const k of [0, 1, 2, 0, 2, 3]) { const v = [a, b, c, d][k]; o.p.push(v[0], v[1], v[2]); o.u.push(uv[k][0], uv[k][1]); o.c.push(col[0], col[1], col[2]); o.n.push(nrm[0], nrm[1], nrm[2]); } };
+    let n = 0;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) for (const r of blocks[i][j].rects) {
+      if (r === club.rect) continue; n++;
+      if (r.d > 0.84 && Math.abs(r.w - r.h) < 70) { towers.push(r); continue; }
+      const f = [1, 0.77, 0.62, 0.85][Math.floor(r.z) % 4], Hh = FULL * f, col = TINT[Math.floor(r.d * 97) % TINT.length], o = bucket(i, j, n % 2);
+      const x0 = r.x, x1 = r.x + r.w, z0 = r.y, z1 = r.y + r.h, side = (ax, az, bx, bz, nrm, seed) => { const L = Math.hypot(bx - ax, bz - az), du = Math.min(1, L / WIDE), u0 = (1 - du) * ((r.d * 7 + seed * 0.37) % 1); quad(o, [ax, 0, az], [bx, 0, bz], [bx, Hh, bz], [ax, Hh, az], [[u0, 0], [u0 + du, 0], [u0 + du, f], [u0, f]], col, nrm); };
+      side(x0, z1, x1, z1, [0, 0, 1], 1); side(x1, z1, x1, z0, [1, 0, 0], 2); side(x1, z0, x0, z0, [0, 0, -1], 3); side(x0, z0, x0, z1, [-1, 0, 0], 4);
+      quad(bucket(i, j, 2), [x0, Hh, z1], [x1, Hh, z1], [x1, Hh, z0], [x0, Hh, z0], [[0, 0], [1, 0], [1, 1], [0, 1]], col, [0, 1, 0]);
+    }
+    const mesh = (o, map) => { const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(o.p, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(o.u, 2)); g.setAttribute('color', new T.Float32BufferAttribute(o.c, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(o.n, 3)); const m = new T.Mesh(g, map); m.castShadow = m.receiveShadow = true; route(m, o.i, o.j); };
+    const bm = [tx.facade1, tx.facade2, tx.roof].map((t) => new T.MeshLambertMaterial({ map: t, vertexColors: true })); for (const k in W) mesh(W[k], bm[W[k].kind]);
+    if (tower.material.map) tower.material.map.encoding = T.LinearEncoding;
+    const twM = new T.MeshLambertMaterial({ map: tower.material.map });
+    for (const r of towers) { const m = new T.Mesh(tower.geometry, twM); m.position.set(r.x + r.w / 2, 0, r.y + r.h / 2); m.scale.set(r.w / 7.38, (620 + r.z * 12) / 20, r.h / 8.35); m.castShadow = m.receiveShadow = true; scene.add(m); }
+
+    // streets: tiled asphalt, markings on a transparent layer, raised pavements with stone kerbs
+    tx.asphalt.repeat.set(WS / 96, WS / 96); CITY.ground.material = lam('#c9c9c9', { map: tx.asphalt });
+    const size = renderer.capabilities.maxTextureSize >= 4096 && !window.matchMedia('(pointer: coarse)').matches ? 4096 : 2048, mc = document.createElement('canvas'); mc.width = mc.height = size; const g = mc.getContext('2d'); g.scale(size / WS, size / WS);
+    g.strokeStyle = '#ecebe6'; g.lineWidth = 2.6; g.setLineDash([20, 24]); g.beginPath(); for (let k = 0; k <= N; k++) { g.moveTo(ic(k), 0); g.lineTo(ic(k), WS); g.moveTo(0, ic(k)); g.lineTo(WS, ic(k)); } g.stroke();
+    g.setLineDash([]); g.lineWidth = 2.2; g.beginPath(); for (let k = 0; k <= N; k++) for (const e of [7, 113]) { g.moveTo(k * CELL + e, 0); g.lineTo(k * CELL + e, WS); g.moveTo(0, k * CELL + e); g.lineTo(WS, k * CELL + e); } g.stroke();   // solid edge lines
+    for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) { const X = i * CELL, Y = j * CELL; g.clearRect(X - 30, Y - 30, 180, 180); g.fillStyle = '#ecebe6'; for (let s = 0; s < 6; s++) { const o = 8 + s * 19; g.fillRect(X - 24, Y + o, 18, 9); g.fillRect(X + 126, Y + o, 18, 9); g.fillRect(X + o, Y - 24, 9, 18); g.fillRect(X + o, Y + 126, 9, 18); } }
+    const mt = new T.CanvasTexture(mc); mt.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const marks = new T.Mesh(new T.PlaneGeometry(WS, WS), new T.MeshLambertMaterial({ map: mt, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })); marks.rotation.x = -Math.PI / 2; marks.position.set(WS / 2, 0.12, WS / 2); marks.receiveShadow = true; scene.add(marks);
+    tx.paving.repeat.set(7, 7); tx.curb.repeat.set(9, 0.12);
+    const slabG = new T.BoxGeometry(400, CURB, 400), kerb = lam('#d0d0d0', { map: tx.curb }), pave = lam('#cfcfcf', { map: tx.paving }), pale = lam('#e6dccb', { map: tx.paving }), lawnG = new T.PlaneGeometry(352, 352), lawn = lam(K.park);
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const b = blocks[i][j], top = b.type === 'plaza' ? pale : pave, slab = new T.Mesh(slabG, [kerb, kerb, top, top, kerb, kerb]); slab.position.set(i * CELL + 320, CURB / 2, j * CELL + 320); slab.receiveShadow = true; scene.add(slab);
+      if (b.type === 'park') { const l = new T.Mesh(lawnG, lawn); l.rotation.x = -Math.PI / 2; l.position.set(i * CELL + 320, CURB + 0.08, j * CELL + 320); l.receiveShadow = true; scene.add(l); }
+    }
+    if (club.ring) { club.ring.position.y = CURB + 0.5; club.ring.updateMatrix(); club.ring.updateMatrixWorld(true); }
+    CITY.SUN = { x: -0.36, y: 0.86, z: -0.3 }; CITY.up = true;      // tall blocks: a higher sun keeps the streets lit
+  }
+
+  const CLUBMAP = { x0: -10.5, z0: -20.5, c: 0.25, nx: 84, nz: 156, d: "                                                                                                            gggg                            gggg                                                                                                                               NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                      NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                                                      NNNNNNNNNNNNNN                                                                      NNNNNNNNNNNNNN                                                                      NNNNNNNNNNNNNN                                                                      NNNNNNNNNNNNNN                                                                      NNNNNNNNNNNNN                                                                       NNNNNNNNNNNNN                                                                       NNNNNNNNNNNNNN                                                                      NNNNNNNNNNNNNN                                                                      NNNNNNNNNNNNNN                                                                      LLLLLLLLLLLLLL                                                                      JJJJJJJJJJJJJJ                                                                      JJJJJJJJJJJJJJ                                                                      HHHHHHHHHHHHHH                                                                      EEEEEEEEEEEEEE                                                                      CCCCCCCCCCCCCC                                                                      CCCCCCCCCCCCCC                                                                      AAAAAAAAAAAAAA                                                                      ??????????????                                                                      ??????????????                                                                      ??????????????                                                                      ??????????????                                                                      ??????????????                                                                      ??????????????                                                                      ??????????????                                                                      ?????????????                                                                       ?????????????                                                                       ??????????????                                                                      ??????????????                                                                      ??????????????                                                                      ??????????????                                                                      ??????????????                                                                      ??????????????                                                                      ??????????????                                                     ???????          ??????????????          ???????                                    ???????? ?????????????????????????????? ????????                                    ???????  ??????????????????????????????  ???????                                    ??????? ???????????????????????????????? ???????                                    ??????  ????????????????????????????????  ??????                                    ?????  ??????????????????????????????????  ?????                                    ????  ????????????????????????????????????  ????                                    ??   ??????????  ??????????????  ??????????   ??                                       ????????????  ==============  ????????????                                ?????????????????????? ;;;;;;;;;;;;;;;; ??????????????????????                      ?????????????????????? ;;;;;;;;;;;;;;;; ??????????????????????                      ?????????????????????? 9999999999999999 ??????????????????????                      ?????????????????????? 6666666666666666 ??????????????????????                      ?????????????????????? 4444444444444444 ??????????????????????                      ?????????????????????? 4444444444444444 ??????????????????????                      ?????? ???????          22222222222222          ??????? ??????                      ?????    ?????                                  ?????    ?????                      ????  ?? ?????  000000000000000000000000000000  ????? ??  ????                      ????? ?? ?????  000000000000000000000000000000  ????? ?? ?????                      ?????    ?????  000000000000000000000000000000  ?????    ?????                      ??????????????  000000000000000000000000000000  ??????????????                      ??????????????  000000000000000000000000000000  ??????????????                      ??????????????  000000000000000000000000000000  ??????????????                      ??????????????  000000000000000000000000000000  ??????????????             ?????    ??????????????  000000000000000000000000000000  ??????????????    ?????    ???   ?????????????????  000000000000000000000000000000  ?????????????????   ???    ??  ???????????????????  000000000000000000000000000000  ???????????????????  ??    ?  ????????????????????  000000000000000000000000000000  ????????????????????  ?    ? ?????????????????????  000000000000000000000000000000  ????????????????????? ?      ?????????????????????  000000000000000000000000000000  ?????????????????????       ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????          000000000000000000000000000000          ??????????????      ??????????????  ;;9644  000000000000000000000000000000  4469;;  ??????????????      ???????????????=;;96442 000000000000000000000000000000 24469;;=???????????????      ???????????????=;;96442 000000000000000000000000000000 24469;;=???????????????      ???????????????=;;96442 000000000000000000000000000000 24469;;=???????????????      ???????????????=;;96442 000000000000000000000000000000 24469;;=???????????????      ???????????????=;;96442 000000000000000000000000000000 24469;;=???????????????      ???????????????=;;96442 000000000000000000000000000000 24469;;=???????????????      ??????????????  ;;9644  000000000000000000000000000000  4469;;  ??????????????      ??????????????          000000000000000000000000000000          ??????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ??????????????????????  000000000000000000000000000000  ??????????????????????      ?????????????    ?????  000000000000000000000000000000  ?????    ?????????????      ????????????? ?? ?????  000000000000000000000000000000  ????? ?? ?????????????      ????????????  ?? ?????  000000000000000000000000000000  ????? ??  ????????????      ?????????????    ?????                                  ?????    ?????????????      ?????????????? ???????  222222 ???????????????? 222222  ??????? ??????????????      ?????????????????????? 4444444 ???????????????? 4444444 ??????????????????????       ????????????????????? 4444444 ???????????????? 4444444 ?????????????????????      ? ????????????????????? 6666666 ???????????????? 6666666 ????????????????????? ?    ?  ???????????????????? 9999999 ???????????????? 9999999 ????????????????????  ?    ??  ??????????????????? ;;;;;;; ???????????????? ;;;;;;; ???????????????????  ??    ???   ????????????????? ;;;;;;; ???????????????? ;;;;;;; ?????????????????   ???    ?????    ??????????????  ====== ???????????????? ======  ??????????????    ?????             ??????????????  ??????????????????????????????  ??????????????                      ??????????????????????????????????????????????????????????????                      ??????????????????????????????????????????????????????????????                      ??????????????????????????????????????????????????????????????                      ??????????????????????????????????????????????????????????????                      ??????????????????????????????????????????????????????????????                      ??????????????????????????????????????????????????????????????                                      ??????????????????????????????                                                      ??????????????????????????????                                                      ??????????????????????????????                                                      ??????????????????????????????                                                      ??????????????????????????????                                                      ??????????????????????????????                                                      ??????????????????????????????                                                      ??????????????????????????????                                                      ??????????????????????????????                                                      ??????????????????????????????                                                      ??????????????????????????????                                                      ??????????????????????????????                                                       ????????????????????????????                                                      ? ???????????????????????????? ?                                                    ? ???????????????????????????? ?                                                    ?  ??????????????????????????  ?                                                    ?? ?????????????????????????? ??                                                    ??  ????????????????????????  ??                                                    ???  ??????????????????????  ???                                                    ????  ????????????????????  ????                                                    ?????  ??????????????????  ?????                                                    ??????  ????????????????  ??????                                                    ???????   ????????????   ???????                                                    ?????????    ??????    ?????????                                                    ????????????        ????????????                                                                                                                                                                                                  " };
+  // ---------- supplied models: the nightclub interior, the car and the street lantern (see CREDITS.md) ----------
+  const SM = 16.4, CPOS = { exit: { x: CX - 142, y: CY }, vip: { x: CX - 60, y: CY + 100 }, bar: { x: CX - 30, y: CY - 82 }, spawn: { x: CX - 118, y: CY, a: 0 }, back: { x: CX - 60, y: CY + 70, a: -Math.PI / 2 },
+    floor: { x0: CX - 100, x1: CX + 76, y0: CY - 68, y1: CY + 68 }, c: { x: CX - 10, y: CY, r: 105 } }, CARM = { ready: false, parts: [], lug: [], mats: {} };
+  function clubY(x, y) { // floor height of the club model under a point, or -1 where there is a wall or nothing
+    const ix = Math.floor(((x - CX) / SM - CLUBMAP.x0) / CLUBMAP.c), iz = Math.floor(((y - CY) / SM - CLUBMAP.z0) / CLUBMAP.c);
+    if (ix < 0 || iz < 0 || ix >= CLUBMAP.nx || iz >= CLUBMAP.nz) return -1;
+    const ch = CLUBMAP.d.charCodeAt(iz * CLUBMAP.nx + ix); return ch === 32 ? -1 : (ch - 48) / 10 * SM;
+  }
+  const b64buf = (txt) => { const bin = atob(txt.trim()), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i); return buf.buffer; };
+  function loadModel(name, cb) { fetch('models/' + name + '.txt').then((r) => { if (!r.ok) throw new Error(name); return r.text(); }).then((txt) => new T.GLTFLoader().parse(b64buf(txt), '', (g) => cb(g.scene), () => {})).catch(() => {}); }
+  function mergeByMaterial(root, filter) { // one geometry per material, in the root's own space
+    root.updateMatrixWorld(true); const groups = {}, v = new T.Vector3(), nm = new T.Matrix3();
+    root.traverse((o) => {
+      if (!o.isMesh || !filter(o)) return;
+      const g = groups[o.material.name] || (groups[o.material.name] = { p: [], n: [], u: [], i: [], mat: o.material }), geo = o.geometry, pos = geo.attributes.position, nor = geo.attributes.normal, uv = geo.attributes.uv, base = g.p.length / 3;
+      nm.getNormalMatrix(o.matrixWorld);
+      for (let a = 0; a < pos.count; a++) { v.fromBufferAttribute(pos, a).applyMatrix4(o.matrixWorld); g.p.push(v.x, v.y, v.z); v.fromBufferAttribute(nor, a).applyMatrix3(nm).normalize(); g.n.push(v.x, v.y, v.z); g.u.push(uv ? uv.getX(a) : 0, uv ? uv.getY(a) : 0); }
+      for (let a = 0; a < geo.index.count; a++) g.i.push(base + geo.index.getX(a));
+    });
+    return Object.keys(groups).map((k) => { const g = groups[k], b = new T.BufferGeometry(); b.setAttribute('position', new T.Float32BufferAttribute(g.p, 3)); b.setAttribute('normal', new T.Float32BufferAttribute(g.n, 3)); b.setAttribute('uv', new T.Float32BufferAttribute(g.u, 2)); b.setIndex(g.i); if (g.mat.map) g.mat.map.encoding = T.LinearEncoding; return { geo: b, name: k, map: g.mat.map }; });
+  }
+  function loadExtras() {
+    if (location.protocol === 'file:' || !T.GLTFLoader) return;
+    loadModel('car', (sc) => { // every car becomes this model, repainted per car
+      const lug = (o) => /chest|wheel_00[45]|railings/.test(o.name);
+      CARM.parts = mergeByMaterial(sc, (o) => !lug(o)); CARM.lug = mergeByMaterial(sc, lug); CARM.ready = true;
+      for (const [k, m] of meshOf) if (!m.userData.legs) { scene.remove(m); meshOf.delete(k); }
+    });
+    loadModel('lamp', (sc) => { // the three-headed lantern replaces the plain lamp posts
+      const k = 64 / 382, M4 = new T.Matrix4(), Q = new T.Quaternion(), S = new T.Vector3(k, k, k);
+      for (const part of mergeByMaterial(sc, () => true)) {
+        const glass = /glass/.test(part.name);
+        cellInst(part.geo, glass ? new T.MeshBasicMaterial({ color: '#fff1c9' }) : lam('#1d1e22'), CITY.lamps, (p, n, v, sc) => { v.set(p[0] - 55 * k, CURB, p[1] + 277 * k); sc.set(k, k, k); }, false).forEach((m) => { m.userData.lod = 'near'; });
+      }
+      for (const m of CITY.lampOld) m.userData.lod = 'far';      // the plain posts stay as the distant version
+    });
+    loadModel('club', setupClub);
+  }
+  function carModel(c) {
+    const g = new T.Group(), inner = new T.Group(), k = 52 / 328; inner.scale.setScalar(k); inner.rotation.y = Math.PI; inner.position.x = 42 * k; g.add(inner);
+    const mat = (p) => {
+      const key = p.name === 'body' ? 'body' + c.color : p.name; if (CARM.mats[key]) return CARM.mats[key];
+      return CARM.mats[key] = p.name === 'body' ? new T.MeshPhongMaterial({ map: p.map, color: c.color, shininess: 45, specular: 0x333333 }) : p.name === 'glass' ? new T.MeshPhongMaterial({ color: '#10161d', shininess: 120, specular: 0x8899aa }) : p.name === 'rubber' ? lam('#15161a') : lam('#ffffff', { map: p.map });
+    };
+    if (c.lug === undefined) c.lug = c.kind === 'civ' && !c.taxi && Math.random() < 0.35;
+    for (const p of CARM.parts.concat(c.lug ? CARM.lug : [])) { const m = new T.Mesh(p.geo, mat(p)); m.castShadow = p.name === 'body' || p.name === 'wheels'; inner.add(m); }
+    const bx = (m, sx, sy, sz, x, y, z) => { const e = new T.Mesh(G.box || (G.box = new T.BoxGeometry(1, 1, 1)), m); e.scale.set(sx, sy, sz); e.position.set(x, y, z); g.add(e); return e; };
+    if (c.kind === 'police') { for (const s of [-1, 1]) bx(lam(K.cop), 17, 3.4, 0.5, 1, 11, s * 11.75); g.userData.l1 = bx(new T.MeshBasicMaterial({ color: '#9aa3ad' }), 2.6, 1.8, 4.6, -1, 22, -2.9); g.userData.l2 = bx(new T.MeshBasicMaterial({ color: '#9aa3ad' }), 2.6, 1.8, 4.6, -1, 22, 2.9); }
+    if (c.taxi) bx(new T.MeshBasicMaterial({ color: '#fff3b8' }), 2.4, 1.8, 6, -1, 22, 0);
+    return g;
+  }
+  function setupClub(model) { // swap the box room for the supplied interior and move everyone and everything into it
+    const keep = new Set([club.ball].concat(club.smoke, club.lasers));
+    for (const o of CH.club.children.slice()) if ((o.isMesh || o.isSprite) && !keep.has(o) && Math.abs(o.position.x - CX) < 176 && Math.abs(o.position.z - CY) < 136) scene.remove(o);
+    club.tiles = [];
+    model.scale.setScalar(SM); model.position.set(CX, 0, CY);
+    model.traverse((o) => { if (o.isMesh) { const m = o.material; for (const t of [m.map, m.emissiveMap]) if (t) t.encoding = T.LinearEncoding; o.material = new T.MeshLambertMaterial({ map: m.map, emissiveMap: m.emissiveMap, emissive: m.emissiveMap ? 0xffffff : 0, side: T.DoubleSide }); o.castShadow = o.receiveShadow = true; } });
+    scene.add(model);
+    const lid = new T.Mesh(new T.BoxGeometry(22 * SM, 4, 40 * SM), lam('#0c0a10')); lid.position.set(CX, 6.2 * SM, CY - SM); lid.castShadow = true; scene.add(lid);
+    const P = (mx, mz) => ({ x: CX + mx * SM, y: CY + mz * SM }), F = (p) => Math.max(0, clubY(p.x, p.y)), basic = (c) => new T.MeshBasicMaterial({ color: c });
+    const put = (m, p, dy) => { m.position.set(p.x, F(p) + dy, p.y); scene.add(m); return m; };
+    const ring = (c, p) => { const r = put(new T.Mesh(new T.RingGeometry(9, 12, 28), new T.MeshBasicMaterial({ color: c, side: T.DoubleSide })), p, 0.7); r.rotation.x = -Math.PI / 2; };
+    const stool = (p) => { put(new T.Mesh(new T.CylinderGeometry(3.3, 3.3, 1.1, 14), lam('#5a2a3f')), p, 5.4); put(new T.Mesh(new T.CylinderGeometry(0.7, 1.6, 5, 8), lam('#1d0c16')), p, 2.5); };
+    const table = (p, h) => { put(new T.Mesh(new T.CylinderGeometry(7, 7, 0.9, 16), lam('#221624')), p, h); put(new T.Mesh(new T.CylinderGeometry(1, 2, h, 8), lam('#1d0c16')), p, h / 2); put(new T.Mesh(new T.SphereGeometry(1.2, 8, 6), basic('#ffe2a0')), p, h + 1.6); };
+    Object.assign(CPOS.exit, P(0, -19.2)); Object.assign(CPOS.vip, P(-6.5, 10.8)); Object.assign(CPOS.bar, P(-6.2, 4.6));
+    Object.assign(CPOS.spawn, P(0, -17.3), { a: Math.PI / 2 }); Object.assign(CPOS.back, P(-4.6, 10.8), { a: 0 });
+    Object.assign(CPOS.floor, { x0: CX - 3.6 * SM, x1: CX + 3.4 * SM, y0: CY - 3.3 * SM, y1: CY + 7.3 * SM }); Object.assign(CPOS.c, P(0, 2), { r: 62 });
+    ring('#58d68d', CPOS.exit); ring('#ffcf4a', CPOS.vip); ring('#35d6e6', CPOS.bar);
+    // dancers: four on the raised stage at the far end, the rest on the sunken floor
+    let st = 0, fl = 0; const spots = [[-2.4, -1.5], [1.9, -0.6], [-0.4, 1.4], [2.5, 3.2], [-2.6, 3.9], [0.3, 5.6], [-1.6, 6.6], [2.3, 6.3], [0.9, -2.6], [-2.9, 1.2]];
+    for (const m of club.dancers) { const u = m.userData, p = u.stage ? P(-3.3 + st++ * 2.2, 13.6) : P(spots[fl % spots.length][0], spots[fl++ % spots.length][1]); u.x = p.x; u.z = p.y; u.y = F(p); u.face = u.stage ? -Math.PI / 2 : Math.random() * 6.28; }
+    // bar along the west wall, DJ at the back of the stage
+    const barP = P(-8.5, 4.6); put(new T.Mesh(new T.BoxGeometry(9, 13, 62), lam('#6a4630')), barP, 6.5); put(new T.Mesh(new T.BoxGeometry(11, 1.2, 64), lam('#2a1c16')), barP, 13.4);
+    for (let n = 0; n < 7; n++) put(new T.Mesh(new T.BoxGeometry(1.6, 5, 1.6), basic(['#7be0c3', '#ffcf4a', '#ff8a5c', '#9db8ff'][n % 4])), P(-8.5, 3.1 + n * 0.5), 16.5);
+    const djP = P(0, 15.7); put(new T.Mesh(new T.BoxGeometry(34, 9, 6), lam('#120d16')), djP, 4.5); put(new T.Mesh(new T.BoxGeometry(34, 0.8, 0.6), basic('#ff4fa3')), P(0, 15.5), 7.4);
+    club.decks = [-1, 1].map((s) => put(new T.Mesh(new T.CylinderGeometry(3.6, 3.6, 0.6, 18), lam('#2a2a30')), P(s * 0.55, 15.7), 9.3));
+    let bar = 0, talk = 0, sit = 0, guards = 0;
+    for (const p of club.people) {
+      if (p.y > CY + 400) continue;                                   // VIP guests stay where they are
+      let q = null, face = 0;
+      if (p.role === 'guard') { if (!guards++) continue; q = P(3.6, -18.6); face = Math.PI; }
+      else if (p.role === 'tender') { q = P(-9.25, 4.6); face = 0; p.along = true; }
+      else if (p.role === 'dj') { q = P(0, 16.7); face = -Math.PI / 2; }
+      else if (p.role === 'bar') { q = P(-7.55, 3.2 + bar++ * 0.95); face = Math.PI + (bar % 2 ? 0.3 : -0.3); }
+      else if (p.role === 'talk') { const c = talk < 3 ? P(7.6, 4.6) : P(6.4, 10.8), a = talk++ * 2.1; if (talk === 1 || talk === 4) table(c, 10); q = { x: c.x + Math.cos(a) * 15, y: c.y + Math.sin(a) * 11 }; face = Math.atan2(c.y - q.y, c.x - q.x); }
+      else if (p.role === 'sit') { const c = sit < 3 ? P(-7.2, -2.6) : P(7.2, -2.6), a = sit++ * 2.094 + 0.5; if (sit === 1 || sit === 4) table(c, 8); q = { x: c.x + Math.cos(a) * 13, y: c.y + Math.sin(a) * 13 }; face = Math.atan2(c.y - q.y, c.x - q.x); stool(q); }
+      if (!q) continue;
+      p.x = q.x; p.y = q.y; p.fy = F(q); p.base = p.fy; p.m.position.set(q.x, p.fy, q.y); p.m.rotation.y = -face;
+    }
+    club.ball.position.set(CX, 5.3 * SM, CY + 2 * SM);
+    club.lasers.forEach((b) => b.position.set(CX, 5.6 * SM, CY + 16.8 * SM));
+    club.model = true; club.posed = false;
+    if (inside && !vip) { Object.assign(player, { x: CPOS.spawn.x, y: CPOS.spawn.y, a: CPOS.spawn.a }); camA = player.a; }
+  }
+  function clubExtras() { // staff, guests, DJ booth, seats, smoke, lasers, and the rings where money is spent
+    const basic = (c) => new T.MeshBasicMaterial({ color: c }), put = (m, x, y, z) => { m.position.set(x, y, z); scene.add(m); return m; };
+    const person = (look, x, y, face, scale, role, extra) => { const m = humanMesh(look); m.scale.setScalar(scale); m.position.set(x, 0, y); m.rotation.y = -face; scene.add(m); club.people.push(Object.assign({ m: m, x: x, y: y, face: face, sc: scale, role: role, ph: Math.random() * 20 }, extra || {})); return m; };
+    const ringAt = (c, x, y) => { const r = put(new T.Mesh(new T.RingGeometry(9, 12, 28), new T.MeshBasicMaterial({ color: c, side: T.DoubleSide })), x, 0.7, y); r.rotation.x = -Math.PI / 2; };
+    const glass = (m, c) => { const gl = new T.Mesh(new T.CylinderGeometry(0.42, 0.34, 1.5, 8), basic(c)); gl.position.set(0.55, -4.0, 0); m.userData.elbows[1].add(gl); m.userData.glass = c; };
+    const stool = (x, y) => { put(new T.Mesh(new T.CylinderGeometry(3.3, 3.3, 1.1, 14), lam('#5a2a3f')), x, 5.4, y); put(new T.Mesh(new T.CylinderGeometry(0.7, 1.6, 5, 8), lam('#1d0c16')), x, 2.5, y); };
+    const suit = { woman: false, skin: '#c98f6f', hair: '#1b1a1f', shirt: '#f2f2ee', jacket: '#17181c', pants: '#17181c', beard: true, style: 1, shoe: '#151517', watch: true };
+    // security: one outside by the door, one just inside
+    person(suit, club.door.x + 15, club.door.y + 5, -Math.PI / 2, 1.5, 'guard');
+    person(Object.assign({}, suit, { skin: '#e2b196', beard: false }), CX - 146, CY - 26, 0, 1.5, 'guard');
+    // bar: a bartender behind it, guests leaning on it, a ring to buy a drink
+    person({ woman: false, skin: '#e2b196', hair: '#5a3a22', shirt: '#f2f2ee', pants: '#17181c', long: true, style: 1, watch: true }, CX - 30, CY - 116.5, Math.PI / 2, 1.3, 'tender');
+    [[-78, true], [-64, false], [8, true], [22, false]].forEach((d) => glass(person(randomLook(d[1]), CX + d[0], CY - 93, -Math.PI / 2 + (d[1] ? 0.35 : -0.35), 1.3, 'bar'), '#ffcf4a'));
+    ringAt('#35d6e6', CX - 30, CY - 82);
+    // DJ booth in the corner beside the stage
+    put(new T.Mesh(new T.BoxGeometry(44, 5, 22), lam('#1d1524')), CX + 62, 2.5, CY - 107);
+    put(new T.Mesh(new T.BoxGeometry(34, 9, 6), lam('#120d16')), CX + 62, 9.5, CY - 99);
+    put(new T.Mesh(new T.BoxGeometry(34, 0.8, 0.6), basic('#ff4fa3')), CX + 62, 12.5, CY - 95.8);
+    for (const s of [-1, 1]) { club.decks.push(put(new T.Mesh(new T.CylinderGeometry(3.6, 3.6, 0.6, 18), lam('#2a2a30')), CX + 62 + s * 9, 14.3, CY - 99)); put(new T.Mesh(new T.BoxGeometry(7, 26, 7), lam('#17181c')), CX + 62 + s * 26, 13, CY - 108); put(new T.Mesh(new T.CircleGeometry(2.6, 14), basic('#35d6e6')), CX + 62 + s * 26, 18, CY - 104.4); }
+    const dj = person({ woman: false, skin: '#a8704f', hair: '#231d1b', shirt: '#f2f2ee', jacket: '#b85c38', rolled: true, pants: '#22263a', beard: true, boots: true, shoe: '#f2f2ee', watch: true }, CX + 62, CY - 108, Math.PI / 2, 1.3, 'dj', { base: 5 });
+    const band = new T.Mesh(new T.TorusGeometry(1.5, 0.2, 6, 14, Math.PI), lam('#17181c')); band.position.y = 1.9; band.rotation.y = Math.PI / 2; dj.userData.head.add(band);
+    for (const s of [-1, 1]) { const cup = new T.Mesh(HG.s, lam('#17181c')); cup.scale.set(0.55, 0.65, 0.35); cup.position.set(0, 1.5, s * 1.5); dj.userData.head.add(cup); }
+    // guests: standing round the tall tables, seated round low ones
+    for (const sy of [-1, 1]) for (const k of [0, 1, 2]) { const a = k * 2.1 + sy, x = CX - 30 + Math.cos(a) * 15, y = CY + sy * 83 + Math.sin(a) * 9; glass(person(randomLook(k !== 1), x, y, Math.atan2(CY + sy * 83 - y, CX - 30 - x), 1.3, 'talk'), ['#7be0c3', '#ff8a5c', '#9db8ff'][k]); }
+    for (const sy of [-1, 1]) {
+      const tx = CX - 124, ty = CY + sy * 52; put(new T.Mesh(new T.CylinderGeometry(7, 7, 0.9, 16), lam('#221624')), tx, 8, ty); put(new T.Mesh(new T.CylinderGeometry(1, 2, 8, 8), lam('#1d0c16')), tx, 4, ty); put(new T.Mesh(HG.s, basic('#ffe2a0')), tx, 9.6, ty).scale.set(1.2, 1.2, 1.2);
+      for (const k of [0, 1, 2]) { const a = k * 2.094 + 0.5, x = tx + Math.cos(a) * 13, y = ty + Math.sin(a) * 13; stool(x, y); person(randomLook(k !== 0), x, y, Math.atan2(ty - y, tx - x), 1.3, 'sit'); }
+    }
+    for (let n = 0; n < 3; n++) for (const sy of [-1, 1]) { // VIP guests; the middle table on one side stays free for the player
+      if (n === 1 && sy === 1) continue;
+      const tx = VX - 85 + n * 40, ty = VY + sy * 52;
+      for (const s of [-1, 1]) { const x = tx + s * 12, y = ty + sy * 6; stool(x, y); person(randomLook(s > 0, { long: true }), x, y, Math.atan2(ty - y, tx - x), 1.3, 'sit'); }
+    }
+    ringAt('#b48cff', VX - 45, VY + 30);
+    const set = new T.Group(); set.position.set(VX - 45, 9.6, VY + 52); set.visible = false; scene.add(set); club.tableSet = set;
+    const bottle = new T.Mesh(new T.CylinderGeometry(0.9, 1.1, 5.5, 10), basic('#58d68d')); bottle.position.set(0, 2.8, 0); set.add(bottle);
+    for (const s of [-1, 1]) { const gl = new T.Mesh(new T.CylinderGeometry(0.7, 0.45, 2, 8), basic('#fff3b8')); gl.position.set(s * 2.6, 1, 1.5); set.add(gl); }
+    const glow = new T.PointLight(0xffd27a, 1.1, 70); glow.position.y = 7; set.add(glow);
+    const flag = new T.Mesh(new T.BoxGeometry(12, 3, 0.5), basic('#ffcf4a')); flag.position.set(0, 16, 0); set.add(flag);
+    // smoke: soft sprites drifting above the floor
+    const sc = document.createElement('canvas'); sc.width = sc.height = 64; const sx = sc.getContext('2d'), sg = sx.createRadialGradient(32, 32, 2, 32, 32, 32);
+    sg.addColorStop(0, 'rgba(255,255,255,0.9)'); sg.addColorStop(1, 'rgba(255,255,255,0)'); sx.fillStyle = sg; sx.fillRect(0, 0, 64, 64); const smokeT = new T.CanvasTexture(sc);
+    for (let n = 0; n < 14; n++) { const s = new T.Sprite(new T.SpriteMaterial({ map: smokeT, transparent: true, opacity: 0.09, depthWrite: false, fog: false, color: n % 2 ? '#ffc4e2' : '#bfe9ff' })); s.scale.set(130, 70, 1); CH.club.add(s); club.smoke.push(s); }
+    // lasers: thin additive beams hinged at the ceiling
+    const beamG = new T.CylinderGeometry(0.22, 0.22, 320, 5); beamG.translate(0, -160, 0);
+    const beams = (list, n, cols, x, y, z) => { for (let k = 0; k < n; k++) { const b = new T.Mesh(beamG, new T.MeshBasicMaterial({ color: cols[k % cols.length], transparent: true, opacity: 0.6, blending: T.AdditiveBlending, depthWrite: false, fog: false })); b.position.set(x, y, z); scene.add(b); list.push(b); } };
+    beams(club.lasers, 8, ['#58ff8a', '#ff4fa3', '#35d6e6'], CX + 152, 64, CY); beams(club.vipLasers, 5, ['#ffcf4a', '#ffb07a'], VX + 106, 62, VY);
+  }
+  const STEP = 60 / 124 / 4;                                                        // one sixteenth note at 124 BPM
+  let seqT = 0, seqN = 0, lastKick = -9, combo = 0, lastHit = -9, danceFx = 0, drinkT = 0, vipTable = false, danceMsg = '', danceMsgT = 0;
+  function noise(dur, vol, hp) {
+    if (!actx) return;
+    if (!G.noise) { G.noise = actx.createBuffer(1, actx.sampleRate, actx.sampleRate); const d = G.noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+    const t = actx.currentTime, src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+    src.buffer = G.noise; f.type = 'highpass'; f.frequency.value = hp; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(master); src.start(t, Math.random() * 0.5, dur + 0.02);
+  }
+  function playStep(n) { // house loop in A minor: kick, clap, hats, bass line, arpeggio, a chord on each bar
+    const s = n % 16, bar = (n >> 4) % 4, root = [55, 55, 43.65, 49][bar];
+    if (s % 4 === 0) { tone(150, 40, 0.22, 'sine', 0.4); lastKick = time; }
+    if (s === 4 || s === 12) noise(0.14, 0.2, 1700);
+    if (s % 4 === 2) noise(0.05, 0.1, 7000); else if (s % 2 === 1) noise(0.025, 0.035, 9000);
+    if (s === 0 || s === 3 || s === 6 || s === 10 || s === 14) { tone(root * 2, root * 2, 0.15, 'triangle', 0.2); tone(root * 2, root * 2, 0.12, 'sawtooth', 0.035); }
+    if (s % 2 === 0) { const k = [1, 1.2, 1.5, 1.8, 2, 1.8, 1.5, 1.2][(s / 2 + bar * 3) % 8]; tone(root * 8 * k, root * 8 * k, 0.12, 'triangle', 0.045); }
+    if (s === 0) for (const k of [1, 1.2, 1.5]) tone(root * 4 * k, root * 4 * k, 0.55, 'sawtooth', 0.018);
+  }
+  const onFloor = () => inside && !vip && player.x > CPOS.floor.x0 && player.x < CPOS.floor.x1 && player.y > CPOS.floor.y0 && player.y < CPOS.floor.y1;
+  function danceHit() { // tap on the beat while standing on the dance floor
+    if (mode !== 'play' || paused || !onFloor()) return;
+    const age = time - lastKick, err = Math.min(age, STEP * 4 - age);
+    if (err < 0.125) {
+      combo = time - lastHit < 1.6 ? combo + 1 : 1; lastHit = time; danceFx = 0.6;
+      const gain = Math.round(50 * Math.min(combo, 10) * (drinkT > 0 ? 2 : 1) * (vipTable ? 1.5 : 1)); cash += gain;
+      danceMsg = '+' + money(gain) + '  ×' + combo; danceMsgT = 1; tone(660 + Math.min(combo, 10) * 50, 990 + Math.min(combo, 10) * 50, 0.09, 'triangle', 0.1);
+    } else { combo = 0; danceMsg = 'Ռիթմից դուրս'; danceMsgT = 1; sfx.empty && sfx.empty(); }
+  }
+  function clubFrame() { // everything that moves in the club; skipped while the player is in the city
+    if (!inside && club.posed) return; club.posed = true;
+    const t = time, beat = t / (STEP * 4), kick = Math.exp(-Math.max(0, t - lastKick) * 7);
+    club.dancers.forEach((m, n) => {
+      const u = m.userData, tt = beat + (n % 2) * 0.5, drop = dancePose(m, u, tt, n % 4, u.stage ? 1 : 0.75) * m.scale.x;
+      m.position.set(u.x + Math.sin(tt * 3.1416) * 2.2, u.y - drop, u.z + Math.sin(tt * 1.5708 + u.ph) * 2.5); m.rotation.y = -u.face + Math.sin(tt * 0.7854 + u.ph) * 0.35;
+    });
+    club.troupe.forEach((m, n) => { // one routine for all: a ring that opens and closes, a new move every four bars, a turn at the end of each phrase
+      const u = m.userData, a = n * 6.2832 / club.troupe.length + beat * 0.12, rad = 19 + 5 * Math.sin(beat * 0.3927), phrase = beat % 16;
+      const drop = dancePose(m, u, beat, Math.floor(beat / 16) % 4, 0.9) * m.scale.x, turn = phrase > 15 ? (phrase - 15) * 6.2832 : 0;
+      m.position.set(VX + 62 + Math.cos(a) * rad, 6.5 - drop, VY + Math.sin(a) * rad); m.rotation.y = Math.PI + 0.25 * Math.sin(beat * 0.7854) + turn;
+    });
+    for (const p of club.people) {
+      const u = p.m.userData, tt = t + p.ph;
+      if (p.role === 'sit') { talkPose(u, tt, true); p.m.position.y = (p.fy || 0) + 6.9 - 10 * p.sc; }
+      else if (p.role === 'talk') { talkPose(u, tt, false); }
+      else if (p.role === 'bar') { talkPose(u, tt, false); u.arms[0].rotation.set(0, 0, 0.9); u.elbows[0].rotation.set(0, 0, 0.75); u.body.rotation.z = 0.12; }
+      else if (p.role === 'guard') { u.arms.forEach((a, k) => { a.rotation.set((k ? 1 : -1) * 0.35, 0, 0.35); u.elbows[k].rotation.set((k ? 1 : -1) * 1.2, 0, 1.5); }); u.head.rotation.y = Math.sin(tt * 0.4) * 0.6; u.body.rotation.x = Math.sin(tt * 0.3) * 0.02; }
+      else if (p.role === 'tender') { walkPose(u, tt * 3, 0.25); if (p.along) { p.m.position.z = p.y + Math.sin(tt * 0.35) * 22; p.m.rotation.y = Math.cos(tt * 0.35) * 0.5; } else { p.m.position.x = p.x + Math.sin(tt * 0.35) * 38; p.m.rotation.y = -Math.PI / 2 + Math.cos(tt * 0.35) * 0.5; } u.arms.forEach((a, k) => { a.rotation.set(0, 0, 0.7); u.elbows[k].rotation.set(0, 0, 1.2 + 0.4 * Math.sin(tt * 9 + k)); }); }
+      else if (p.role === 'dj') { const b = 0.5 - 0.5 * Math.cos(beat * 6.2832); p.m.position.y = p.base - b * 0.8; u.head.rotation.set(0, Math.sin(beat * 0.7854) * 0.3, -0.12 - 0.14 * b); u.body.rotation.z = 0.1 + 0.05 * b; u.arms[0].rotation.set(0, 0, 0.75); u.elbows[0].rotation.set(0, 0, 0.9 + 0.1 * Math.sin(beat * 3.1416)); u.arms[1].rotation.set(-(2.4 + 0.2 * b), 0, 0.2); u.elbows[1].rotation.set(-0.3 * b, 0, 0.3); }
+      if (u.joints) rigApply(u);
+    }
+    club.decks.forEach((d) => { d.rotation.y = t * 3.4; });
+    club.tiles.forEach((tile, n) => tile.material.color.setHSL(((n * 31 + Math.floor(beat) * 53) % 360) / 360, 0.7, 0.22 + 0.2 * kick + ((n + Math.floor(beat)) % 3 ? 0 : 0.1)));
+    const lx = vip ? VX + 38 : CPOS.c.x, ly = vip ? VY : CPOS.c.y, lr = vip ? 60 : CPOS.c.r;
+    club.lights.forEach((l, n) => { l.position.set(lx + Math.cos(t * (0.5 + n * 0.2) + n * 2) * lr, 47, ly + Math.sin(t * (0.7 + n * 0.14) + n) * lr * 0.65); l.intensity = 0.45 + 0.75 * kick; });
+    club.smoke.forEach((s, n) => { const half = n < 9, cx = half ? CPOS.c.x : VX, cy = half ? CPOS.c.y : VY, w = half ? (club.model ? 120 : 140) : 95, d = half ? (club.model ? 130 : 100) : 70; s.position.set(cx + Math.sin(t * 0.07 + n * 2.4) * w, 9 + (n % 4) * 5 + Math.sin(t * 0.3 + n) * 3, cy + Math.cos(t * 0.05 + n * 1.7) * d); s.material.opacity = 0.07 + 0.03 * Math.sin(t * 0.4 + n); });
+    club.lasers.forEach((b, n) => { const sw = Math.sin(t * 0.6 + n * 0.9) * 0.75, dip = 1.0 + 0.3 * Math.sin(t * 0.9 + n * 1.3); if (club.model) b.rotation.set(dip, 0, sw); else b.rotation.set(sw, 0, -dip); b.material.opacity = 0.25 + 0.5 * kick; });
+    club.vipLasers.forEach((b, n) => { b.rotation.set(Math.sin(t * 0.4 + n * 1.2) * 0.6, 0, -(1.05 + 0.25 * Math.sin(t * 0.7 + n))); b.material.opacity = 0.2 + 0.35 * kick; });
+    club.tableSet.visible = vipTable;
+    club.ball.rotation.y = t * 0.65; club.ball.rotation.z = t * 0.22;
+  }
+  function clubRings() { // the floor rings of the room the player is in
+    const enter = (q) => { player.x = q.x; player.y = q.y; player.a = q.a; camA = q.a; camO = 0; sfx.door(); };
+    const buy = (price, ok, what) => { if (cash < price) toast(what + ' ' + money(price) + ' է. փողդ չի հերիքում, պարիր ու վաստակիր'); else { cash -= price; sfx.coin(); ok(); } };
+    if (vip) return [{ x: VX - 96, y: VY, hint: 'վերադառնալ դահլիճ', go: () => { vip = false; enter(CPOS.back); } },
+      { x: VX - 45, y: VY + 30, hint: vipTable ? 'քո VIP սեղանը' : 'VIP սեղան վարձել (3 000 ֏)', go: () => { if (vipTable) toast('Սեղանն արդեն քոնն է'); else buy(3000, () => { vipTable = true; toast('VIP սեղանը քոնն է · պարի շահույթը ×1,5'); }, 'VIP սեղանը'); } }];
+    return [{ x: CPOS.exit.x, y: CPOS.exit.y, hint: 'դուրս գալ', go: () => { inside = false; enter({ x: club.door.x, y: club.door.y - 6, a: -Math.PI / 2 }); } },
+      { x: CPOS.vip.x, y: CPOS.vip.y, hint: 'մտնել VIP սրահ', go: () => { vip = true; enter({ x: VX - 74, y: VY, a: 0 }); toast('VIP սրահ. պարային շոու'); } },
+      { x: CPOS.bar.x, y: CPOS.bar.y, hint: 'խմիչք առնել (500 ֏)', go: () => buy(500, () => { drinkT = 90; toast('Խմիչք −500 ֏ · պարի շահույթը ×2, 90 վրկ'); }, 'Խմիչքը') }];
+  }
+  function clubUpdate(dt) {
+    const ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + (Math.abs(joy.dx) > 0.22 ? joy.dx : 0), iy = (keys.down ? 1 : 0) - (keys.up ? 1 : 0) + (Math.abs(joy.dy) > 0.22 ? joy.dy : 0);
+    player.a += ix * 2.8 * dt; idleT = Math.abs(ix) > 0.1 || Math.abs(iy) > 0.1 ? 0 : idleT + dt;
+    const px = player.x, py = player.y;
+    if (Math.abs(iy) > 0.1) { const s = -iy * (iy < 0 ? 150 : 80); player.x += Math.cos(player.a) * s * dt; player.y += Math.sin(player.a) * s * dt; player.walk += dt * 10; }
+    if (club.model && !vip) {
+      const h0 = clubY(px, py), ok = (x, y) => { const h = clubY(x, y); return h >= 0 && (h0 < 0 || Math.abs(h - h0) < 0.4 * SM); };
+      if (!ok(player.x, player.y)) { if (ok(player.x, py)) player.y = py; else if (ok(px, player.y)) player.x = px; else { player.x = px; player.y = py; } }
+      const h = clubY(player.x, player.y); if (h >= 0) player.fy = (player.fy || 0) + (h - (player.fy || 0)) * Math.min(1, dt * 14);
+    }
+    if (vip) { player.x = clamp(player.x, VX - 102, VX + 12); player.y = clamp(player.y, VY - 70, VY + 70); }
+    else if (!club.model) { player.x = clamp(player.x, CX - 152, CX + 88); player.y = clamp(player.y, CY - 94, CY + 112); }
+    seqT -= dt; while (seqT <= 0) { seqT += STEP; playStep(seqN++); }
+    if (drinkT > 0) drinkT -= dt; if (danceFx > 0) danceFx -= dt; if (danceMsgT > 0) danceMsgT -= dt;
+    if (combo && time - lastHit > 1.6) combo = 0;
+    if (actx) { const now = actx.currentTime; master.gain.setTargetAtTime(soundOn ? 1 : 0, now, 0.05); engGain.gain.setTargetAtTime(0, now, 0.05); sirGain.gain.setTargetAtTime(0, now, 0.05); }
+    let near = 1e9, hit = null;
+    for (const r of clubRings()) { const d = Math.hypot(player.x - r.x, player.y - r.y); if (d < near) near = d; if (d < 13) hit = r; }
+    if (near > 26) clubArm = true; else if (hit && clubArm) { clubArm = false; hit.go(); }
+  }
+  function clubDoor() { // E near the club door outside, or near a ring inside; returns true when it handled the key
+    if (inside) { for (const r of clubRings()) if (Math.hypot(player.x - r.x, player.y - r.y) < 34) { clubArm = false; r.go(); break; } return true; }
+    if (player.car || Math.hypot(player.x - club.door.x, player.y - club.door.y) > 30) return false;
+    if (heat > 0) toast('Ոստիկանները հետևիցդ են, հիմա չես կարող մտնել');
+    else if (cash < FEE) toast('Մուտքը ' + money(FEE) + ' է, փողդ չի հերիքում');
+    else { cash -= FEE; inside = true; vip = false; clubArm = false; player.x = CPOS.spawn.x; player.y = CPOS.spawn.y; player.a = CPOS.spawn.a; camA = player.a; camO = 0; beatT = 0; sfx.coin(); toast(FEE ? 'Բարի գալուստ  −' + money(FEE) : 'Բարի գալուստ Նեոն ակումբ'); }
+    return true;
+  }
+
+  function resize() {
+    const r = cv.getBoundingClientRect(); W = Math.max(1, r.width); H = Math.max(1, r.height);
+    dpr = Math.min(window.matchMedia('(pointer: coarse)').matches ? 1.5 : 2, window.devicePixelRatio || 1);
+    ov.width = Math.round(W * dpr); ov.height = Math.round(H * dpr);
+    if (renderer) { renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); cam3.aspect = W / H; cam3.updateProjectionMatrix(); }
+  }
+  window.addEventListener('resize', resize);
+
+  function draw() {
+    if (!renderer) return;
+    stamp++;
+    const flash = Math.floor(time * 6) % 2;
+    for (const c of cars) {
+      let m = meshOf.get(c); if (!m) { m = carMesh(c); meshOf.set(c, m); scene.add(m); }
+      m.userData.s = stamp; m.position.set(c.x, groundY(c.x, c.y), c.y); m.rotation.y = -c.a; { const dc = Math.abs(c.x - cam3.position.x) + Math.abs(c.y - cam3.position.z); m.visible = dc < CH.VIEW; shadowLod(m, dc < 800); }
+      if (m.userData.l1) { m.userData.l1.material.color.set(c.chase ? (flash ? K.alert : K.cop) : '#9aa3ad'); m.userData.l2.material.color.set(c.chase ? (flash ? K.cop : K.alert) : '#9aa3ad'); }
+    }
+    for (const p of peds) {
+      let m = meshOf.get(p); if (!m) { m = pedMesh(p); meshOf.set(p, m); scene.add(m); }
+      m.userData.s = stamp; m.position.set(p.x, (p.down > 0 ? 3 : 0) + groundY(p.x, p.y), p.y);
+      m.rotation.set(0, -(p.free ? p.a : Math.floor(p.t / 378) * Math.PI / 2 + (p.dir < 0 ? Math.PI : 0)), p.down > 0 ? Math.PI / 2 : 0);
+      m.visible = !inside && Math.abs(p.x - cam3.position.x) + Math.abs(p.y - cam3.position.z) < 1300;
+      if (m.visible) { walkPose(m.userData, p.down > 0 ? 0 : p.free ? time * 11 : p.t * 0.17, p.down > 0 ? 0 : 1); shadowLod(m, Math.abs(p.x - cam3.position.x) + Math.abs(p.y - cam3.position.z) < 650); }
+    }
+    for (const [k, m] of meshOf) if (m.userData.s !== stamp) { scene.remove(m); meshOf.delete(k); }
+    const play = mode === 'play';
+    playerMesh.visible = play && !player.car;
+    walkAmp += ((player.walk !== lastWalk ? 1 : 0) - walkAmp) * 0.25; lastWalk = player.walk;
+    playerMesh.rotation.y = -player.a;
+    const inY = inside && club.model && !vip ? (player.fy || 0) : 0;
+    if (inside && danceFx > 0) playerMesh.position.set(player.x, inY - dancePose(playerMesh, playerMesh.userData, time / (STEP * 4), 1, 1) * 1.35, player.y);   // a hit on the beat: dance
+    else { walkPose(playerMesh.userData, player.walk * 0.85, walkAmp); playerMesh.position.set(player.x, inside ? inY : groundY(player.x, player.y), player.y); }
+    if (playerMesh.userData.photoHead) { // keep the photo head on the avatar's neck
+      playerMesh.updateMatrixWorld(true); const hp = playerMesh.worldToLocal(playerMesh.userData.headBone.getWorldPosition(new T.Vector3()));
+      playerMesh.userData.photoHead.position.set(hp.x + 0.25, hp.y + 1.25, hp.z);
+    }
+    marker.visible = play && !!job && !inside; clubFrame();
+    if (marker.visible) { marker.position.set(job.p.x, 210, job.p.y); marker.material.color.set(job.stage === 'pickup' ? K.gold : K.go); const s = 1 + Math.sin(time * 5) * 0.08; marker.scale.set(s, 1, s); }
+
+    // camera: behind the car or the walker; a slow circle over the square on the title screen
+    if (play) {
+      const t = target(), spd = player.car ? Math.abs(player.car.v) : 0;
+      camA += ad((player.car ? player.car.a : player.a) - camA) * Math.min(1, lastDt * 3.6);
+      // face view: the camera swings round to the front, on request or after standing still for a while
+      const look = faceCam || (!player.car && !inside && idleT > 2.5), mix = (u, v, w) => u + (v - u) * w;
+      camO += ad((look ? Math.PI : 0) - camO) * Math.min(1, lastDt * (look ? 2.5 : 6));
+      const o = Math.abs(ad(camO)) / Math.PI, ang = camA + camO, far = W < H ? 1.45 : 1;
+      const dist = player.car ? (80 + spd * 0.07) * far : mix(66, 21, o) * far, p = { x: t.x - Math.cos(ang) * dist, y: t.y - Math.sin(ang) * dist };
+      if (inside && vip) { p.x = clamp(p.x, VX - 108, VX + 108); p.y = clamp(p.y, VY - 78, VY + 78); }
+      else if (inside && club.model) { for (let k = 0; k < 7 && clubY(p.x, p.y) < 0; k++) { p.x = (p.x + t.x) / 2; p.y = (p.y + t.y) / 2; } }
+      else if (inside) { p.x = clamp(p.x, CX - 153, CX + 153); p.y = clamp(p.y, CY - 113, CY + 113); } else pushOut(p, 9);
+      cam3.position.set(p.x, inY + (player.car ? 36 * far : mix(Math.min(32 * far, inY ? 34 : 99), 28.5, o)), p.y);
+      if (o > 0.03) cam3.lookAt(t.x, inY + (player.car ? 10 : mix(14, 27.5, o)), t.y); else cam3.lookAt(t.x + Math.cos(camA) * 45, inY + 9, t.y + Math.sin(camA) * 45);
+      const fov = 60 + spd * 0.035; if (Math.abs(cam3.fov - fov) > 0.2) { cam3.fov = fov; cam3.updateProjectionMatrix(); }
+    } else {
+      const a = time * 0.07, cx = ic(3) + 260, cy = ic(3) + 260;
+      cam3.position.set(cx + Math.cos(a) * (CITY.up ? 1100 : 820), CITY.up ? 900 : 430, cy + Math.sin(a) * (CITY.up ? 1100 : 820)); cam3.lookAt(cx, CITY.up ? 150 : 0, cy);
+    }
+    const fx = play ? player.x : ic(3) + 260, fz = play ? player.y : ic(3) + 260;
+    const SU = CITY.SUN; sun.position.set(fx + SU.x * 1000, SU.y * 1000, fz + SU.z * 1000); sun.target.position.set(fx, 0, fz); sun.target.updateMatrixWorld();
+    sky.position.copy(cam3.position); sunDisc.position.set(cam3.position.x + SU.x * 3600, cam3.position.y + SU.y * 3600, cam3.position.z + SU.z * 3600);
+    streamCity();
+    renderer.render(scene, cam3);
+
+    // overlay: compass arrow to the job, touch stick
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0); octx.clearRect(0, 0, W, H);
+    if (play && onFloor()) { // rhythm meter: tap when the closing ring meets the circle
+      const age = time - lastKick, ph = clamp(age / (STEP * 4), 0, 1), mx = W / 2, my = H - (touch ? 215 : 150);
+      octx.lineWidth = 4; octx.strokeStyle = '#ff4fa3'; octx.beginPath(); octx.arc(mx, my, 26, 0, 6.2832); octx.stroke();
+      octx.lineWidth = 3; octx.strokeStyle = K.fg; octx.globalAlpha = 0.35 + 0.65 * ph; octx.beginPath(); octx.arc(mx, my, 26 + 46 * (1 - ph), 0, 6.2832); octx.stroke(); octx.globalAlpha = 1;
+      octx.font = '700 15px "JetBrains Mono", monospace'; octx.textAlign = 'center'; octx.lineWidth = 3; octx.strokeStyle = K.ink; octx.fillStyle = K.fg;
+      if (danceMsgT > 0) { octx.globalAlpha = Math.min(1, danceMsgT * 2); octx.strokeText(danceMsg, mx, my - 84 - (1 - danceMsgT) * 14); octx.fillText(danceMsg, mx, my - 84 - (1 - danceMsgT) * 14); octx.globalAlpha = 1; }
+    }
+    if (play && job && !inside) {
+      const t = target(), dx = job.p.x - t.x, dy = job.p.y - t.y, rel = ad(Math.atan2(dy, dx) - camA - camO), col = job.stage === 'pickup' ? K.gold : K.go;
+      const ax = W / 2, ay = Math.max(150, H * 0.22);
+      octx.save(); octx.translate(ax, ay); octx.rotate(rel);
+      octx.fillStyle = col; octx.strokeStyle = K.ink; octx.lineWidth = 2; octx.beginPath(); octx.moveTo(0, -20); octx.lineTo(13, 12); octx.lineTo(0, 5); octx.lineTo(-13, 12); octx.closePath(); octx.fill(); octx.stroke(); octx.restore();
+      octx.font = '700 13px "JetBrains Mono", monospace'; octx.textAlign = 'center'; octx.lineWidth = 3; octx.strokeStyle = K.ink; octx.fillStyle = K.fg;
+      const label = Math.round(Math.hypot(dx, dy) / 8.4) + ' մ'; octx.strokeText(label, ax, ay + 36); octx.fillText(label, ax, ay + 36);
+    }
+    if (joy.id !== null) {
+      octx.strokeStyle = K.fg; octx.globalAlpha = 0.4; octx.lineWidth = 2; octx.beginPath(); octx.arc(joy.ox, joy.oy, 52, 0, 6.2832); octx.stroke();
+      octx.fillStyle = K.fg; octx.globalAlpha = 0.6; octx.beginPath(); octx.arc(joy.ox + joy.dx * 52, joy.oy + joy.dy * 52, 22, 0, 6.2832); octx.fill(); octx.globalAlpha = 1;
+    }
+
+    // minimap
+    const M = 184, s = M / WS; mctx.clearRect(0, 0, M, M);
+    mctx.strokeStyle = 'rgba(241,237,230,0.3)'; mctx.lineWidth = 3; mctx.beginPath();
+    for (let k = 0; k <= N; k++) { mctx.moveTo(ic(k) * s, 0); mctx.lineTo(ic(k) * s, M); mctx.moveTo(0, ic(k) * s); mctx.lineTo(M, ic(k) * s); } mctx.stroke();
+    const dot = (x, y, c, r) => { mctx.fillStyle = c; mctx.beginPath(); mctx.arc(x * s, y * s, r, 0, 6.2832); mctx.fill(); };
+    if (play) {
+      dot(club.door.x, club.door.y, '#ff4fa3', 6);
+      if (job) dot(job.p.x, job.p.y, job.stage === 'pickup' ? K.gold : K.go, 8);
+      for (const c of cars) if (c.kind === 'police' && c.chase) dot(c.x, c.y, flash ? K.alert : K.cop, 6);
+      const t = inside ? club.door : target(); mctx.save(); mctx.translate(t.x * s, t.y * s); mctx.rotate(player.car ? player.car.a : player.a); mctx.fillStyle = K.fg; mctx.beginPath(); mctx.moveTo(12, 0); mctx.lineTo(-8, -8); mctx.lineTo(-8, 8); mctx.closePath(); mctx.fill(); mctx.restore();
+    }
+  }
+
+  // ---------- HUD ----------
+  const cache = {};
+  const put = (id, v) => { if (cache[id] !== v) { cache[id] = v; $(id).textContent = v; } };
+  function hud() {
+    const play = mode === 'play';
+    put('cash', money(cash));
+    if (play && (cash !== savedCash || vipTable !== savedTable) && time - saveT > 1) { saveT = time; writeSave(); }
+    const n = Math.ceil(heat), key = 's' + n;
+    if (cache.stars !== key) { cache.stars = key; $('stars').innerHTML = '<b>' + '★'.repeat(n) + '</b>' + '☆'.repeat(5 - n); $('stars').classList.toggle('hot', n > 0); }
+    put('speed', inside ? (drinkT > 0 ? 'խմիչք ×2 · ' + Math.ceil(drinkT) + ' վ' : vip ? 'VIP սրահ' : 'ակումբում') : player.car ? Math.round(Math.abs(player.car.v) * 0.42) + ' կմ/ժ' : 'ոտքով');
+    const showDance = play && !paused && onFloor();
+    if (cache.dance !== showDance) { cache.dance = showDance; $('danceBtn').hidden = !showDance; }
+    const showJob = play && !!job;
+    if (cache.jobShow !== showJob) { cache.jobShow = showJob; $('job').hidden = !showJob; }
+    if (showJob) {
+      const del = job.stage === 'deliver';
+      if (cache.del !== del) { cache.del = del; $('job').classList.toggle('deliver', del); }
+      put('jobText', del ? 'Հասցրու՝ ' + job.label + ' · ' + money(job.pay) : 'Վերցրու պատվերը՝ ' + job.label);
+      const tl = del ? Math.max(0, Math.ceil(job.time)) : -1;
+      put('jobTime', del ? Math.floor(tl / 60) + ':' + String(tl % 60).padStart(2, '0') : '');
+      const late = del && tl <= 8; if (cache.late !== late) { cache.late = late; $('job').classList.toggle('late', late); }
+    }
+    let hint = '';
+    if (play && inside) { for (const r of clubRings()) if (Math.hypot(player.x - r.x, player.y - r.y) < 34) hint = r.hint; }
+    else if (play && !player.car && Math.hypot(player.x - club.door.x, player.y - club.door.y) < 30) hint = 'մտնել ակումբ (' + (FEE ? money(FEE) : 'անվճար') + ')';
+    else if (play && !touch) {
+      if (player.car) { if (Math.abs(player.car.v) < 45) hint = 'իջնել'; }
+      else for (const c of cars) if (c.kind !== 'police' && Math.hypot(c.x - player.x, c.y - player.y) < 58) { hint = 'նստել մեքենան'; break; }
+    }
+    if (cache.hint !== hint) { cache.hint = hint; $('hint').hidden = !hint; $('hint').innerHTML = hint ? '<kbd>E</kbd>' + hint : ''; }
+  }
+
+  // ---------- input ----------
+  const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'hand' };
+  window.addEventListener('keydown', (e) => {
+    if (mode !== 'play') return;
+    if ((e.code === 'KeyP' || e.code === 'Escape') && !e.repeat) { setPause(!paused); e.preventDefault(); return; }
+    if (paused) return;
+    if (inside && e.code === 'Space') { if (!e.repeat) danceHit(); e.preventDefault(); return; }
+    if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
+    if ((e.code === 'KeyE' || e.code === 'KeyF') && !e.repeat) enterExit();
+    if (e.code === 'KeyC' && !e.repeat) toggleFace();
+  });
+  window.addEventListener('keyup', (e) => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false; });
+  window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+  let touch = false;
+  function useTouch() { if (touch) return; touch = true; $('stage').classList.add('touch'); if (mode === 'play') $('pad').hidden = false; }
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    useTouch(); e.preventDefault();
+    if (mode !== 'play' || paused || joy.id !== null) return;
+    const r = cv.getBoundingClientRect(); joy.id = e.pointerId; joy.ox = e.clientX - r.left; joy.oy = e.clientY - r.top; joy.dx = joy.dy = 0;
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== joy.id) return;
+    const r = cv.getBoundingClientRect(); let dx = (e.clientX - r.left - joy.ox) / 52, dy = (e.clientY - r.top - joy.oy) / 52; const m = Math.hypot(dx, dy);
+    if (m > 1) { dx /= m; dy /= m; } joy.dx = dx; joy.dy = dy;
+  });
+  const joyEnd = (e) => { if (e.pointerId === joy.id) { joy.id = null; joy.dx = joy.dy = 0; } };
+  cv.addEventListener('pointerup', joyEnd); cv.addEventListener('pointercancel', joyEnd);
+  $('btnAct').addEventListener('click', enterExit);
+  $('danceBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); danceHit(); });
+  $('hint').addEventListener('click', enterExit);
+  const bb = $('btnBrake');
+  bb.addEventListener('pointerdown', (e) => { padBrake = true; e.preventDefault(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((n) => bb.addEventListener(n, () => { padBrake = false; }));
+  function setPause(v) {
+    if (mode !== 'play' || paused === v) return;
+    paused = v; $('pause').hidden = !v; $('pauseBtn').textContent = v ? '▶' : 'Ⅱ';
+    for (const k in keys) keys[k] = false; joy.id = null; joy.dx = joy.dy = 0; padBrake = false;
+    if (actx) master.gain.setTargetAtTime(v || !soundOn ? 0 : 1, actx.currentTime, 0.03);
+    if (v) $('resumeBtn').focus(); else $('resumeBtn').blur();
+  }
+  $('pauseBtn').addEventListener('click', () => { setPause(!paused); $('pauseBtn').blur(); });
+  $('resumeBtn').addEventListener('click', () => setPause(false));
+  document.addEventListener('visibilitychange', () => { if (document.hidden) setPause(true); });
+  function toggleFace() { faceCam = !faceCam; $('faceBtn').classList.toggle('on', faceCam); }
+  $('faceBtn').addEventListener('click', () => { toggleFace(); $('faceBtn').blur(); });
+  $('snd').addEventListener('click', () => { soundOn = !soundOn; $('snd').classList.toggle('off', !soundOn); });
+  // ---------- saving: money and the rented VIP table stay in this browser between visits ----------
+  const SAVE_KEY = 'pinkCitySave'; let savedCash = -1, savedTable = false, saveT = 0;
+  function readSave() { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return d && typeof d.cash === 'number' ? d : null; } catch (e) { return null; } }
+  function writeSave() { savedCash = cash; savedTable = vipTable; try { localStorage.setItem(SAVE_KEY, JSON.stringify({ cash: Math.round(cash), vipTable: vipTable })); } catch (e) {} }
+  function showSave() { const d = readSave(), has = !!d && (d.cash > 0 || d.vipTable); $('saveRow').hidden = !has; if (has) $('saveText').textContent = 'Պահպանված է՝ ' + money(d.cash) + (d.vipTable ? ' · VIP սեղան' : ''); }
+  function startGame(startAtClub) {
+    initAudio(); reset(); inside = !!startAtClub; vip = false; clubArm = !startAtClub; combo = 0; drinkT = 0; vipTable = false; seqT = 0;
+    const sv = readSave(); if (sv) { cash = sv.cash; vipTable = !!sv.vipTable; } savedCash = cash; savedTable = vipTable;
+    mode = 'play'; $('menu').hidden = true;
+    if (touch) $('pad').hidden = false;
+    if (startAtClub) {
+      player.car = null;
+      player.x = CPOS.spawn.x; player.y = CPOS.spawn.y; player.a = CPOS.spawn.a;
+      beatT = 0; beatN = 0; toast('ՆԵՈՆ ԱԿՈՒՄԲ • ոսկեգույն օղակը տանում է VIP սրահ');
+    } else toast('Նստիր մեքենան ու գնա դեղին օղակի մոտ');
+    camA = player.a; camO = 0; idleT = 0;
+    $('startBtn').blur(); $('clubStartBtn').blur();
+  }
+  $('startBtn').addEventListener('click', () => startGame(false));
+  $('clubStartBtn').addEventListener('click', () => startGame(true));
+  $('wipeBtn').addEventListener('click', () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} showSave(); });
+  window.addEventListener('pagehide', () => { if (mode === 'play') writeSave(); });
+  showSave();
+  window.addEventListener('touchstart', useTouch, { passive: true, once: true });
+
+  let last = 0;
+  function frame(t) { const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t; lastDt = dt; if (!paused) update(dt); draw(); hud(); requestAnimationFrame(frame); }
+  function boot() {
+    try { init3d(); } catch (e) { renderer = null; }
+    if (!renderer) { $('startBtn').disabled = true; $('startBtn').textContent = 'Այս սարքում 3D-ն չի աշխատում'; }
+    if (renderer) { loadAvatars(); loadCity(); loadExtras(); }
+    resize(); reset(); requestAnimationFrame(frame);
+  }
+  if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(boot); else boot();
+})();
+</script>
