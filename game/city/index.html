@@ -93,7 +93,22 @@ body { background: var(--sky); color: var(--fg); font-family: var(--font-text); 
   color: var(--fg); font: 700 13px var(--font-text); touch-action: none; cursor: pointer;
 }
 .pad button.act { width: 76px; height: 76px; border-color: var(--gold); }
+.pad { flex-direction: column; align-items: flex-end; }
+.pedals { display: none; gap: 10px; align-items: flex-end; }
+.driving .pedals { display: flex; }
+.driving .pad button.act { width: 60px; height: 60px; font-size: 12px; }
+.pad .pedals button { border-radius: 16px; font-size: 14px; }
+.pad .pedals .hb { width: 58px; height: 58px; border-radius: 50%; font-size: 11px; line-height: 1.15; }
+.pad .pedals .rev { width: 74px; height: 92px; border-color: var(--alert); }
+.pad .pedals .gas { width: 88px; height: 128px; border-color: var(--go); font-size: 17px; font-weight: 800; }
+.pad .pedals button small { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-top: 2px; }
+.pad .pedals button.on { background: rgba(241, 237, 230, 0.28); transform: scale(0.96); }
+.pad .pedals .gas.on { background: rgba(88, 214, 141, 0.45); }
+.pad .pedals .rev.on { background: rgba(255, 90, 95, 0.45); }
+.steer-tip { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); max-width: 44%; font-size: 13px; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 11px; pointer-events: none; transition: opacity 400ms; }
+.steer-tip.out { opacity: 0; }
 .touch .hint { bottom: calc(120px + env(safe-area-inset-bottom, 0px)); }
+.touch.driving .hint { left: max(16px, env(safe-area-inset-left, 0px)); transform: none; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); max-width: 44%; }
 .loading { position: absolute; inset: 0; z-index: 30; display: flex; align-items: flex-end; background: linear-gradient(180deg, rgba(18, 10, 22, 0.55), rgba(18, 10, 22, 0.94) 70%); backdrop-filter: blur(6px); transition: opacity 400ms; }
 .loading.out { opacity: 0; }
 .ld-in { width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 14px; padding-block: 32px calc(36px + env(safe-area-inset-bottom, 0px)); padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
@@ -192,12 +207,17 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   <div class="chap" id="chap" hidden><small id="chapN"></small><b id="chapT"></b></div>
   <div class="talk" id="talk" hidden><div class="tk-card" id="tkCard"><div class="tk-who" id="tkWho"></div><p class="tk-text" id="tkText"></p><div class="tk-acts" id="tkActs"></div></div></div>
   <div class="hint" id="hint" hidden></div>
+  <div class="steer-tip out" id="steerTip">Ղեկ՝ մատդ պահիր էկրանի ձախ կողմում ու քաշիր աջ կամ ձախ</div>
 
   <button class="dance" id="danceBtn" type="button" hidden>Պարել</button>
 
   <div class="pad" id="pad" hidden>
-    <button type="button" id="btnBrake">Արգելակ</button>
     <button type="button" id="btnAct" class="act">Մեքենա</button>
+    <div class="pedals">
+      <button type="button" id="btnBrake" class="hb" aria-label="Ձեռքի արգելակ">Ձեռքի<br>արգ.</button>
+      <button type="button" id="btnRev" class="rev" aria-label="Արգելակ և հետընթաց">Արգելակ<small>հետ</small></button>
+      <button type="button" id="btnGas" class="gas" aria-label="Գազ">Գազ</button>
+    </div>
   </div>
 
   <div class="overlay bigmap" id="bigmap" hidden>
@@ -232,7 +252,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       <p>Բաց քաղաք՝ վարդագույն տուֆից։ Նստիր ցանկացած մեքենա, պատվերներ հասցրու, փող աշխատիր ու մի բռնվիր ոստիկաններին։</p>
       <ul class="how">
         <li><b>Պատմություն՝</b> 5 գլուխ՝ կերպարներով, երկխոսություններով ու ընտրություններով։ Գնա քարտեզի վարդագույն խոսքի նշանի մոտ. Գուրգեն քեռին սպասում է քեզ հրապարակում</li>
-        <li><b>Գնալ՝</b> W և S, <b>թեքվել՝</b> A և D (կամ սլաքներ)։ Հեռախոսով՝ մատով քաշիր էկրանի վրա</li>
+        <li><b>Գնալ՝</b> W և S, <b>թեքվել՝</b> A և D (կամ սլաքներ)։ Հեռախոսով քայլելիս՝ մատով քաշիր էկրանի վրա, մեքենայում՝ ձախ մատով ղեկ (քաշիր աջ-ձախ), աջով՝ «Գազ» ու «Արգելակ/հետ» ոտնակները</li>
         <li><b>Նստել կամ իջնել՝</b> E</li>
         <li><b>Ձեռքի արգելակ՝</b> Space</li>
         <li><b>Դեմքը առջևից տեսնել՝</b> C կամ «Դեմք» կոճակը</li>
@@ -364,7 +384,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   let mode = 'menu', W = 1, H = 1, dpr = 1, time = 0;
   let cars = [], peds = [], player, cash = 0, heat = 0, evadeT = 0, bustT = 0, crashCd = 0, job = null, toastT = 0;
   const keys = {}, joy = { id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
-  let padBrake = false;
+  let padBrake = false, padGas = false, padRev = false;
+  const padOff = () => { padBrake = padGas = padRev = false; for (const id of ['btnBrake', 'btnGas', 'btnRev']) $(id).classList.remove('on'); };
 
   function makeCar(x, y, a, kind) {
     const taxi = kind === 'civ' && Math.random() < 0.12;
@@ -532,7 +553,10 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const jm = Math.hypot(joy.dx, joy.dy);
     if (playing && player.car) {
       const c = player.car; let thr = -iy, steer = ix;
-      if (jm > 0.22) { steer = joy.dx; thr = clamp(-joy.dy * 1.4, -1, 1); }
+      if (touch) { // phone: the left thumb steers by sliding sideways, the right thumb works the pedals
+        if (joy.id !== null) { const s = clamp(joy.sx || 0, -1, 1), a = Math.max(0, Math.abs(s) - 0.07) / 0.93; steer = Math.sign(s) * Math.pow(a, 1.35) * (1 / 0.8) * (1 - 0.3 * clamp(Math.abs(c.v) / 420, 0, 1)); }
+        if (padGas || padRev) thr = padGas && !padRev ? 1 : -1;
+      } else if (jm > 0.22) { steer = joy.dx; thr = clamp(-joy.dy * 1.4, -1, 1); }
       carStep(c, thr, steer * 0.8, keys.hand || padBrake, dt);
       player.x = c.x; player.y = c.y;
     } else if (playing) {
@@ -1889,7 +1913,12 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
       octx.font = '700 13px "JetBrains Mono", monospace'; octx.textAlign = 'center'; octx.lineWidth = 3; octx.strokeStyle = K.ink; octx.fillStyle = '#ffd6a0';
       const lb = Math.round(Math.hypot(dx, dy) / 8.4) + ' մ'; octx.strokeText(lb, ax, ay + 36); octx.fillText(lb, ax, ay + 36);
     }
-    if (joy.id !== null) {
+    if (joy.id !== null && play && player.car && touch) { // steering: a horizontal track with the knob following the thumb
+      const sx = joy.sx || 0; octx.globalAlpha = 0.45; octx.strokeStyle = K.fg; octx.lineWidth = 3; octx.lineCap = 'round';
+      octx.beginPath(); octx.moveTo(joy.ox - 70, joy.oy); octx.lineTo(joy.ox + 70, joy.oy); octx.stroke();
+      octx.beginPath(); octx.moveTo(joy.ox, joy.oy - 10); octx.lineTo(joy.ox, joy.oy + 10); octx.stroke();
+      octx.globalAlpha = 0.75; octx.fillStyle = Math.abs(sx) > 0.9 ? K.gold : K.fg; octx.beginPath(); octx.arc(joy.ox + sx * 70, joy.oy, 20, 0, 6.2832); octx.fill(); octx.globalAlpha = 1;
+    } else if (joy.id !== null) {
       octx.strokeStyle = K.fg; octx.globalAlpha = 0.4; octx.lineWidth = 2; octx.beginPath(); octx.arc(joy.ox, joy.oy, 52, 0, 6.2832); octx.stroke();
       octx.fillStyle = K.fg; octx.globalAlpha = 0.6; octx.beginPath(); octx.arc(joy.ox + joy.dx * 52, joy.oy + joy.dy * 52, 22, 0, 6.2832); octx.fill(); octx.globalAlpha = 1;
     }
@@ -1907,6 +1936,9 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
     const n = Math.ceil(heat), key = 's' + n;
     if (cache.stars !== key) { cache.stars = key; $('stars').innerHTML = '<b>' + '★'.repeat(n) + '</b>' + '☆'.repeat(5 - n); $('stars').classList.toggle('hot', n > 0); }
     put('clock', clockText());
+    const drv = play && !!player.car && !inside && !atHome;
+    if (cache.drv !== drv) { cache.drv = drv; $('stage').classList.toggle('driving', drv); $('btnAct').textContent = drv ? 'Իջնել' : 'Մեքենա'; if (!drv) padOff();
+      if (drv && touch && !cache.tipShown) { cache.tipShown = true; $('steerTip').classList.remove('out'); setTimeout(() => $('steerTip').classList.add('out'), 6000); } }
     put('speed', atHome ? 'տանը' : inside ? (drinkT > 0 ? 'խմիչք ×2 · ' + Math.ceil(drinkT) + ' վ' : vip ? 'VIP սրահ' : 'ակումբում') : player.car ? Math.round(Math.abs(player.car.v) * 0.42) + ' կմ/ժ' : 'ոտքով');
     const showDance = play && !paused && onFloor();
     if (cache.dance !== showDance) { cache.dance = showDance; $('danceBtn').hidden = !showDance; }
@@ -1964,20 +1996,23 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   cv.addEventListener('pointermove', (e) => {
     if (e.pointerId !== joy.id) return;
     const r = cv.getBoundingClientRect(); let dx = (e.clientX - r.left - joy.ox) / 52, dy = (e.clientY - r.top - joy.oy) / 52; const m = Math.hypot(dx, dy);
+    joy.sx = clamp((e.clientX - r.left - joy.ox) / 70, -1, 1);
     if (m > 1) { dx /= m; dy /= m; } joy.dx = dx; joy.dy = dy;
   });
-  const joyEnd = (e) => { if (e.pointerId === joy.id) { joy.id = null; joy.dx = joy.dy = 0; } };
+  const joyEnd = (e) => { if (e.pointerId === joy.id) { joy.id = null; joy.dx = joy.dy = joy.sx = 0; } };
   cv.addEventListener('pointerup', joyEnd); cv.addEventListener('pointercancel', joyEnd);
   $('btnAct').addEventListener('click', enterExit);
   $('danceBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); danceHit(); });
   $('hint').addEventListener('click', enterExit);
-  const bb = $('btnBrake');
-  bb.addEventListener('pointerdown', (e) => { padBrake = true; e.preventDefault(); });
-  ['pointerup', 'pointercancel', 'pointerleave'].forEach((n) => bb.addEventListener(n, () => { padBrake = false; }));
+  const pedal = (id, set) => { const b = $(id);
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); useTouch(); set(true); b.classList.add('on'); try { b.setPointerCapture(e.pointerId); } catch (er) {} if (navigator.vibrate) navigator.vibrate(8); });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((n) => b.addEventListener(n, () => { set(false); b.classList.remove('on'); }));
+    b.addEventListener('contextmenu', (e) => e.preventDefault()); };
+  pedal('btnBrake', (v) => { padBrake = v; }); pedal('btnGas', (v) => { padGas = v; }); pedal('btnRev', (v) => { padRev = v; });
   function setPause(v) {
     if (mode !== 'play' || paused === v) return;
     paused = v; if (v) storyList(); $('pause').hidden = !v; $('pauseBtn').textContent = v ? '▶' : 'Ⅱ';
-    for (const k in keys) keys[k] = false; joy.id = null; joy.dx = joy.dy = 0; padBrake = false;
+    for (const k in keys) keys[k] = false; joy.id = null; joy.dx = joy.dy = joy.sx = 0; padOff();
     if (actx) master.gain.setTargetAtTime(v || !soundOn ? 0 : 1, actx.currentTime, 0.03);
     if (v) $('resumeBtn').focus(); else $('resumeBtn').blur();
   }
@@ -2274,7 +2309,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   // dialogue: lines are [who, text]; { choice: [[label, lines]] } offers replies; a function in the list runs as it is reached
   function say(lines, done) {
     TALK = { q: lines.slice(), done: done };
-    for (const k in keys) keys[k] = false; joy.id = null; joy.dx = joy.dy = 0; padBrake = false; if (player.car) player.car.v = 0;
+    for (const k in keys) keys[k] = false; joy.id = null; joy.dx = joy.dy = joy.sx = 0; padOff(); if (player.car) player.car.v = 0;
     $('talk').hidden = false; talkNext();
   }
   function talkNext() {
