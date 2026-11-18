@@ -169,7 +169,7 @@ func _next() -> void:
 	if talk == null: return
 	var L = talk.q.pop_front() if talk.q.size() else null
 	while L is Callable: L.call(); L = talk.q.pop_front() if talk.q.size() else null
-	for b in talk_btns.get_children(): b.queue_free()
+	for b in talk_btns.get_children(): talk_btns.remove_child(b); b.queue_free()
 	if L == null:
 		var d: Callable = talk.done; end_talk(); if d.is_valid(): d.call()
 		return
@@ -196,7 +196,7 @@ func _pick(n: int) -> void:
 ## items: [{ label, sub, price, go: Callable, on, disabled }]
 func panel(title: String, text: String, items: Array) -> void:
 	shop_title.text = title; shop_text.text = text
-	for b in shop_list.get_children(): b.queue_free()
+	for b in shop_list.get_children(): shop_list.remove_child(b); b.queue_free()
 	for it in items:
 		var b := Button.new(); b.text = it.label + (("   " + it.price) if it.has("price") else ""); b.add_theme_font_size_override("font_size", 18)
 		b.custom_minimum_size = Vector2(0, 50); b.disabled = it.get("disabled", false); b.pressed.connect(it.go); shop_list.add_child(b)
@@ -218,7 +218,7 @@ func _process(_dt: float) -> void:
 	var D := 140.0 if small else 180.0
 	radar.size = Vector2(D, D); radar.position = Vector2(s.x - D - 16, 12); radar.visible = not big.visible
 	var line: Array = main.missions.hud_line()
-	job_panel.visible = line[0] != "" and not busy()
+	job_panel.visible = line[0] != "" and not busy() and main.interior.inside == ""
 	job_text.text = line[0]; job_time.text = line[1]; job_text.add_theme_color_override("font_color", line[2])
 	job_panel.reset_size(); job_panel.position = Vector2((s.x - job_panel.size.x) / 2, 12)
 	if big.visible:
@@ -242,7 +242,7 @@ func _draw_north(c: Control) -> void:
 
 func _draw_radar() -> void:
 	var c := radar_draw; var C := c.size.x; var R := C / 2; var th := _th(); var z := C / 1500.0
-	var ctr: Vector2 = main.target_pos()
+	var ctr: Vector2 = main.map_pos()
 	var X := Transform2D(th, Vector2(z, z), 0, Vector2(R, R)) * Transform2D(0, -ctr)
 	c.draw_set_transform_matrix(X)
 	c.draw_texture_rect(base, Rect2(0, 0, WS, WS), false)
@@ -268,7 +268,7 @@ func _draw_big() -> void:
 	var ms = main.missions; var flash := int(main.time * 6) % 2 == 0
 	if ms.wp != null:
 		var pts := PackedVector2Array()
-		for p in ms.route(main.target_pos()): pts.append(p * k)
+		for p in ms.route(main.map_pos()): pts.append(p * k)
 		_stroke(c, pts, 7)
 	for car in main.cars:
 		if car.kind == "police" and car.chase: c.draw_circle(Vector2(car.x, car.y) * k, 7, Color("ff5a5f") if flash else Color("4d8dff"))
@@ -284,7 +284,7 @@ func _draw_big() -> void:
 			c.draw_string_outline(font, q + Vector2(-w / 2, 34), it.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, 5, Color(0.05, 0.05, 0.07, 0.9))
 			c.draw_string(font, q + Vector2(-w / 2, 34), it.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
 	var head: float = main.pcar.a if main.pcar else main.me.a
-	_arrow(c, main.target_pos() * k, head, 16)
+	_arrow(c, main.map_pos() * k, head, 16)
 
 func _big_input(e: InputEvent) -> void:
 	var pos := Vector2.INF

@@ -27,15 +27,15 @@ var marker: MeshInstance3D  # the column over the current goal
 var marker_mat: StandardMaterial3D
 
 const CAST := {
-	"gurgen": { "gen": "Գուրգեն քեռու", "name": "Գուրգեն քեռի", "nom": "Գուրգեն քեռին", "av": "m08", "col": "ffcf4a" },
+	"gurgen": { "gen": "Գուրգեն քեռու", "name": "Գուրգեն քեռի", "nom": "Գուրգեն քեռին", "av": "m02", "col": "ffcf4a" },
 	"nare": { "gen": "Նարեի", "name": "Նարե", "nom": "Նարեն", "av": "f05", "col": "ff8fb8" },
 	"rubo": { "gen": "Ռուբոյի", "name": "Ռուբո", "nom": "Ռուբոն", "av": "m04", "col": "ff5a5f" },
-	"levon": { "gen": "Լևոնի", "name": "Լևոն", "nom": "Լևոնը", "av": "m07", "col": "35d6e6" },
+	"levon": { "gen": "Լևոնի", "name": "Լևոն", "nom": "Լևոնը", "av": "m17", "col": "35d6e6" },
 	"lilit": { "gen": "Լիլիթի", "name": "Լիլիթ", "nom": "Լիլիթը", "av": "f13", "col": "b48cff" },
 	"you": { "name": "Դու", "col": "f1ede6" } }
 const ICON := { "dealer": "4d8dff", "clothes": "b48cff", "home": "58d68d", "race": "35d6e6", "escape": "ff5a5f", "pickup": "ffcf4a", "deliver": "58d68d",
 	"cp": "35d6e6", "wp": "ff9f1c", "square": "4f9fc0", "story": "ff4fa3", "rival": "35d6e6", "club": "ff4fa3" }
-const PLACE_NAME := { "square": "Հրապարակ", "club": "Նեոն ակումբ", "race": "Մրցարշավ", "escape": "Փախուստ" }
+const PLACE_NAME := { "square": "Հրապարակ", "club": "Նեոն ակումբ", "race": "Մրցարշավ", "escape": "Փախուստ", "dealer": "Ավտոսրահ", "clothes": "Հագուստ", "home": "Տուն" }
 const GOODS := ["լավաշ", "ծաղիկներ", "ծանրոց", "խորոված", "ուղևոր", "դեղորայք", "ծիրան"]
 
 var chs: Array = []
@@ -84,21 +84,30 @@ func _sign(x: float, y: float, text: String, col: Color) -> void:
 	add_child(l)
 
 func _build_places() -> void:
-	var defs := [{ "id": "race", "b": [5, 5], "car": true }, { "id": "escape", "b": [1, 5], "car": true }]
+	var defs := [{ "id": "dealer", "b": [1, 2], "car": false }, { "id": "clothes", "b": [2, 4], "car": false }, { "id": "home", "b": [4, 1], "car": false },
+		{ "id": "race", "b": [5, 5], "car": true }, { "id": "escape", "b": [1, 5], "car": true }]
 	var ci := int(club_rect.x / CELL); var cj := int(club_rect.y / CELL)
 	for d in defs:
 		var i: int = d.b[0]; var j: int = (d.b[1] + 1) % N if (d.b[0] == ci and d.b[1] == cj) else d.b[1]
 		var x := i * CELL + 270.0; var y := j * CELL + (92.0 if d.car else 131.0)
 		var col := Color(ICON[d.id])
 		_ring(x, y, 20 if d.car else 9, 24 if d.car else 12, col)
-		_sign(x, j * CELL + 128.0, PLACE_NAME[d.id], col)
-		places.append({ "id": d.id, "x": x, "y": y, "car": d.car, "arm": false })
-	_ring(club_door.x, club_door.y, 9, 12, Color(ICON.club))   # the club opens in stage 4
-	_sign(club_door.x, club_door.y + 8, "ՆԵՈՆ", Color(ICON.club))
+		if d.id != "home": _sign(x, j * CELL + (128.0 if d.car else 140.0), PLACE_NAME[d.id].to_upper(), col)
+		places.append({ "id": d.id, "x": x, "y": y, "j": j, "car": d.car, "arm": false, "park": Vector3(x + 80, j * CELL + 98, 0) })
+	_ring(club_door.x, club_door.y, 9, 12, Color(ICON.club))
+	_sign(club_door.x, club_door.y + 8, "ՆԵՈՆ ԱԿՈՒՄԲ", Color(ICON.club))
 
 # ----------------------------------------------------------------- money and saving ----------
 func prog0() -> Dictionary:
-	return { "cars": [], "car": null, "outfit": "m07", "outfits": ["m07"], "home": false, "race_best": 0.0, "story": 0, "kind": false }
+	return { "cars": [], "car": null, "outfit": "m07", "outfits": ["m07"], "home": false, "race_best": 0.0, "story": 0, "kind": false, "vip_table": false }
+
+func place(id: String):
+	for pl in places: if pl.id == id: return pl
+	return null
+
+func pay(price: int, ok: Callable) -> void:
+	if cash < price: m.toast("Փողդ չի հերիքում. պակասում է " + money(price - cash)); return
+	cash -= price; ok.call(); save()
 
 func _load() -> void:
 	prog = prog0()
@@ -179,6 +188,7 @@ func _place_check(tg: Vector2) -> void:
 			else: _open_place(pl)
 
 func _open_place(pl) -> void:
+	if pl.id in ["dealer", "clothes", "home"]: m.interior.open_place(pl); return
 	if pl.id == "race":
 		m.ui.panel("Մրցարշավ", "Անցիր 6 ստուգակետով ժամանակին։ Մրցանակ՝ 2 500 ֏, գումարած 50 ֏ մնացած ամեն վայրկյանի համար։" + (" Ռեկորդդ՝ " + fmt_t(prog.race_best) + "։" if prog.race_best > 0 else ""),
 			[{ "label": "Սկսել", "go": _go_race.bind(pl) }])
@@ -571,8 +581,7 @@ func frame(dt: float) -> void:   # from main._process: characters, the beam and 
 		var id: String = it[0]; var p = it[1]
 		if p == null: continue
 		if not npc.has(id):
-			var k: int = People.AVATARS.find(CAST[id].av)
-			npc[id] = People.Avatar.new(m.people_scenes[maxi(0, k)]); add_child(npc[id].root)
+			npc[id] = People.Avatar.new(People.scene(CAST[id].av)); add_child(npc[id].root)
 		var av = npc[id]; seen[id] = true; av.root.visible = true
 		var t: Vector2 = m.target_pos(); var face := atan2(t.y - p.y, t.x - p.x) if t.distance_to(p) < 160 else -PI / 2
 		av.root.position = Vector3(p.x, m.city.ground_y(p.x, p.y), p.y) * S; av.root.rotation.y = -face

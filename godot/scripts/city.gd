@@ -118,8 +118,10 @@ func _multi(mesh: Mesh, mat: Material, xforms: Array, shadows := true) -> MultiM
 func _box_xf(cx: float, cy: float, cz: float, sx: float, sy: float, sz: float) -> Transform3D:  # centre and size in game units
 	return Transform3D(Basis.from_scale(Vector3(sx, sy, sz) * S), Vector3(cx, cy, cz) * S)
 
+var keep_out: Array = []   # Rect2s where park trees are left out (the house)
+
 func build() -> void:
-	generate()
+	if blocks.is_empty(): generate()
 	var unit := BoxMesh.new()   # 1 x 1 x 1, scaled per instance
 	# ground: asphalt everywhere, the blocks sit on it as raised slabs
 	var ground := MeshInstance3D.new()
@@ -145,6 +147,9 @@ func build() -> void:
 			if b.type == "park":
 				parks.append(_box_xf(i * CELL + 320, CURB + 0.1, j * CELL + 320, 352, 0.2, 352))
 				for t in b.trees:
+					var out := false
+					for r: Rect2 in keep_out: if r.grow(t.r).has_point(Vector2(t.x, t.y)): out = true
+					if out: continue
 					trunks.append(_box_xf(t.x, CURB + 9, t.y, 4, 18, 4))
 					crowns.append(Transform3D(Basis.from_scale(Vector3(t.r, t.r * 1.15, t.r) * S * 2.0), Vector3(t.x, CURB + 18 + t.r * 0.8, t.y) * S))
 			var n := 0

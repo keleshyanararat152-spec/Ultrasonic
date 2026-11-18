@@ -7,6 +7,11 @@ class_name People
 const CELL := 520
 const AVATARS := ["m07", "m04", "m08", "f05", "f13", "f02"]
 const H := 1.85 * 1.05     # height in Godot units
+static var _scenes := {}
+
+static func scene(id: String) -> PackedScene:   # any avatar by name, loaded once
+	if not _scenes.has(id): _scenes[id] = load("res://assets/people/%s.glb" % id)
+	return _scenes[id]
 
 ## A posable person. root is placed in the world; the model inside faces +x like the cars.
 class Avatar:
@@ -85,6 +90,31 @@ class Avatar:
 				var ug := Transform3D(Basis(lat, sw * 0.45 * amp) * Basis(lower[s]) * g.basis, g.origin)
 				_set_global(ua, ug)
 				if fa >= 0: _set_global(fa, _rot(ug * skel.get_bone_rest(fa), lat, -0.3 * amp - 0.1))
+
+	## b: beats; style 0..3 picks the arm move; returns how far the body drops on the bounce (Godot units)
+	func dance(b: float, style: int, amp := 1.0) -> float:
+		if skel == null: return 0.0
+		var bounce := (0.5 - 0.5 * cos(b * TAU)) * amp
+		for k in 2:
+			var s := "L" if k == 0 else "R"
+			var th: int = bones[s + " Thigh"]; var ca: int = bones[s + " Calf"]
+			var side := sin(b * PI + k * PI) * 0.12 * amp   # a step from foot to foot
+			if th >= 0:
+				var tg := _rot(skel.get_bone_global_rest(th), lat, -(bounce * 0.42 + maxf(0, side)))
+				_set_global(th, tg)
+				if ca >= 0: _set_global(ca, _rot(tg * skel.get_bone_rest(ca), lat, bounce * 0.8 + maxf(0, side) * 1.4))
+			var ua: int = bones[s + " UpperArm"]; var fa: int = bones[s + " Forearm"]
+			if ua < 0 or not lower.has(s): continue
+			var g := skel.get_bone_global_rest(ua); var up := 0.0; var bend := -0.9
+			match style:
+				0: up = -(0.5 + 0.7 * bounce)                                  # both arms pump forward
+				1: up = sin(b * PI + k * PI) * 0.9; bend = -1.3                 # arms swing in turn
+				2: up = -(1.6 + 0.9 * bounce) if k == int(b / 2) % 2 else -0.3; bend = -0.3   # one hand up, every other bar
+				_: up = -0.3 - 0.35 * bounce; bend = -1.6 - 0.3 * bounce        # small boxer steps
+			var ug := Transform3D(Basis(lat, up * amp) * Basis(lower[s]) * g.basis, g.origin)
+			_set_global(ua, ug)
+			if fa >= 0: _set_global(fa, _rot(ug * skel.get_bone_rest(fa), lat, bend * amp))
+		return bounce * 0.07
 
 # --------------------------------------------------------------------- pedestrians ----------
 class Ped:

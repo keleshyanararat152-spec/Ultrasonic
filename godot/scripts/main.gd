@@ -45,12 +45,14 @@ var sig_mm: MultiMesh
 var sig_t := -9.0
 var missions
 var ui
+var interior
 
 func _ready() -> void:
 	randomize()
 	_environment()
 	city = preload("res://scripts/city.gd").new()
 	add_child(city)
+	city.generate(); city.keep_out = [preload("res://scripts/interior.gd").house_spot(city).rect]
 	city.build()
 	_build_signals()
 	for name in MODELS: scenes[name] = load("res://assets/cars/%s.glb" % name)
@@ -81,7 +83,9 @@ func _ready() -> void:
 	cam = Camera3D.new(); cam.fov = 62; cam.near = 0.2; cam.far = 600
 	add_child(cam)
 	missions = preload("res://scripts/missions.gd").new(); add_child(missions); missions.setup(self)
+	interior = preload("res://scripts/interior.gd").new(); interior.m = self; add_child(interior); interior.build_house()
 	_hud()
+	interior.start()
 	toast(missions.start_text(), 4)
 
 static func ic(i: int) -> float:
@@ -89,6 +93,13 @@ static func ic(i: int) -> float:
 
 func target_pos() -> Vector2:
 	return Vector2(pcar.x, pcar.y) if pcar else Vector2(me.x, me.y)
+
+func map_pos() -> Vector2:   # where the maps put you: the club door or your house while you are inside
+	return interior.map_pos() if interior.inside != "" else target_pos()
+
+func set_outfit(id: String) -> void:
+	if me_av: me_av.root.queue_free()
+	me_av = People.Avatar.new(People.scene(id)); add_child(me_av.root)
 
 # -------------------------------------------------------------------- environment ----------
 func _environment() -> void:
@@ -133,6 +144,9 @@ func _day_night(dt: float) -> void:
 	env.fog_light_color = Color("f0d2b6") * tint
 	env.ambient_light_color = Color(0.62, 0.66, 0.72).lerp(Color(0.75, 0.55, 0.5), dusk).lerp(Color(0.1, 0.12, 0.2), night)
 	env.ambient_light_energy = 1.0
+	if interior.inside != "":   # indoors: no sun, the room's own light
+		sun.light_energy = 0.0
+		env.ambient_light_color = Color(0.52, 0.48, 0.44) if interior.inside == "home" else Color(0.32, 0.26, 0.38)
 	for g: Array in city.facade_mats:
 		(g[0] as StandardMaterial3D).albedo_color = Color(1.0, 0.82, 0.55) * night * 1.1; (g[1] as Node3D).visible = night > 0.02
 	city.bulb_mat.emission_energy_multiplier = 0.4 + night * 3.5
@@ -246,6 +260,8 @@ func _ped_avatar(p) -> void:
 
 # --------------------------------------------------------------------- getting in and out ----------
 func act() -> void:
+	if interior.inside != "": interior.act(); return
+	if interior.near_door(): interior.enter_club(); return
 	if pcar:
 		if absf(pcar.v) > 45: return
 		var p := Vector2(pcar.x + sin(pcar.a) * 28, pcar.y - cos(pcar.a) * 28)
@@ -277,6 +293,7 @@ func _physics_process(dt: float) -> void:
 	if ui.busy(): return   # talking, a panel or the big map: the city waits
 	time += dt
 	var inp: Dictionary = touch_ui.read_input()
+	if interior.inside != "": interior.step(dt, inp); return   # in the club or at home the city waits too
 	if pcar:
 		var hit := pcar.step(city, inp.thr, inp.steer * 0.8, inp.hand, dt)
 		if hit > 70: _crash(hit)
@@ -299,6 +316,7 @@ func _physics_process(dt: float) -> void:
 			else: ly = signf(ly) * hy
 			p = Vector2(c.x + lx * ca - ly * sa, c.y + lx * sa + ly * ca)
 		p = city.push_out(p, 7); me.x = p.x; me.y = p.y
+		interior.door_tick()
 	# traffic: civilians keep to the streets and lights; police chase when you have stars
 	var blockers := []
 	if not pcar: blockers.append(Vector2(me.x, me.y))
@@ -390,6 +408,7 @@ func _process(dt: float) -> void:
 			(c.anim.lights[k] as StandardMaterial3D).albedo_color = (Color("ff5a5f") if (k == 0) == flash else Color("4d8dff")) if c.chase else Color("9aa3ad")
 	for p in peds: _place_ped(p, dt)
 	missions.frame(dt)
+	interior.frame(dt)
 	# you on foot
 	me_av.root.visible = pcar == null
 	if not pcar:
@@ -404,7 +423,7 @@ func _process(dt: float) -> void:
 	var far := 1.45 if vs.x < vs.y else 1.0
 	var dist := ((80 + spd * 0.07) if pcar else 60.0) * far
 	var p := Vector2(t.x - cos(cam_a) * dist, t.y - sin(cam_a) * dist)
-	if not pcar: p = city.push_out(p, 9)
+	if not pcar: p = interior.cam_fix(p) if interior.inside != "" else city.push_out(p, 9)
 	if shake > 0:
 		var k := shake * shake * 6; p += Vector2(randf_range(-k, k), randf_range(-k, k)); shake = maxf(0, shake - dt * 2.5)
 	var gy: float = city.ground_y(t.x, t.y)
@@ -475,20 +494,27 @@ func _hud() -> void:
 	var tp := _panel(); tp.set_anchors_preset(Control.PRESET_CENTER_TOP); tp.position = Vector2(-240, 120); tp.custom_minimum_size = Vector2(480, 0)
 	var tl := Label.new(); tl.add_theme_font_size_override("font_size", 20); tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tp.add_child(tl); tp.visible = false; layer.add_child(tp)
-	hud = { "panel": panel, "cash": cash, "stars": stars, "speed": speed, "clock": clock, "toast": tl, "toast_panel": tp }
+	var hp := _panel(); hp.visible = false
+	var hl := Label.new(); hl.add_theme_font_size_override("font_size", 17); hp.add_child(hl); layer.add_child(hp)
+	hud = { "hint": hl, "hint_panel": hp, "panel": panel, "cash": cash, "stars": stars, "speed": speed, "clock": clock, "toast": tl, "toast_panel": tp }
 
 func _hud_tick(dt: float) -> void:
 	var n := ceili(heat)
 	hud.stars.text = "★".repeat(n) + "☆".repeat(5 - n)
 	hud.stars.add_theme_color_override("font_color", Color("ff5a5f") if n > 0 else Color("a9a59c"))
-	hud.speed.text = ("%d կմ/ժ" % int(absf(pcar.v) * 0.42)) if pcar else "ոտքով"
+	hud.speed.text = interior.status() if interior.inside != "" else (("%d կմ/ժ" % int(absf(pcar.v) * 0.42)) if pcar else "ոտքով")
 	hud.clock.text = clock_text()
 	hud.cash.text = missions.money(missions.cash)
 	hud.panel.visible = not ui.big.visible
 	if toast_t > 0:
 		toast_t -= dt
 		if toast_t <= 0: hud.toast_panel.visible = false
-	touch_ui.act_label = "Իջնել" if pcar else ("Նստել" if _car_near() else "")
+	var il: String = interior.act_label()
+	touch_ui.act_label = "Իջնել" if pcar else (il if il != "" else ("Նստել" if _car_near() and interior.inside == "" else ""))
+	var hn: String = interior.hint()
+	hud.hint.text = hn; hud.hint_panel.visible = hn != "" and not DisplayServer.is_touchscreen_available() and not ui.busy()
+	var vs := get_viewport().get_visible_rect().size; var hp: Control = hud.hint_panel
+	hp.reset_size(); hp.position = Vector2((vs.x - hp.size.x) / 2, vs.y - hp.size.y - 24)
 	touch_ui.driving = pcar != null
 
 func _car_near() -> bool:
@@ -498,6 +524,7 @@ func _car_near() -> bool:
 
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo and (e.keycode == KEY_E or e.keycode == KEY_F): act()
+	if e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_SPACE and interior.on_floor(): interior.dance_hit()
 
 # testing aid: `godot -- --shot=/path/out.png [--frames=N] [--drive]` saves a frame and quits
 var _test := {}
@@ -513,14 +540,24 @@ func _test_tick() -> void:
 			if a == "--heat": heat = 3
 			if a == "--talk": _test.talk = true
 			if a == "--map": _test.map = true
+			if a == "--club": _test.club = true
+			if a == "--vip": _test.vip = true
+			if a == "--home": _test.home = true
+			if a == "--house": _test.house = true
 			if a == "--storytest": _test.story = true
 			if a == "--jobtest": _test.jobs = true
+			if a == "--shoptest": _test.shop = true
 	if _test.get("story", false): _story_test(); return
 	if _test.get("jobs", false): _job_test(); return
+	if _test.get("shop", false): _shop_test(); return
 	if not _test.on: return
 	touch_ui.touched = true
 	_frame += 1
 	if _frame == 40 and _test.get("talk", false): me.x = missions.sp.square.x; me.y = missions.sp.square.y + 10
+	if _frame == 5 and _test.get("club", false): interior.enter_club(); me.x = interior.CX - 110; me.y = interior.CY + 10; me.a = 0; cam_a = 0
+	if _frame == 5 and _test.get("vip", false): interior.enter_club(); interior._to_vip(); me.x = interior.VX - 60; me.y = interior.VY
+	if _frame == 5 and _test.get("home", false): interior.enter_home(); me.x = interior.HX - 40; me.y = interior.HY + 30; me.a = -0.5; cam_a = -0.5
+	if _frame == 3 and _test.get("house", false): me.x = interior.house.x - 30; me.y = interior.house.front - 150; me.a = PI / 2 - 0.3; cam_a = me.a
 	if _frame == 60 and _test.get("map", false): missions.set_waypoint(Vector2(ic(6), ic(1))); ui.toggle_map()
 	if _frame > 30:   # script time per frame, for comparing speed-ups
 		_test.proc = _test.get("proc", 0.0) + Performance.get_monitor(Performance.TIME_PROCESS) * 1000
@@ -616,3 +653,17 @@ func _job_test() -> void:   # deliveries, a taxi fare, the race and the escape, 
 		var c = ms.act.cps[ms.act.k]; pcar.x = c.x; pcar.y = c.y; pcar.v = 0
 	elif ms.act != null and ms.act.kind == "escape":
 		if _frame % 20 == 0: heat = 0
+
+func _shop_test() -> void:   # buys a car, an outfit and the house, then goes home and dances in the club
+	_frame += 1
+	var ms = missions
+	if _frame == 2: ms.prog = ms.prog0(); ms.cash = 200000
+	if _frame == 4: interior.open_place(ms.place("dealer")); (ui.shop_list.get_child(4) as Button).pressed.emit(); print("SHOP car ", ms.prog.car, " cash ", ms.cash, " owned ", interior.owned != null)
+	if _frame == 6: interior.open_place(ms.place("clothes")); (ui.shop_list.get_child(9) as Button).pressed.emit(); ui.close_panel(); print("SHOP outfit ", ms.prog.outfit, " cash ", ms.cash)
+	if _frame == 8: interior.open_place(ms.place("home")); (ui.shop_list.get_child(0) as Button).pressed.emit(); print("SHOP home ", ms.prog.home, " inside ", interior.inside, " cash ", ms.cash)
+	if _frame == 10: interior._call_car(); interior._sleep(); interior._wardrobe(); (ui.shop_list.get_child(0) as Button).pressed.emit(); ui.close_panel(); print("SHOP wardrobe ", ms.prog.outfit)
+	if _frame == 12: interior.leave_home(); print("SHOP out ", interior.inside, " me ", me.x, " ", me.y)
+	if _frame == 14: interior.enter_club(); me.x = interior.CX - 40; me.y = interior.CY; print("SHOP club ", interior.inside, " floor ", interior.on_floor())
+	if _frame > 14 and _frame < 300 and _frame % 7 == 0: interior.dance_hit()
+	if _frame == 300: interior._drink(); interior._to_vip(); interior._table(); print("SHOP vip ", interior.inside, " table ", ms.prog.vip_table, " cash ", ms.cash)
+	if _frame == 310: interior._from_vip(); interior._leave_club(); print("SHOP left ", interior.inside); get_tree().quit()
