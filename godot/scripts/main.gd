@@ -715,11 +715,11 @@ func _job_test() -> void:   # deliveries, a taxi fare, the race and the escape, 
 		if _frame < 200:
 			pcar.x = ms.job.p.x; pcar.y = ms.job.p.y; pcar.v = 0
 		elif _frame == 200:
-			print("JOB cash after fares ", ms.cash); pcar.x = ms.places[0].x + 120; pcar.y = ms.places[0].y
-		elif _frame == 210: pcar.x = ms.places[0].x; pcar.y = ms.places[0].y
+			print("JOB cash after fares ", ms.cash); pcar.x = ms.place("race").x + 120; pcar.y = ms.place("race").y
+		elif _frame == 210: pcar.x = ms.place("race").x; pcar.y = ms.place("race").y
 		elif _frame == 400:
-			print("JOB cash after race ", ms.cash, " best ", ms.prog.race_best); pcar.x = ms.places[1].x + 120; pcar.y = ms.places[1].y
-		elif _frame == 410: pcar.x = ms.places[1].x; pcar.y = ms.places[1].y
+			print("JOB cash after race ", ms.cash, " best ", ms.prog.race_best); pcar.x = ms.place("escape").x + 120; pcar.y = ms.place("escape").y
+		elif _frame == 410: pcar.x = ms.place("escape").x; pcar.y = ms.place("escape").y
 		elif _frame > 600: print("JOB end cash ", ms.cash); get_tree().quit()
 	elif ms.act != null and ms.act.kind == "race":
 		var c = ms.act.cps[ms.act.k]; pcar.x = c.x; pcar.y = c.y; pcar.v = 0

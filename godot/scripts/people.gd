@@ -37,7 +37,7 @@ class Avatar:
 	func _init(scene: PackedScene) -> void:
 		var model: Node3D = scene.instantiate()
 		root.add_child(model)
-		model.rotation.y = PI / 2   # the avatars face +z; turn them to face +x
+		model.rotation.y = PI / 2   # the avatars face +z; turn them to face +x (checked against the bones below)
 		skel = _find_skel(model)
 		if skel == null: return
 		var xf := Transform3D.IDENTITY   # skeleton space -> model space, by walking up to the model
@@ -47,6 +47,14 @@ class Avatar:
 			n = n.get_parent()
 		var inv := xf.basis.inverse()
 		lat = (inv * Vector3.RIGHT).normalized(); down = (inv * Vector3.DOWN).normalized(); fwd = (inv * Vector3.BACK).normalized()
+		# read the body's own axes from its bones, so it does not matter how the importer turned the file
+		var hb := skel.find_bone("Bip01 Head"); var pb := skel.find_bone("Bip01 Pelvis"); var lb := skel.find_bone("Bip01 L Thigh"); var rb := skel.find_bone("Bip01 R Thigh")
+		if hb >= 0 and pb >= 0 and lb >= 0 and rb >= 0:
+			var up := (skel.get_bone_global_rest(hb).origin - skel.get_bone_global_rest(pb).origin).normalized()
+			var l := skel.get_bone_global_rest(lb).origin - skel.get_bone_global_rest(rb).origin; l = (l - up * l.dot(up)).normalized()
+			var f := l.cross(up).normalized()
+			down = -up; fwd = f; lat = l
+			var fm := (xf.basis * f); model.rotation.y = atan2(fm.z, fm.x)
 		# scale to a person's height, measured on the skeleton (head to toe, in model space)
 		var head := skel.find_bone("Bip01 Head"); var toe := skel.find_bone("Bip01 L Toe0")
 		var hgt := 1.8
@@ -55,6 +63,7 @@ class Avatar:
 		model.scale = Vector3.ONE * (H / maxf(0.01, hgt))
 		var foot := (xf * skel.get_bone_global_rest(toe).origin).y if toe >= 0 else 0.0
 		model.position.y = -foot * model.scale.y
+		_bind(model)   # newer Godot can leave the body unbound from its bones; tie it back
 		for nm in WB: bones[nm] = skel.find_bone("Bip01 " + nm)
 		_dress_skin(model)
 		for s in ["L", "R"]:
@@ -70,6 +79,11 @@ class Avatar:
 		var key := scene.resource_path
 		if not _walk_tables.has(key): _walk_tables[key] = _make_table()
 		wt = _walk_tables[key]
+
+	func _bind(n: Node) -> void:
+		if n is MeshInstance3D and (n as MeshInstance3D).skin != null:
+			(n as MeshInstance3D).skeleton = (n as MeshInstance3D).get_path_to(skel)
+		for c in n.get_children(): _bind(c)
 
 	static var _dressed := {}
 	func _dress_skin(n: Node) -> void:   # skin a little soft, cloth matt, faces with light under the skin on computers

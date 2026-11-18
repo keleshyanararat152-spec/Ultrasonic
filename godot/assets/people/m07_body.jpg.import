@@ -8,7 +8,7 @@ metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "de59a58d2bf10a0cc18b1a7cdb2ccc2f"
+"md5": "66410b9b15d3a1470c0973b18a3c51c8"
 }
 
 [deps]
@@ -21,6 +21,8 @@ dest_files=["res://.godot/imported/m07_body.jpg-01f60f50c9d2696d50146221f9e993da
 compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
+compress/uastc_level=0
+compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
@@ -28,6 +30,10 @@ mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
+process/channel_remap/red=0
+process/channel_remap/green=1
+process/channel_remap/blue=2
+process/channel_remap/alpha=3
 process/fix_alpha_border=true
 process/premult_alpha=false
 process/normal_map_invert_y=false
