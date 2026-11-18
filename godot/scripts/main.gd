@@ -79,7 +79,7 @@ func _ready() -> void:
 		var r: Vector2i = Car.DV[(d + 1) % 4]; var t := randf_range(150, 370)
 		_make_car(ic(I) + dv.x * t + r.x * 50, ic(J) + dv.y * t + r.y * 50, d * PI / 2, TRAFFIC.pick_random())
 	var lite := OS.has_feature("mobile")
-	for n in (26 if lite else 40):
+	for n in (26 if lite else (70 if hi else 40)):
 		var p := People.Ped.new()
 		p.i = randi_range(0, 6); p.j = randi_range(0, 6); p.t = randf_range(0, 1512); p.dir = 1 if randf() < 0.5 else -1; p.sp = randf_range(32, 50)
 		_ped_avatar(p); peds.append(p)
@@ -316,7 +316,7 @@ func _aabb(n: Node) -> AABB:
 	return box
 
 func _ped_avatar(p) -> void:
-	p.av = People.Avatar.new(people_scenes[randi_range(1, people_scenes.size() - 1)])
+	p.av = People.Avatar.new(People.scene(People.PEOPLE.pick_random()))
 	add_child(p.av.root)
 
 # --------------------------------------------------------------------- getting in and out ----------
@@ -475,7 +475,7 @@ func _process(dt: float) -> void:
 	if not pcar:
 		me_av.root.position = Vector3(me.x, city.ground_y(me.x, me.y), me.y) * S
 		me_av.root.rotation.y = -me.a
-		me_av.walk(me.walk * 0.85, minf(1, me.moving * 1.5))
+		me_av.walk(me.walk * 0.85, minf(1, me.moving * 1.5)); me_av.root.position.y += me_av.bob
 	# camera: behind the car or the walker
 	var t := target_pos(); var head: float = pcar.a if pcar else me.a
 	var spd := absf(pcar.v) if pcar else 0.0
@@ -491,6 +491,9 @@ func _process(dt: float) -> void:
 	cam.position = Vector3(p.x, (36 if pcar else 30) * far + gy, p.y) * S
 	cam.look_at(Vector3(t.x + cos(cam_a) * 45, gy + (9 if pcar else 14), t.y + sin(cam_a) * 45) * S)
 	cam.fov = 60 + spd * 0.035
+	if _test.get("close", false):   # testing aid: a close side view of you
+		var me3 := Vector3(me.x, city.ground_y(me.x, me.y), me.y) * S; var sd := Vector3(-sin(me.a), 0, cos(me.a))
+		cam.position = me3 + sd * 3.2 + Vector3(cos(me.a), 0, sin(me.a)) * 1.2 + Vector3(0, 1.3, 0); cam.look_at(me3 + Vector3(0, 1.0, 0)); cam.fov = 45
 	sun.global_position = cam.global_position
 	_hud_tick(dt)
 	_test_tick()
@@ -518,14 +521,14 @@ func _place_ped(p, dt: float) -> void:
 	var r: Node3D = p.av.root
 	r.position = Vector3(p.x, city.ground_y(p.x, p.y), p.y) * S
 	var dc := (r.position - cam.position).length()
-	r.visible = dc < 130
+	r.visible = dc < (220 if hi else 130)
 	if not r.visible: return
 	r.rotation = Vector3(0, -p.a, PI / 2 if p.down > 0 else 0.0)
 	if p.down > 0: r.position.y += 0.3
 	var moving: bool = p.down <= 0 and (p.free_life > 0 or p.cross.is_empty() or not p.cross.wait)
 	var rate := (17.0 if p.panic_t > 0 or p.free_life > 0 else 11.0)
 	p.av.phase += dt * rate * (1.0 if moving else 0.0)
-	if dc < 70: p.av.walk(p.av.phase, 1.0 if moving else 0.0)
+	if dc < (130 if hi else 70): p.av.walk(p.av.phase, 1.0 if moving else 0.0); r.position.y += p.av.bob
 
 # ------------------------------------------------------------------------ HUD ----------
 func _panel() -> PanelContainer:
@@ -608,6 +611,7 @@ func _test_tick() -> void:
 			if a == "--home": _test.home = true
 			if a == "--house": _test.house = true
 			if a.begins_with("--at="): _test.at = a.substr(5).split(",")
+			if a == "--close": _test.close = true
 			if a == "--storytest": _test.story = true
 			if a == "--jobtest": _test.jobs = true
 			if a == "--shoptest": _test.shop = true
@@ -623,7 +627,7 @@ func _test_tick() -> void:
 	if _frame == 5 and _test.get("home", false): interior.enter_home(); me.x = interior.HX - 40; me.y = interior.HY + 30; me.a = -0.5; cam_a = -0.5
 	if _test.has("at") and _frame < 100:
 		var q: Array = _test.at; me.x = float(q[0]); me.y = float(q[1]); me.a = float(q[2]); cam_a = me.a
-		touch_ui.stick = Vector2.ZERO
+		touch_ui.stick = Vector2(0, -1) if OS.get_cmdline_user_args().has("--walk") else Vector2.ZERO
 		if _frame == 99 or _frame == _test.get("frames", 120): pass
 	if _frame == 3 and _test.get("house", false): me.x = interior.house.x - 30; me.y = interior.house.front - 150; me.a = PI / 2 - 0.3; cam_a = me.a
 	if _frame == 60 and _test.get("map", false): missions.set_waypoint(Vector2(ic(6), ic(1))); ui.toggle_map()
