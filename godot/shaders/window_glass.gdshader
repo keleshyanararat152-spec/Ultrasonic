@@ -11,7 +11,7 @@ void fragment() {
 	vec3 warm = mix(vec3(1.0, 0.62, 0.3), vec3(1.0, 0.85, 0.62), room.y * room.y);
 	float grad = 0.55 + 0.45 * UV.y;
 	ALBEDO = mix(vec3(0.05, 0.065, 0.08), warm * 0.25, lit);
-	ROUGHNESS = 0.04;
-	SPECULAR = 0.9;
+	ROUGHNESS = 0.07;
+	SPECULAR = 0.55;
 	EMISSION = warm * lit * (0.5 + 0.7 * room.y) * grad;
 }

@@ -178,7 +178,7 @@ func _day_night(dt: float) -> void:
 	for g: Array in city.facade_mats:
 		(g[0] as StandardMaterial3D).albedo_color = Color(1.0, 0.82, 0.55) * night * (1.6 if hi else 1.1); (g[1] as Node3D).visible = night > 0.02
 	city.bulb_mat.emission_energy_multiplier = 0.4 + night * 3.5
-	if city.parts: city.parts.glass_mat.set_shader_parameter("night", night)
+	if city.parts: city.parts.glass_mat.set_shader_parameter("night", night); city.parts.lamp_mat.emission_energy_multiplier = 0.2 + night * 4.0
 	var t := target_pos()
 	var near: Array = city.lamps.duplicate()
 	near.sort_custom(func(p, q): return p.distance_squared_to(t) < q.distance_squared_to(t))

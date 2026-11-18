@@ -7,7 +7,12 @@ uniform sampler2D stone : source_color, filter_linear_mipmap_anisotropic, repeat
 uniform sampler2D stone_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D stone_r : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec2 fac_size = vec2(56.2, 39.0);   // the area one facade image covers, in Godot units
-uniform float stone_size = 3.6;               // one stone image, in Godot units
+uniform sampler2D stone2 : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D stone2_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D stone2_r : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float stone_size = 3.6;
+uniform float stone2_size = 3.0;
+uniform float ground = 0.26;     // pavement height: grime gathers above it               // one stone image, in Godot units
 uniform bool srgb_tint = true;
 uniform bool windows = true;   // false: the walls are all stone; real windows are set on them
 varying vec3 wpos;
@@ -16,6 +21,12 @@ varying vec3 wnrm;
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+}
+
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+	vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
 
 void fragment() {
@@ -27,13 +38,22 @@ void fragment() {
 	float wall = windows ? smoothstep(0.35, 0.7, texture(facade_r, fuv).r) : 1.0;
 	vec2 suv = vec2(h, -wpos.y) / stone_size;
 	vec3 tint = srgb_tint ? pow(COLOR.rgb, vec3(2.2)) : COLOR.rgb;
-	vec3 st = texture(stone, suv).rgb;
+	bool second = COLOR.a < 0.5;   // each building one of two stones
+	vec2 suv2 = vec2(h, -wpos.y) / stone2_size;
+	vec3 st = second ? texture(stone2, suv2).rgb : texture(stone, suv).rgb;
 	float lum = dot(st, vec3(0.3, 0.5, 0.2));
 	vec3 stone_col = mix(vec3(lum), st, 0.35) * mix(tint, vec3(dot(tint, vec3(0.33))), 0.15) * 1.75 * (0.75 + 0.25 * clamp(dot(fac, vec3(0.33)) / 0.8, 0.0, 1.2));
+	// weathering: large soft patches, darker and dirtier near the pavement, streaks under the roof line
+	float patch = vnoise(vec2(h, wpos.y) * 0.18) * 0.6 + vnoise(vec2(h, wpos.y) * 0.7) * 0.4;
+	float grime = 1.0 - 0.32 * (1.0 - smoothstep(0.0, 2.6, wpos.y - ground));
+	float streak = 1.0 - 0.12 * smoothstep(0.55, 0.9, vnoise(vec2(h * 1.7, wpos.y * 0.08)));
+	stone_col *= (0.86 + 0.24 * patch) * grime * streak;
 	ALBEDO = mix(fac * 0.55, stone_col, wall);
-	ROUGHNESS = mix(0.06, texture(stone_r, suv).r, wall);
+	float sr = second ? texture(stone2_r, suv2).r : texture(stone_r, suv).r;
+	ROUGHNESS = mix(0.06, sr, wall);
 	SPECULAR = mix(0.9, 0.4, wall);
 	METALLIC = 0.0;
-	NORMAL_MAP = mix(vec3(0.5, 0.5, 1.0), texture(stone_n, suv).rgb, wall);
+	vec3 sn = second ? texture(stone2_n, suv2).rgb : texture(stone_n, suv).rgb;
+	NORMAL_MAP = mix(vec3(0.5, 0.5, 1.0), sn, wall);
 	NORMAL_MAP_DEPTH = 1.3;
 }

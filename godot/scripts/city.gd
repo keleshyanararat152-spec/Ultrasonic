@@ -187,7 +187,7 @@ func build() -> void:
 				var f: float = [1.0, 0.77, 0.62, 0.85][int(r.z) % 4]
 				var h: float = FULL * f
 				walls[n % 2].append(_box_xf(r.x + r.w / 2.0, h / 2.0, r.y + r.h / 2.0, r.w, h, r.h))
-				var tuff := Color(r.c).lerp(Color.WHITE, 0.12)
+				var tuff := Color(r.c).lerp(Color.WHITE, 0.12); tuff.a = 1.0 if r.d > 0.35 else 0.0   # alpha picks the stone
 				wall_cols[n % 2].append(tuff); ledge_cols.append(tuff.lerp(Color.WHITE, 0.45))
 				roofs.append(_box_xf(r.x + r.w / 2.0, h + 0.4, r.y + r.h / 2.0, r.w - 2, 1, r.h - 2))
 				# on the roof: a stair house and a few air-conditioning boxes
@@ -211,6 +211,10 @@ func build() -> void:
 		wm.set_shader_parameter("stone_r", load("res://assets/tex/ph/sandstone_blocks_05_rough.jpg"))
 		wm.set_shader_parameter("fac_size", Vector2(WIDE, FULL) * S); wm.set_shader_parameter("srgb_tint", hi)
 		wm.set_shader_parameter("windows", not hi)
+		wm.set_shader_parameter("stone2", load("res://assets/tex/ph/rough_block_wall_diff.jpg"))
+		wm.set_shader_parameter("stone2_n", load("res://assets/tex/ph/rough_block_wall_nor.jpg"))
+		wm.set_shader_parameter("stone2_r", load("res://assets/tex/ph/rough_block_wall_rough.jpg"))
+		wm.set_shader_parameter("ground", CURB * S)
 		_multi(unit, wm, walls[q], true, wall_cols[q])
 		# night windows: the same walls a hair larger, the lit-window texture added on top after dusk
 		var glow := _tex_mat("res://assets/tex/facade%d_n.jpg" % (q + 1), fac_uv, Color.BLACK)

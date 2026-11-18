@@ -9,3 +9,5 @@
 - **Engine**: Godot Engine 4.3 (MIT), https://godotengine.org
 - **Ground and wall materials** (`assets/tex/ph/`): Poly Haven (https://polyhaven.com), CC0 — asphalt_02,
   hexagonal_concrete_paving, pavement_02, sandstone_blocks_05. Re-saved as JPEG at quality 86.
+- **Second wall stone**: Poly Haven rough_block_wall, CC0.
+- **Facade parts** (`assets/facade/*.glb`): made for this game in Blender by `tools/blender/facade_parts.py`.

@@ -124,4 +124,30 @@ a.rotation_euler = (math.radians(-22), 0, 0)
 bpy.ops.object.transform_apply(rotation=True)
 box("valance", (SW + 0.5, 0.03, 0.22), (0, -1.02, SH / 2 + 0.05), awning)
 export(os.path.join(out, "shop.glb"))
+# ------------------------------------------------------------------ entrance door ----------
+reset()
+frame = mat("frame", (0.93, 0.9, 0.85), 0.55)
+wood = mat("wood", (0.32, 0.18, 0.1), 0.45)
+glass = mat("glass", (0.08, 0.1, 0.12), 0.05)
+stone = mat("trim", (0.85, 0.8, 0.74), 0.85)
+metal = mat("brass", (0.8, 0.62, 0.3), 0.3, 1.0)
+DW, DH = 1.6, 2.4
+box("jamb_l", (0.16, 0.22, DH + 0.5), (-DW / 2 - 0.08, -0.11, 0.25), stone, 0.02)
+box("jamb_r", (0.16, 0.22, DH + 0.5), (DW / 2 + 0.08, -0.11, 0.25), stone, 0.02)
+box("head", (DW + 0.6, 0.26, 0.24), (0, -0.13, DH / 2 + 0.62), stone, 0.02)
+box("transom", (DW, 0.02, 0.45), (0, -0.03, DH / 2 + 0.27), glass)
+box("transom_bar", (DW, 0.08, 0.06), (0, -0.04, DH / 2 + 0.02), frame)
+for s_ in (-1, 1):
+    box("leaf%d" % s_, (DW / 2 - 0.02, 0.06, DH - 0.05), (s_ * DW / 4, -0.04, -0.27), wood, 0.008)
+    for zz in (-0.95, 0.15):
+        box("panel%d%d" % (s_, int(zz * 10)), (DW / 2 - 0.3, 0.03, 0.8), (s_ * DW / 4, -0.08, zz), wood, 0.01)
+    box("handle%d" % s_, (0.03, 0.06, 0.3), (s_ * 0.08, -0.1, -0.2), metal)
+box("canopy", (DW + 1.2, 1.1, 0.1), (0, -0.55, DH / 2 + 0.95), stone, 0.02)
+for s_ in (-1, 1):
+    box("brace%d" % s_, (0.08, 0.9, 0.08), (s_ * (DW / 2 + 0.4), -0.45, DH / 2 + 0.85), metal)
+box("step1", (DW + 1.0, 0.7, 0.16), (0, -0.35, -DH / 2 - 0.33 - 0.08), stone, 0.015)
+box("step2", (DW + 0.6, 0.4, 0.16), (0, -0.2, -DH / 2 - 0.33 + 0.08), stone, 0.015)
+for s_ in (-1, 1):
+    box("lamp%d" % s_, (0.14, 0.14, 0.3), (s_ * (DW / 2 + 0.45), -0.12, DH / 2 - 0.1), mat("lamp", (1.0, 0.9, 0.7), 0.3))
+export(os.path.join(out, "door.glb"))
 print("facade parts written to", out)
