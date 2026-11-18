@@ -144,6 +144,7 @@ func _multi(mesh: Mesh, mat: Material, xforms: Array, shadows := true, colors :=
 func _box_xf(cx: float, cy: float, cz: float, sx: float, sy: float, sz: float) -> Transform3D:  # centre and size in game units
 	return Transform3D(Basis.from_scale(Vector3(sx, sy, sz) * S), Vector3(cx, cy, cz) * S)
 
+var parts                 # the 3D windows, balconies and shop fronts (computers)
 var keep_out: Array = []   # Rect2s where park trees are left out (the house)
 
 func build() -> void:
@@ -209,6 +210,7 @@ func build() -> void:
 		wm.set_shader_parameter("stone_n", load("res://assets/tex/ph/sandstone_blocks_05_nor.jpg"))
 		wm.set_shader_parameter("stone_r", load("res://assets/tex/ph/sandstone_blocks_05_rough.jpg"))
 		wm.set_shader_parameter("fac_size", Vector2(WIDE, FULL) * S); wm.set_shader_parameter("srgb_tint", hi)
+		wm.set_shader_parameter("windows", not hi)
 		_multi(unit, wm, walls[q], true, wall_cols[q])
 		# night windows: the same walls a hair larger, the lit-window texture added on top after dusk
 		var glow := _tex_mat("res://assets/tex/facade%d_n.jpg" % (q + 1), fac_uv, Color.BLACK)
@@ -216,8 +218,10 @@ func build() -> void:
 		glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; glow.disable_receive_shadows = true
 		var gx := []
 		for xf: Transform3D in walls[q]: gx.append(Transform3D(xf.basis.scaled(Vector3(1.004, 1.0, 1.004)), xf.origin))
-		var gi := _multi(unit, glow, gx, false); gi.visible = false
-		facade_mats.append([glow, gi])
+		if not hi:   # on a computer the 3D windows light up instead
+			var gi := _multi(unit, glow, gx, false); gi.visible = false
+			facade_mats.append([glow, gi])
+	if hi: parts = preload("res://scripts/facade_parts.gd").new(); parts.build(self)
 	_multi(unit, _tex_mat("res://assets/tex/roof.jpg", Vector3(1, 1, 1) / 12.0, Color.WHITE, 0.9, "res://assets/tex/roof_n.png"), roofs, false)
 	var lm := _plain(Color.WHITE); lm.vertex_color_use_as_albedo = true; lm.vertex_color_is_srgb = RenderingServer.get_rendering_device() != null
 	_multi(unit, lm, ledges, true, ledge_cols)

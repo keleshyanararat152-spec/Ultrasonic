@@ -9,6 +9,7 @@ uniform sampler2D stone_r : hint_roughness_r, filter_linear_mipmap_anisotropic, 
 uniform vec2 fac_size = vec2(56.2, 39.0);   // the area one facade image covers, in Godot units
 uniform float stone_size = 3.6;               // one stone image, in Godot units
 uniform bool srgb_tint = true;
+uniform bool windows = true;   // false: the walls are all stone; real windows are set on them
 varying vec3 wpos;
 varying vec3 wnrm;
 
@@ -23,7 +24,7 @@ void fragment() {
 	float h = side_x ? -wpos.z : wpos.x;
 	vec2 fuv = vec2(h / fac_size.x, -wpos.y / fac_size.y);
 	vec3 fac = texture(facade, fuv).rgb;
-	float wall = smoothstep(0.35, 0.7, texture(facade_r, fuv).r);
+	float wall = windows ? smoothstep(0.35, 0.7, texture(facade_r, fuv).r) : 1.0;
 	vec2 suv = vec2(h, -wpos.y) / stone_size;
 	vec3 tint = srgb_tint ? pow(COLOR.rgb, vec3(2.2)) : COLOR.rgb;
 	vec3 st = texture(stone, suv).rgb;
