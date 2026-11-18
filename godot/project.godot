@@ -29,6 +29,12 @@ theme/custom_font="res://fonts/NotoSansArmenian.ttf"
 
 [rendering]
 
+textures/default_filters/anisotropic_filtering_level=4
+lights_and_shadows/positional_shadow/soft_shadow_filter_quality=3
+environment/volumetric_fog/volume_size=96
+environment/volumetric_fog/volume_depth=96
+anti_aliasing/quality/use_debanding=true
+
 renderer/rendering_method="forward_plus"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true

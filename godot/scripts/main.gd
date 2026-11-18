@@ -41,6 +41,9 @@ var sky_mat: ShaderMaterial
 var hi := false                      # the computer renderer (Forward+): screen-space effects are on
 var lamp_lights: Array = []
 var head_light: SpotLight3D
+var night_k := 0.0                   # 0 by day .. 1 at night
+var _head_mat: StandardMaterial3D
+var car_spots: Array = []            # headlights lent to the nearest cars at night (computers)
 var sig: Array = []                  # traffic signals: { I, J, d }
 var sig_mm: MultiMesh
 var sig_t := -9.0
@@ -81,7 +84,7 @@ func _ready() -> void:
 		p.i = randi_range(0, 6); p.j = randi_range(0, 6); p.t = randf_range(0, 1512); p.dir = 1 if randf() < 0.5 else -1; p.sp = randf_range(32, 50)
 		_ped_avatar(p); peds.append(p)
 	me_av = People.Avatar.new(people_scenes[0]); add_child(me_av.root)
-	cam = Camera3D.new(); cam.fov = 62; cam.near = 0.2; cam.far = 600
+	cam = Camera3D.new(); cam.fov = 62; cam.near = 0.2; cam.far = 1400 if hi else 600
 	add_child(cam)
 	missions = preload("res://scripts/missions.gd").new(); add_child(missions); missions.setup(self)
 	interior = preload("res://scripts/interior.gd").new(); interior.m = self; add_child(interior); interior.build_house()
@@ -118,13 +121,17 @@ func _environment() -> void:
 	env.glow_enabled = true; env.glow_intensity = 0.5; env.glow_strength = 0.9; env.glow_bloom = 0.0; env.glow_hdr_threshold = 1.1
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	env.adjustment_enabled = true; env.adjustment_saturation = 1.12; env.adjustment_contrast = 1.06
-	if hi:   # on a computer: shading in the corners, light bouncing off walls, reflections in glass
+	if hi:   # on a computer, everything: bounced light, shading in corners, reflections, light in the haze
 		env.ssao_enabled = true; env.ssao_radius = 1.4; env.ssao_intensity = 1.6; env.ssao_power = 1.4
 		env.ssil_enabled = true; env.ssil_radius = 4.0; env.ssil_intensity = 0.7
-		env.ssr_enabled = true; env.ssr_max_steps = 48; env.ssr_fade_in = 0.15; env.ssr_fade_out = 2.0
-		env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN; env.glow_intensity = 0.35
-		get_viewport().screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
-		get_viewport().msaa_3d = Viewport.MSAA_4X
+		env.ssr_enabled = true; env.ssr_max_steps = 64; env.ssr_fade_in = 0.15; env.ssr_fade_out = 2.0
+		env.sdfgi_enabled = true; env.sdfgi_cascades = 4; env.sdfgi_min_cell_size = 0.4; env.sdfgi_use_occlusion = true
+		env.sdfgi_bounce_feedback = 0.4; env.sdfgi_energy = 0.9; env.sdfgi_y_scale = Environment.SDFGI_Y_SCALE_75_PERCENT
+		env.volumetric_fog_enabled = true; env.volumetric_fog_density = 0.004; env.volumetric_fog_length = 120
+		env.volumetric_fog_detail_spread = 1.5; env.volumetric_fog_ambient_inject = 0.0; env.volumetric_fog_sky_affect = 0.0
+		env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN; env.glow_intensity = 0.4
+		get_viewport().use_taa = true; get_viewport().msaa_3d = Viewport.MSAA_2X
+		get_viewport().mesh_lod_threshold = 0.5
 	we.environment = env
 	add_child(we)
 	sun = DirectionalLight3D.new()
@@ -134,10 +141,13 @@ func _environment() -> void:
 	if hi: sun.directional_shadow_max_distance = 260; sun.shadow_blur = 1.5; sun.light_angular_distance = 0.6
 	add_child(sun)
 	for k in (3 if OS.has_feature("mobile") else (12 if hi else 6)):   # street lamps near you light up at night
-		var l := OmniLight3D.new(); l.light_color = Color("ffcf8f"); l.omni_range = 18; l.light_energy = 0; l.omni_attenuation = 1.6; l.shadow_enabled = hi and k < 2
+		var l := OmniLight3D.new(); l.light_color = Color("ffcf8f"); l.omni_range = 18; l.light_energy = 0; l.omni_attenuation = 1.6; l.shadow_enabled = hi and k < 4
 		add_child(l); lamp_lights.append(l)
 	head_light = SpotLight3D.new(); head_light.light_color = Color("fff0d2"); head_light.spot_range = 34; head_light.spot_angle = 28; head_light.light_energy = 0
 	add_child(head_light)
+	_head_mat = StandardMaterial3D.new(); _head_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; _head_mat.albedo_color = Color(0.85, 0.85, 0.8)
+	for k in (6 if hi else 0):
+		var sl := SpotLight3D.new(); sl.light_color = Color("fff0d2"); sl.spot_range = 26; sl.spot_angle = 30; sl.light_energy = 0; add_child(sl); car_spots.append(sl)
 
 ## One day lasts DAY_LEN seconds: 0 is sunrise, 0.5 sunset. Sun, sky, fog, lamps and windows follow it.
 func _day_night(dt: float) -> void:
@@ -160,7 +170,8 @@ func _day_night(dt: float) -> void:
 	sky_mat.set_shader_parameter("sun_col", sun.light_color * (0.35 if night > 0.5 else 1.0)); sky_mat.set_shader_parameter("t", time)
 	env.fog_light_color = Color("f0d2b6") * tint
 	env.ambient_light_color = Color(0.62, 0.66, 0.72).lerp(Color(0.75, 0.55, 0.5), dusk).lerp(Color(0.15, 0.17, 0.27), night)
-	env.ambient_light_energy = 1.0
+	env.ambient_light_energy = (0.75 + 0.5 * night) if hi else 1.0   # SDFGI adds the bounced light on top
+	if hi: env.volumetric_fog_albedo = Color(0.9, 0.85, 0.8).lerp(Color(0.4, 0.45, 0.6), night); env.volumetric_fog_density = 0.003 + 0.006 * night
 	if interior.inside != "":   # indoors: no sun, the room's own light
 		sun.light_energy = 0.0
 		env.ambient_light_color = Color(0.52, 0.48, 0.44) if interior.inside == "home" else Color(0.32, 0.26, 0.38)
@@ -171,9 +182,20 @@ func _day_night(dt: float) -> void:
 	var near: Array = city.lamps.duplicate()
 	near.sort_custom(func(p, q): return p.distance_squared_to(t) < q.distance_squared_to(t))
 	for k in lamp_lights.size():
-		var l: OmniLight3D = lamp_lights[k]; l.light_energy = night * (2.0 if hi else 1.2); l.omni_range = 26 if hi else 20
+		var l: OmniLight3D = lamp_lights[k]; l.light_energy = night * (4.0 if hi else 1.2); l.omni_range = 30 if hi else 20; l.omni_attenuation = 1.2 if hi else 1.6
 		l.position = Vector3(near[k].x, city.CURB + 44, near[k].y) * S
-	head_light.light_energy = night * 2.4 if pcar else 0.0
+	head_light.light_energy = night * (3.5 if hi else 2.4) if pcar else 0.0
+	night_k = night
+	_head_mat.albedo_color = Color(0.85, 0.85, 0.8).lerp(Color(2.4, 2.2, 1.8), night)
+	if hi:   # the nearest other cars light the road too
+		var others: Array = cars.filter(func(c): return c != pcar and c.driver and c.node.visible)
+		others.sort_custom(func(p, q): return Vector2(p.x, p.y).distance_squared_to(t) < Vector2(q.x, q.y).distance_squared_to(t))
+		for k in car_spots.size():
+			var sl: SpotLight3D = car_spots[k]
+			if k >= others.size() or night < 0.05: sl.light_energy = 0; continue
+			var c: Car = others[k]; var f := Vector3(cos(c.a), 0, sin(c.a))
+			sl.light_energy = night * 2.5; sl.position = Vector3(c.x, city.ground_y(c.x, c.y) + 7, c.y) * S + f * 2.2
+			sl.look_at(sl.position + f * 10 + Vector3(0, -1.2, 0))
 	if pcar:
 		var f := Vector3(cos(pcar.a), 0, sin(pcar.a)); var gy: float = city.ground_y(pcar.x, pcar.y)
 		head_light.position = Vector3(pcar.x, gy + 8, pcar.y) * S + f * 2.2
@@ -250,7 +272,15 @@ func _rebuild_node(c: Car) -> void:
 			var bar := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = Vector3(0.26, 0.16, 0.44); bar.mesh = bm
 			var mat := StandardMaterial3D.new(); mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; mat.albedo_color = Color("9aa3ad"); bar.material_override = mat
 			bar.position = Vector3(-0.2, box.size.y * k - 0.04, s * 0.28); root.add_child(bar); lights.append(mat)
-	c.anim = { "tilt": tilt, "wheels": wheels, "front": front, "dir": 1.0 if spec[1] else -1.0, "spin": 0.0, "roll": 0.0, "pitch": 0.0, "pa": c.a, "pv": c.v, "lights": lights }
+	# head- and tail-lights: glowing patches at the corners, brighter at night and when braking
+	var L: float = spec[0] * 10.5 * S / 2; var Wd: float = box.size.z * k / 2; var Hh: float = box.size.y * k
+	var tail := StandardMaterial3D.new(); tail.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; tail.albedo_color = Color(0.5, 0.02, 0.02)
+	for s in [-1, 1]:
+		var hq := MeshInstance3D.new(); var hb := BoxMesh.new(); hb.size = Vector3(0.04, 0.09, 0.22); hq.mesh = hb; hq.material_override = _head_mat
+		hq.position = Vector3(L - 0.06, Hh * 0.42, s * Wd * 0.68); hq.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; tilt.add_child(hq)
+		var tq := MeshInstance3D.new(); var tb := BoxMesh.new(); tb.size = Vector3(0.04, 0.08, 0.26); tq.mesh = tb; tq.material_override = tail
+		tq.position = Vector3(-L + 0.05, Hh * 0.5, s * Wd * 0.7); tq.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; tilt.add_child(tq)
+	c.anim = { "tilt": tilt, "wheels": wheels, "front": front, "dir": 1.0 if spec[1] else -1.0, "spin": 0.0, "roll": 0.0, "pitch": 0.0, "pa": c.a, "pv": c.v, "lights": lights, "tail": tail, "brake": 0.0 }
 	add_child(root)
 	c.node = root
 
@@ -480,6 +510,8 @@ func _place(c: Car, dt: float) -> void:
 	var roll := clampf(-c.v * yaw * 0.00035, -0.08, 0.08); var pitch := clampf(accel * 0.00022, -0.06, 0.06); var f := minf(1, dt * 6)
 	u.roll += (roll - u.roll) * f; u.pitch += (pitch - u.pitch) * f
 	(u.tilt as Node3D).rotation = Vector3(u.roll, 0, u.pitch)
+	u.brake = 1.0 if (accel < -60 and c.v > 5) or (c.red_stop and absf(c.v) < 30) else maxf(0.0, u.brake - dt * 4)
+	(u.tail as StandardMaterial3D).albedo_color = Color(0.45, 0.02, 0.02).lerp(Color(1.6, 0.08, 0.06), maxf(night_k * 0.55, u.brake))
 
 func _place_ped(p, dt: float) -> void:
 	var r: Node3D = p.av.root

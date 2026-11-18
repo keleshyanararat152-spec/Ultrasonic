@@ -89,8 +89,12 @@ func road_point() -> Vector2:  # a random spot in the middle of a street
 	return Vector2(t, ic(k)) if randf() < 0.5 else Vector2(ic(k), t)
 
 # ---------------------------------------------------------------- building the scene ----------
-func _tex_mat(path: String, uv: Vector3, tint := Color.WHITE, rough := 0.9) -> StandardMaterial3D:
+var hi := RenderingServer.get_rendering_device() != null   # Forward+ on a computer: full detail
+
+func _tex_mat(path: String, uv: Vector3, tint := Color.WHITE, rough := 0.9, normal := "", nscale := 1.0) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
+	if hi and normal != "":
+		m.normal_enabled = true; m.normal_texture = load(normal); m.normal_scale = nscale
 	m.albedo_texture = load(path)
 	m.albedo_color = tint
 	m.uv1_triplanar = true
@@ -105,7 +109,7 @@ func _crown_mesh() -> Mesh:
 	var st := SurfaceTool.new()
 	for b in [[Vector3(0, -0.05, 0), 0.4], [Vector3(0.2, 0.08, 0.12), 0.3], [Vector3(-0.2, 0.06, -0.12), 0.3], [Vector3(0.04, 0.25, -0.06), 0.27],
 			[Vector3(-0.1, -0.08, 0.22), 0.27], [Vector3(0.16, -0.1, -0.2), 0.25]]:
-		var sp := SphereMesh.new(); sp.radius = b[1]; sp.height = b[1] * 2; sp.radial_segments = 9; sp.rings = 5
+		var sp := SphereMesh.new(); sp.radius = b[1]; sp.height = b[1] * 2; sp.radial_segments = 14 if hi else 9; sp.rings = 8 if hi else 5
 		st.append_from(sp, 0, Transform3D(Basis.IDENTITY, b[0]))
 	return st.commit()
 
@@ -139,7 +143,7 @@ func build() -> void:
 	var ground := MeshInstance3D.new()
 	var pm := PlaneMesh.new(); pm.size = Vector2(WS, WS) * S
 	ground.mesh = pm
-	ground.material_override = _tex_mat("res://assets/tex/asphalt.jpg", Vector3(1.0 / 9.6, 1.0 / 9.6, 1.0 / 9.6), Color(0.82, 0.82, 0.84), 0.95)
+	ground.material_override = _tex_mat("res://assets/tex/asphalt.jpg", Vector3(1.0 / 9.6, 1.0 / 9.6, 1.0 / 9.6), Color(0.82, 0.82, 0.84), 0.88, "res://assets/tex/asphalt_n.png", 0.8)
 	ground.position = Vector3(WS / 2.0, 0, WS / 2.0) * S
 	add_child(ground)
 	var far := MeshInstance3D.new()   # hills beyond the edge
@@ -182,13 +186,13 @@ func build() -> void:
 					var p := Vector2(rng.randf_range(r.x + 12, r.x + r.w - 12), rng.randf_range(r.y + 12, r.y + r.h - 12))
 					kit.append(_box_xf(p.x, h + 3, p.y, 8, 5, 6)); kit_cols.append(Color("b9bcbf").darkened(rng.randf() * 0.2))
 				ledges.append(_box_xf(r.x + r.w / 2.0, h + 1.6, r.y + r.h / 2.0, r.w + 4.4, 4.2, r.h + 4.4))
-	var paving := _tex_mat("res://assets/tex/paving.jpg", Vector3(1, 1, 1) / 5.7, Color(0.8, 0.76, 0.72))
+	var paving := _tex_mat("res://assets/tex/paving.jpg", Vector3(1, 1, 1) / 5.7, Color(0.8, 0.76, 0.72), 0.9, "res://assets/tex/paving_n.png")
 	_multi(unit, paving, slabs, false)
-	_multi(unit, _tex_mat("res://assets/tex/paving.jpg", Vector3(1, 1, 1) / 5.7, Color(0.95, 0.88, 0.8)), plaza, false)
+	_multi(unit, _tex_mat("res://assets/tex/paving.jpg", Vector3(1, 1, 1) / 5.7, Color(0.95, 0.88, 0.8), 0.9, "res://assets/tex/paving_n.png"), plaza, false)
 	_multi(unit, _plain(Color("6c9659")), parks, false)
 	var fac_uv := Vector3(1.0 / (WIDE * S), 1.0 / (FULL * S), 1.0 / (WIDE * S))
 	for q in 2:
-		var wm := _tex_mat("res://assets/tex/facade%d.jpg" % (q + 1), fac_uv, Color.WHITE, 1.0)
+		var wm := _tex_mat("res://assets/tex/facade%d.jpg" % (q + 1), fac_uv, Color.WHITE, 1.0, "res://assets/tex/facade%d_nm.png" % (q + 1), 1.2)
 		wm.vertex_color_use_as_albedo = true   # each building its own tuff
 		wm.vertex_color_is_srgb = RenderingServer.get_rendering_device() != null   # Forward+ reads instance colours as linear
 		wm.roughness_texture = load("res://assets/tex/facade%d_r.png" % (q + 1)); wm.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
@@ -202,7 +206,7 @@ func build() -> void:
 		for xf: Transform3D in walls[q]: gx.append(Transform3D(xf.basis.scaled(Vector3(1.004, 1.0, 1.004)), xf.origin))
 		var gi := _multi(unit, glow, gx, false); gi.visible = false
 		facade_mats.append([glow, gi])
-	_multi(unit, _tex_mat("res://assets/tex/roof.jpg", Vector3(1, 1, 1) / 12.0), roofs, false)
+	_multi(unit, _tex_mat("res://assets/tex/roof.jpg", Vector3(1, 1, 1) / 12.0, Color.WHITE, 0.9, "res://assets/tex/roof_n.png"), roofs, false)
 	var lm := _plain(Color.WHITE); lm.vertex_color_use_as_albedo = true; lm.vertex_color_is_srgb = RenderingServer.get_rendering_device() != null
 	_multi(unit, lm, ledges, true, ledge_cols)
 	# trees: the park trees plus a row along every pavement, and three-headed lamps at the corners
