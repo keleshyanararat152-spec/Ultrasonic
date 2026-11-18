@@ -37,7 +37,8 @@ var touch_ui
 var hud := {}
 var sun: DirectionalLight3D
 var env: Environment
-var sky_mat: ProceduralSkyMaterial
+var sky_mat: ShaderMaterial
+var hi := false                      # the computer renderer (Forward+): screen-space effects are on
 var lamp_lights: Array = []
 var head_light: SpotLight3D
 var sig: Array = []                  # traffic signals: { I, J, d }
@@ -105,23 +106,35 @@ func set_outfit(id: String) -> void:
 func _environment() -> void:
 	var we := WorldEnvironment.new()
 	env = Environment.new()
-	var sky := Sky.new(); sky_mat = ProceduralSkyMaterial.new()
-	sky_mat.sun_angle_max = 20
-	sky.sky_material = sky_mat
+	hi = RenderingServer.get_rendering_device() != null   # Forward+ on computers; phones use Compatibility
+	var sky := Sky.new(); sky_mat = ShaderMaterial.new(); sky_mat.shader = load("res://shaders/sky.gdshader")
+	sky.sky_material = sky_mat; sky.radiance_size = Sky.RADIANCE_SIZE_128 if hi else Sky.RADIANCE_SIZE_64
+	sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL if hi else Sky.PROCESS_MODE_AUTOMATIC
 	env.background_mode = Environment.BG_SKY; env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR; env.ambient_light_energy = 1.0
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.fog_enabled = true; env.fog_density = 0.0022; env.fog_sky_affect = 0.25
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES; env.tonemap_exposure = 1.05; env.tonemap_white = 6.0
+	env.fog_enabled = true; env.fog_density = 0.0022; env.fog_sky_affect = 0.2
+	env.glow_enabled = true; env.glow_intensity = 0.5; env.glow_strength = 0.9; env.glow_bloom = 0.04; env.glow_hdr_threshold = 1.1
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	env.adjustment_enabled = true; env.adjustment_saturation = 1.12; env.adjustment_contrast = 1.06
+	if hi:   # on a computer: shading in the corners, light bouncing off walls, reflections in glass
+		env.ssao_enabled = true; env.ssao_radius = 1.4; env.ssao_intensity = 1.6; env.ssao_power = 1.4
+		env.ssil_enabled = true; env.ssil_radius = 4.0; env.ssil_intensity = 0.7
+		env.ssr_enabled = true; env.ssr_max_steps = 48; env.ssr_fade_in = 0.15; env.ssr_fade_out = 2.0
+		env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN; env.glow_intensity = 0.35
+		get_viewport().screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
+		get_viewport().msaa_3d = Viewport.MSAA_4X
 	we.environment = env
 	add_child(we)
 	sun = DirectionalLight3D.new()
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 140
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if hi else DirectionalLight3D.SHADOW_ORTHOGONAL
+	if hi: sun.directional_shadow_max_distance = 260; sun.shadow_blur = 1.5; sun.light_angular_distance = 0.6
 	add_child(sun)
-	for k in (3 if OS.has_feature("mobile") else 6):   # street lamps near you light up at night
-		var l := OmniLight3D.new(); l.light_color = Color("ffcf8f"); l.omni_range = 18; l.light_energy = 0; l.omni_attenuation = 1.6; l.shadow_enabled = false
+	for k in (3 if OS.has_feature("mobile") else (12 if hi else 6)):   # street lamps near you light up at night
+		var l := OmniLight3D.new(); l.light_color = Color("ffcf8f"); l.omni_range = 18; l.light_energy = 0; l.omni_attenuation = 1.6; l.shadow_enabled = hi and k < 2
 		add_child(l); lamp_lights.append(l)
 	head_light = SpotLight3D.new(); head_light.light_color = Color("fff0d2"); head_light.spot_range = 34; head_light.spot_angle = 28; head_light.light_energy = 0
 	add_child(head_light)
@@ -139,8 +152,12 @@ func _day_night(dt: float) -> void:
 	sun.light_energy = 0.18 if night > 0.5 else (0.3 + 0.8 * minf(1, maxf(0, el) / 0.45)) * (1 - night)
 	sun.light_color = Color("ffdcb0").lerp(Color("ff9a5a"), dusk).lerp(Color("8aa0d8"), night)
 	var tint := Color.WHITE.lerp(Color(1, 0.62, 0.46), dusk).lerp(Color(0.11, 0.14, 0.25), night)
-	sky_mat.sky_top_color = Color("5f9bd1") * tint; sky_mat.sky_horizon_color = Color("f0d2b6") * tint
-	sky_mat.ground_horizon_color = sky_mat.sky_horizon_color; sky_mat.ground_bottom_color = Color("8a7d74") * tint
+	var top := Color("4f8fd0").lerp(Color("6a7fb8"), dusk).lerp(Color("070b18"), night)
+	var hor := Color("f0d2b6").lerp(Color("ffa060"), dusk).lerp(Color("1c2236"), night)
+	sky_mat.set_shader_parameter("top_col", top); sky_mat.set_shader_parameter("hor_col", hor)
+	sky_mat.set_shader_parameter("gnd_col", Color("8a7d74") * tint); sky_mat.set_shader_parameter("night", night)
+	sky_mat.set_shader_parameter("cloud_col", Color.WHITE.lerp(Color("ffb48a"), dusk).lerp(Color("2a3046"), night))
+	sky_mat.set_shader_parameter("sun_col", sun.light_color * (0.35 if night > 0.5 else 1.0)); sky_mat.set_shader_parameter("t", time)
 	env.fog_light_color = Color("f0d2b6") * tint
 	env.ambient_light_color = Color(0.62, 0.66, 0.72).lerp(Color(0.75, 0.55, 0.5), dusk).lerp(Color(0.1, 0.12, 0.2), night)
 	env.ambient_light_energy = 1.0
@@ -148,7 +165,7 @@ func _day_night(dt: float) -> void:
 		sun.light_energy = 0.0
 		env.ambient_light_color = Color(0.52, 0.48, 0.44) if interior.inside == "home" else Color(0.32, 0.26, 0.38)
 	for g: Array in city.facade_mats:
-		(g[0] as StandardMaterial3D).albedo_color = Color(1.0, 0.82, 0.55) * night * 1.1; (g[1] as Node3D).visible = night > 0.02
+		(g[0] as StandardMaterial3D).albedo_color = Color(1.0, 0.82, 0.55) * night * (1.6 if hi else 1.1); (g[1] as Node3D).visible = night > 0.02
 	city.bulb_mat.emission_energy_multiplier = 0.4 + night * 3.5
 	var t := target_pos()
 	var near: Array = city.lamps.duplicate()

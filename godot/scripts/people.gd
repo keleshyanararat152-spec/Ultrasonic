@@ -22,6 +22,10 @@ class Avatar:
 	var down := Vector3.DOWN
 	var lower := {}               # rotation that brings each upper arm down from the A-pose
 	var phase := 0.0
+	static var _walk_tables := {}   # per model: the walk worked out once at 16 steps, so each frame only sets rotations
+	const WN := 16
+	const WB := ["L Thigh", "R Thigh", "L Calf", "R Calf", "L UpperArm", "R UpperArm", "L Forearm", "R Forearm"]
+	var wt = null                    # { idx: bone indices, stand: [Quaternion], step: [[Quaternion]] }
 
 	func _init(scene: PackedScene) -> void:
 		var model: Node3D = scene.instantiate()
@@ -53,6 +57,22 @@ class Avatar:
 			var side := -1.0 if s == "L" else 1.0
 			var want := (down + (inv * Vector3(0, 0, side * 0.13)).normalized() * 0.13).normalized()
 			lower[s] = Quaternion(d0, want)
+		var key := scene.resource_path
+		if not _walk_tables.has(key): _walk_tables[key] = _make_table()
+		wt = _walk_tables[key]
+
+	func _make_table() -> Dictionary:
+		var idx := []
+		for nm in WB: idx.append(bones[nm])
+		var grab := func() -> Array:
+			var out := []
+			for b: int in idx: out.append(skel.get_bone_pose_rotation(b) if b >= 0 else Quaternion.IDENTITY)
+			return out
+		_walk_raw(0.0, 0.0); var stand: Array = grab.call()
+		var steps := []
+		for k in WN: _walk_raw(k * TAU / WN, 1.0); steps.append(grab.call())
+		_walk_raw(0.0, 0.0)
+		return { "idx": idx, "stand": stand, "step": steps }
 
 	static func _find_skel(n: Node) -> Skeleton3D:
 		if n is Skeleton3D: return n
@@ -71,8 +91,19 @@ class Avatar:
 	func _rot(g: Transform3D, axis: Vector3, ang: float) -> Transform3D:
 		return Transform3D(Basis(axis, ang) * g.basis, g.origin)
 
-	## ph: step phase; amp: 0 standing .. 1 walking
+	## ph: step phase; amp: 0 standing .. 1 walking. Reads the table made at load; cheap.
 	func walk(ph: float, amp: float) -> void:
+		if skel == null or wt == null: return
+		var f := fposmod(ph, TAU) / TAU * WN; var k0 := int(f) % WN; var k1 := (k0 + 1) % WN; var u := f - floor(f)
+		var idx: Array = wt.idx; var a0: Array = wt.step[k0]; var a1: Array = wt.step[k1]; var st: Array = wt.stand
+		for i in idx.size():
+			var b: int = idx[i]
+			if b < 0: continue
+			var q: Quaternion = (a0[i] as Quaternion).slerp(a1[i], u)
+			if amp < 0.999: q = (st[i] as Quaternion).slerp(q, clampf(amp, 0, 1))
+			skel.set_bone_pose_rotation(b, q)
+
+	func _walk_raw(ph: float, amp: float) -> void:
 		if skel == null: return
 		for k in 2:
 			var s := "L" if k == 0 else "R"
