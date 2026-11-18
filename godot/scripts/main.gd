@@ -544,6 +544,7 @@ func _test_tick() -> void:
 			if a == "--vip": _test.vip = true
 			if a == "--home": _test.home = true
 			if a == "--house": _test.house = true
+			if a.begins_with("--at="): _test.at = a.substr(5).split(",")
 			if a == "--storytest": _test.story = true
 			if a == "--jobtest": _test.jobs = true
 			if a == "--shoptest": _test.shop = true
@@ -557,6 +558,10 @@ func _test_tick() -> void:
 	if _frame == 5 and _test.get("club", false): interior.enter_club(); me.x = interior.CX - 110; me.y = interior.CY + 10; me.a = 0; cam_a = 0
 	if _frame == 5 and _test.get("vip", false): interior.enter_club(); interior._to_vip(); me.x = interior.VX - 60; me.y = interior.VY
 	if _frame == 5 and _test.get("home", false): interior.enter_home(); me.x = interior.HX - 40; me.y = interior.HY + 30; me.a = -0.5; cam_a = -0.5
+	if _test.has("at") and _frame < 100:
+		var q: Array = _test.at; me.x = float(q[0]); me.y = float(q[1]); me.a = float(q[2]); cam_a = me.a
+		touch_ui.stick = Vector2.ZERO
+		if _frame == 99 or _frame == _test.get("frames", 120): pass
 	if _frame == 3 and _test.get("house", false): me.x = interior.house.x - 30; me.y = interior.house.front - 150; me.a = PI / 2 - 0.3; cam_a = me.a
 	if _frame == 60 and _test.get("map", false): missions.set_waypoint(Vector2(ic(6), ic(1))); ui.toggle_map()
 	if _frame > 30:   # script time per frame, for comparing speed-ups
@@ -568,7 +573,7 @@ func _test_tick() -> void:
 		if _frame == 5: me.x = cars[0].x - 20; me.y = cars[0].y - 40; act()
 		if _frame > 5 and _frame < 60: touch_ui.pedals = { 99: "gas" }
 		else: touch_ui.pedals = {}
-	else:
+	elif not _test.has("at"):
 		touch_ui.stick = Vector2(0, -1) if _frame < 50 else Vector2.ZERO
 	if _frame == _test.get("frames", 120):
 		get_viewport().get_texture().get_image().save_png(_test.shot)

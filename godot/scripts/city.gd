@@ -12,6 +12,7 @@ const FULL := 390.0        # height the baked facade texture covers, in game uni
 const WIDE := 562.0        # width it covers
 
 var WS: int = N * CELL + 120
+const TUFF := ["d98f7a", "c9755f", "e0a989", "b8695a", "8d5a52", "a8a39d", "e6b39a", "5b5560"]   # the tuff stone of each building
 var blocks: Array = []     # blocks[i][j] = { type, rects: [ {x, y, w, h, z, d} ], trees: [ {x, y, r} ] }
 var _seed: int = 20261116
 var facade_mats: Array = []   # their night windows light up after dusk
@@ -55,8 +56,8 @@ func generate() -> void:
 				else: cells = [[0, 0, 170, 170], [186, 0, 170, 170], [0, 186, 170, 170], [186, 186, 170, 170]]
 				for c in cells:
 					var sx := srand() * 18; var sy := srand() * 18; var ex := srand() * 18; var ey := srand() * 18
-					srand()  # colour pick in the browser game
-					b.rects.append({ "x": ox + c[0] + sx, "y": oy + c[1] + sy, "w": c[2] - sx - ex, "h": c[3] - sy - ey, "z": 7 + srand() * 10, "d": srand() })
+					var tc: String = TUFF[int(srand() * TUFF.size())]
+					b.rects.append({ "x": ox + c[0] + sx, "y": oy + c[1] + sy, "w": c[2] - sx - ex, "h": c[3] - sy - ey, "c": tc, "z": 7 + srand() * 10, "d": srand() })
 			col.append(b)
 		blocks.append(col)
 
@@ -102,12 +103,14 @@ func _tex_mat(path: String, uv: Vector3, tint := Color.WHITE, rough := 0.9) -> S
 func _plain(c: Color, rough := 0.9) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new(); m.albedo_color = c; m.roughness = rough; return m
 
-func _multi(mesh: Mesh, mat: Material, xforms: Array, shadows := true) -> MultiMeshInstance3D:
+func _multi(mesh: Mesh, mat: Material, xforms: Array, shadows := true, colors := []) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = colors.size() > 0
 	mm.mesh = mesh
 	mm.instance_count = xforms.size()
 	for k in xforms.size(): mm.set_instance_transform(k, xforms[k])
+	for k in colors.size(): mm.set_instance_color(k, colors[k])
 	var mi := MultiMeshInstance3D.new()
 	mi.multimesh = mm
 	mi.material_override = mat
@@ -136,7 +139,7 @@ func build() -> void:
 	add_child(far)
 
 	var slabs := []; var parks := []; var plaza := []
-	var walls := { 0: [], 1: [] }; var roofs := []; var ledges := []
+	var walls := { 0: [], 1: [] }; var wall_cols := { 0: [], 1: [] }; var roofs := []; var ledges := []; var ledge_cols := []
 	var trunks := []; var crowns := []
 	for i in N:
 		for j in N:
@@ -158,6 +161,8 @@ func build() -> void:
 				var f: float = [1.0, 0.77, 0.62, 0.85][int(r.z) % 4]
 				var h: float = FULL * f
 				walls[n % 2].append(_box_xf(r.x + r.w / 2.0, h / 2.0, r.y + r.h / 2.0, r.w, h, r.h))
+				var tuff := Color(r.c).lerp(Color.WHITE, 0.12)
+				wall_cols[n % 2].append(tuff); ledge_cols.append(tuff.lerp(Color.WHITE, 0.45))
 				roofs.append(_box_xf(r.x + r.w / 2.0, h + 0.4, r.y + r.h / 2.0, r.w - 2, 1, r.h - 2))
 				ledges.append(_box_xf(r.x + r.w / 2.0, h + 1.6, r.y + r.h / 2.0, r.w + 4.4, 4.2, r.h + 4.4))
 	var paving := _tex_mat("res://assets/tex/paving.jpg", Vector3(1, 1, 1) / 5.7, Color(0.8, 0.76, 0.72))
@@ -166,7 +171,11 @@ func build() -> void:
 	_multi(unit, _plain(Color("6c9659")), parks, false)
 	var fac_uv := Vector3(1.0 / (WIDE * S), 1.0 / (FULL * S), 1.0 / (WIDE * S))
 	for q in 2:
-		_multi(unit, _tex_mat("res://assets/tex/facade%d.jpg" % (q + 1), fac_uv, [Color(0.86, 0.84, 0.82), Color(0.9, 0.82, 0.76)][q], 0.75), walls[q])
+		var wm := _tex_mat("res://assets/tex/facade%d.jpg" % (q + 1), fac_uv, Color.WHITE, 1.0)
+		wm.vertex_color_use_as_albedo = true   # each building its own tuff
+		wm.roughness_texture = load("res://assets/tex/facade%d_r.png" % (q + 1)); wm.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		wm.metallic_specular = 0.6
+		_multi(unit, wm, walls[q], true, wall_cols[q])
 		# night windows: the same walls a hair larger, the lit-window texture added on top after dusk
 		var glow := _tex_mat("res://assets/tex/facade%d_n.jpg" % (q + 1), fac_uv, Color.BLACK)
 		glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
@@ -176,7 +185,8 @@ func build() -> void:
 		var gi := _multi(unit, glow, gx, false); gi.visible = false
 		facade_mats.append([glow, gi])
 	_multi(unit, _tex_mat("res://assets/tex/roof.jpg", Vector3(1, 1, 1) / 12.0), roofs, false)
-	_multi(unit, _plain(Color("c9bfb3")), ledges)
+	var lm := _plain(Color.WHITE); lm.vertex_color_use_as_albedo = true
+	_multi(unit, lm, ledges, true, ledge_cols)
 	# trees: the park trees plus a row along every pavement, and three-headed lamps at the corners
 	for i in N:
 		for j in N:

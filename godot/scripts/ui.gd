@@ -114,7 +114,7 @@ func _build_base() -> void:   # the city map: streets, pavements, buildings, par
 				for r in b.rects:
 					var rr := Rect2i(int(r.x * k), int(r.y * k), int(r.w * k), int(r.h * k))
 					img.fill_rect(rr, Color("6b4a44"))
-					img.fill_rect(rr.grow(-1), Color("b98576"))
+					img.fill_rect(rr.grow(-1), Color(r.get("c", "b98576")))
 	if city:
 		var m = main.missions if main else null
 		if m and not m.club_rect.is_empty():
