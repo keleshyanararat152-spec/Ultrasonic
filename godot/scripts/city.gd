@@ -100,6 +100,15 @@ func _tex_mat(path: String, uv: Vector3, tint := Color.WHITE, rough := 0.9) -> S
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m
 
+## A tree crown in a unit box: a cluster of lumps instead of one ball.
+func _crown_mesh() -> Mesh:
+	var st := SurfaceTool.new()
+	for b in [[Vector3(0, -0.05, 0), 0.4], [Vector3(0.2, 0.08, 0.12), 0.3], [Vector3(-0.2, 0.06, -0.12), 0.3], [Vector3(0.04, 0.25, -0.06), 0.27],
+			[Vector3(-0.1, -0.08, 0.22), 0.27], [Vector3(0.16, -0.1, -0.2), 0.25]]:
+		var sp := SphereMesh.new(); sp.radius = b[1]; sp.height = b[1] * 2; sp.radial_segments = 9; sp.rings = 5
+		st.append_from(sp, 0, Transform3D(Basis.IDENTITY, b[0]))
+	return st.commit()
+
 func _plain(c: Color, rough := 0.9) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new(); m.albedo_color = c; m.roughness = rough; return m
 
@@ -140,7 +149,8 @@ func build() -> void:
 
 	var slabs := []; var parks := []; var plaza := []
 	var walls := { 0: [], 1: [] }; var wall_cols := { 0: [], 1: [] }; var roofs := []; var ledges := []; var ledge_cols := []
-	var trunks := []; var crowns := []
+	var trunks := []; var crowns := []; var crown_cols := []; var kit := []; var kit_cols := []
+	var rng := RandomNumberGenerator.new(); rng.seed = 7041   # looks only: leaves the city's own random numbers alone
 	for i in N:
 		for j in N:
 			var b: Dictionary = blocks[i][j]
@@ -154,7 +164,8 @@ func build() -> void:
 					for r: Rect2 in keep_out: if r.grow(t.r).has_point(Vector2(t.x, t.y)): out = true
 					if out: continue
 					trunks.append(_box_xf(t.x, CURB + 9, t.y, 4, 18, 4))
-					crowns.append(Transform3D(Basis.from_scale(Vector3(t.r, t.r * 1.15, t.r) * S * 2.0), Vector3(t.x, CURB + 18 + t.r * 0.8, t.y) * S))
+					crowns.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(t.r, t.r * 1.15, t.r) * S * 2.0), Vector3(t.x, CURB + 18 + t.r * 0.8, t.y) * S))
+					crown_cols.append(Color("4f7d45").lerp(Color(rng.randf_range(0.3, 0.55), rng.randf_range(0.5, 0.65), 0.25), rng.randf() * 0.6))
 			var n := 0
 			for r in b.rects:
 				n += 1
@@ -164,6 +175,12 @@ func build() -> void:
 				var tuff := Color(r.c).lerp(Color.WHITE, 0.12)
 				wall_cols[n % 2].append(tuff); ledge_cols.append(tuff.lerp(Color.WHITE, 0.45))
 				roofs.append(_box_xf(r.x + r.w / 2.0, h + 0.4, r.y + r.h / 2.0, r.w - 2, 1, r.h - 2))
+				# on the roof: a stair house and a few air-conditioning boxes
+				var hut := Vector2(rng.randf_range(r.x + 20, r.x + r.w - 40), rng.randf_range(r.y + 20, r.y + r.h - 40))
+				kit.append(_box_xf(hut.x + 12, h + 6, hut.y + 9, 24, 12, 18)); kit_cols.append(Color(r.c).darkened(0.15))
+				for q in rng.randi_range(2, 5):
+					var p := Vector2(rng.randf_range(r.x + 12, r.x + r.w - 12), rng.randf_range(r.y + 12, r.y + r.h - 12))
+					kit.append(_box_xf(p.x, h + 3, p.y, 8, 5, 6)); kit_cols.append(Color("b9bcbf").darkened(rng.randf() * 0.2))
 				ledges.append(_box_xf(r.x + r.w / 2.0, h + 1.6, r.y + r.h / 2.0, r.w + 4.4, 4.2, r.h + 4.4))
 	var paving := _tex_mat("res://assets/tex/paving.jpg", Vector3(1, 1, 1) / 5.7, Color(0.8, 0.76, 0.72))
 	_multi(unit, paving, slabs, false)
@@ -196,10 +213,14 @@ func build() -> void:
 				for p in [[bx + t, by + 6], [bx + t, by + 394], [bx + 6, by + t], [bx + 394, by + t]]:
 					var sz := 9 + srand() * 4
 					trunks.append(_box_xf(p[0], CURB + 22, p[1], 2.6, 44, 2.6))
-					crowns.append(Transform3D(Basis.from_scale(Vector3(sz * 1.25, sz, sz * 1.25) * S * 2.0), Vector3(p[0], CURB + 42 + sz, p[1]) * S))
-	_multi(unit, _plain(Color("6b4a35")), trunks)
-	var crown := SphereMesh.new(); crown.radius = 0.5; crown.height = 1.0; crown.radial_segments = 8; crown.rings = 5
-	_multi(crown, _plain(Color("4f7d45")), crowns)
+					crowns.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sz * 1.25, sz, sz * 1.25) * S * 2.0), Vector3(p[0], CURB + 42 + sz, p[1]) * S))
+					crown_cols.append(Color("4f7d45").lerp(Color(rng.randf_range(0.3, 0.55), rng.randf_range(0.5, 0.65), 0.25), rng.randf() * 0.6))
+	var trunk := CylinderMesh.new(); trunk.top_radius = 0.3; trunk.bottom_radius = 0.5; trunk.height = 1.0; trunk.radial_segments = 7; trunk.rings = 1
+	_multi(trunk, _plain(Color("6b4a35")), trunks)
+	var cm := _plain(Color.WHITE, 0.85); cm.vertex_color_use_as_albedo = true; cm.vertex_color_is_srgb = RenderingServer.get_rendering_device() != null
+	_multi(_crown_mesh(), cm, crowns, true, crown_cols)
+	var km := _plain(Color.WHITE); km.vertex_color_use_as_albedo = true; km.vertex_color_is_srgb = cm.vertex_color_is_srgb
+	_multi(unit, km, kit, true, kit_cols)
 	var posts := []; var bulbs := []
 	for i in N:
 		for j in N:

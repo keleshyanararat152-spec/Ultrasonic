@@ -114,8 +114,8 @@ func _environment() -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR; env.ambient_light_energy = 1.0
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES; env.tonemap_exposure = 1.05; env.tonemap_white = 6.0
-	env.fog_enabled = true; env.fog_density = 0.0022; env.fog_sky_affect = 0.2
-	env.glow_enabled = true; env.glow_intensity = 0.5; env.glow_strength = 0.9; env.glow_bloom = 0.04; env.glow_hdr_threshold = 1.1
+	env.fog_enabled = true; env.fog_density = 0.0015 if hi else 0.0022; env.fog_sky_affect = 0.2
+	env.glow_enabled = true; env.glow_intensity = 0.5; env.glow_strength = 0.9; env.glow_bloom = 0.0; env.glow_hdr_threshold = 1.1
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	env.adjustment_enabled = true; env.adjustment_saturation = 1.12; env.adjustment_contrast = 1.06
 	if hi:   # on a computer: shading in the corners, light bouncing off walls, reflections in glass
@@ -240,6 +240,7 @@ func _rebuild_node(c: Car) -> void:
 	var k: float = spec[0] * 10.5 * S / maxf(0.001, box.size.x)
 	model.scale = Vector3.ONE * k
 	if spec[1]: model.rotation.y = PI
+	if hi: _shine(model)
 	var wheels := []; _find_wheels(model, wheels)
 	var front := []
 	for wn: Node3D in wheels: front.append((wn.position.x < 0) if spec[1] else (wn.position.x > 0))
@@ -252,6 +253,18 @@ func _rebuild_node(c: Car) -> void:
 	c.anim = { "tilt": tilt, "wheels": wheels, "front": front, "dir": 1.0 if spec[1] else -1.0, "spin": 0.0, "roll": 0.0, "pitch": 0.0, "pa": c.a, "pv": c.v, "lights": lights }
 	add_child(root)
 	c.node = root
+
+var _shone := {}
+func _shine(n: Node) -> void:   # car paint gets a clear coat on computers; tyres and plastic stay matt
+	if n is MeshInstance3D:
+		var mi := n as MeshInstance3D
+		for k in mi.get_surface_override_material_count():
+			var mt = mi.get_active_material(k)
+			if mt is BaseMaterial3D and not _shone.has(mt.get_instance_id()):
+				_shone[mt.get_instance_id()] = true
+				if mt.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED and (mt.metallic > 0.1 or mt.roughness < 0.6):
+					mt.clearcoat_enabled = true; mt.clearcoat = 0.7; mt.clearcoat_roughness = 0.12
+	for c in n.get_children(): _shine(c)
 
 func _find_wheels(n: Node, out: Array) -> void:
 	for ch in n.get_children():
