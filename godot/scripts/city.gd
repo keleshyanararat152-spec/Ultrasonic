@@ -173,6 +173,7 @@ func build() -> void:
 	for q in 2:
 		var wm := _tex_mat("res://assets/tex/facade%d.jpg" % (q + 1), fac_uv, Color.WHITE, 1.0)
 		wm.vertex_color_use_as_albedo = true   # each building its own tuff
+		wm.vertex_color_is_srgb = RenderingServer.get_rendering_device() != null   # Forward+ reads instance colours as linear
 		wm.roughness_texture = load("res://assets/tex/facade%d_r.png" % (q + 1)); wm.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 		wm.metallic_specular = 0.6
 		_multi(unit, wm, walls[q], true, wall_cols[q])
@@ -185,7 +186,7 @@ func build() -> void:
 		var gi := _multi(unit, glow, gx, false); gi.visible = false
 		facade_mats.append([glow, gi])
 	_multi(unit, _tex_mat("res://assets/tex/roof.jpg", Vector3(1, 1, 1) / 12.0), roofs, false)
-	var lm := _plain(Color.WHITE); lm.vertex_color_use_as_albedo = true
+	var lm := _plain(Color.WHITE); lm.vertex_color_use_as_albedo = true; lm.vertex_color_is_srgb = RenderingServer.get_rendering_device() != null
 	_multi(unit, lm, ledges, true, ledge_cols)
 	# trees: the park trees plus a row along every pavement, and three-headed lamps at the corners
 	for i in N:

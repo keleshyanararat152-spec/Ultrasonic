@@ -159,7 +159,7 @@ func _day_night(dt: float) -> void:
 	sky_mat.set_shader_parameter("cloud_col", Color.WHITE.lerp(Color("ffb48a"), dusk).lerp(Color("2a3046"), night))
 	sky_mat.set_shader_parameter("sun_col", sun.light_color * (0.35 if night > 0.5 else 1.0)); sky_mat.set_shader_parameter("t", time)
 	env.fog_light_color = Color("f0d2b6") * tint
-	env.ambient_light_color = Color(0.62, 0.66, 0.72).lerp(Color(0.75, 0.55, 0.5), dusk).lerp(Color(0.1, 0.12, 0.2), night)
+	env.ambient_light_color = Color(0.62, 0.66, 0.72).lerp(Color(0.75, 0.55, 0.5), dusk).lerp(Color(0.15, 0.17, 0.27), night)
 	env.ambient_light_energy = 1.0
 	if interior.inside != "":   # indoors: no sun, the room's own light
 		sun.light_energy = 0.0
@@ -171,7 +171,7 @@ func _day_night(dt: float) -> void:
 	var near: Array = city.lamps.duplicate()
 	near.sort_custom(func(p, q): return p.distance_squared_to(t) < q.distance_squared_to(t))
 	for k in lamp_lights.size():
-		var l: OmniLight3D = lamp_lights[k]; l.light_energy = night * 0.9
+		var l: OmniLight3D = lamp_lights[k]; l.light_energy = night * (2.0 if hi else 1.2); l.omni_range = 26 if hi else 20
 		l.position = Vector3(near[k].x, city.CURB + 44, near[k].y) * S
 	head_light.light_energy = night * 2.4 if pcar else 0.0
 	if pcar:
