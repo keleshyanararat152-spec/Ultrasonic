@@ -45,6 +45,9 @@ func _hit(p: Vector2) -> String:
 	return ""
 
 func _input(e: InputEvent) -> void:
+	if main and main.ui and main.ui.busy():   # dialogue, a panel or the big map takes the touches
+		pedals.clear(); left_id = -1; steer_x = 0; stick = Vector2.ZERO
+		return
 	if e is InputEventScreenTouch:
 		touched = true
 		if e.pressed:

@@ -142,6 +142,11 @@ func next_leg(I: int, J: int, target := Vector2.INF) -> void:
 		for o: int in opts:
 			var q := Vector2(520.0 * (I + DV[o].x) + 60, 520.0 * (J + DV[o].y) + 60).distance_to(target)
 			if q < best: best = q; d = o
+	elif flee and target != Vector2.INF:   # a runaway picks a street away from you, not always the same
+		var best := -1.0
+		for o: int in opts:
+			var q := Vector2(520.0 * (I + DV[o].x) + 60, 520.0 * (J + DV[o].y) + 60).distance_to(target) + randf_range(0, 320)
+			if q > best: best = q; d = o
 	var r: Vector2i = DV[(d + 1) % 4]
 	ai = { "i": I, "j": J, "d": d, "stage": 1,
 		"wx": 520.0 * I + 60 + DV[d].x * 85 + r.x * 28, "wy": 520.0 * J + 60 + DV[d].y * 85 + r.y * 28, "direct": false }
@@ -151,7 +156,12 @@ func resync() -> void:  # head for the nearest crossroads, then follow the stree
 	ai = { "i": I, "j": J, "d": -1, "stage": 2, "wx": 520.0 * I + 60, "wy": 520.0 * J + 60, "direct": false }
 
 var chase := false
+var flee := false         # runs from you, through red lights
 var red_stop := false
+var story := false        # belongs to a story chapter; removed when the chapter ends
+var path: Array = []      # the race rival: street points to drive through
+var pk := 0
+var ck := 0               # checkpoints the rival has passed
 
 ## The street-following driver. world gives light_at(I, J, d) and the player's position; blockers are
 ## positions a civilian car must not drive into (the player on foot, people on a crossing).
@@ -175,14 +185,14 @@ func drive(world, cars: Array, blockers: Array, dt: float) -> void:
 			ai.stage = 0; ai.wx = 520.0 * (ai.i + d.x) + 60 - d.x * 85 + r.x * 28; ai.wy = 520.0 * (ai.j + d.y) + 60 - d.y * 85 + r.y * 28
 		else:
 			var st: String = world.light_at(ai.i + d.x, ai.j + d.y, ai.d)
-			if not chase and (st == "r" or (st == "y" and v < 60)): red_stop = true
+			if not chase and not flee and (st == "r" or (st == "y" and v < 60)): red_stop = true
 			else: red_stop = false; next_leg(ai.i + d.x, ai.j + d.y, tgt)
 		tx = ai.wx; ty = ai.wy
 	var diff := wrapf(atan2(ty - y, tx - x) - a, -PI, PI)
 	var steer := clampf(diff * 2.2, -1, 1); var tv := 285.0 if chase else cruise
 	if absf(diff) > 0.6: tv = minf(tv, 75)
 	if not chase and ai.stage == 1: tv = minf(tv, 85)
-	if not chase and ai.stage == 0 and ai.d >= 0:   # slow for a red or amber at the next crossroads
+	if not chase and not flee and ai.stage == 0 and ai.d >= 0:   # slow for a red or amber at the next crossroads
 		var d: Vector2i = DV[ai.d]
 		var st: String = world.light_at(ai.i + d.x, ai.j + d.y, ai.d)
 		var dw := Vector2(ai.wx - x, ai.wy - y).length()
@@ -191,7 +201,7 @@ func drive(world, cars: Array, blockers: Array, dt: float) -> void:
 			tv = minf(tv, 0.0 if dw < 36 else (dw - 30) * 1.4)
 			if dw < 40: red_stop = true
 	if red_stop: tv = 0
-	if not chase:
+	if not chase and not flee:
 		var f := Vector2(cos(a), sin(a)); var blocked := false
 		for o: Car in cars:
 			if o == self: continue
@@ -211,9 +221,27 @@ func drive(world, cars: Array, blockers: Array, dt: float) -> void:
 	elif tv == 0:
 		if v > 5: thr = -1
 		else: v = 0
-	elif v < tv: thr = 1.0 if chase else 0.6
+	elif v < tv: thr = 1.0 if chase or flee else 0.6
 	elif v > tv + 15: thr = -0.6
 	var hit := step(city, thr, steer, false, dt)
-	if chase or hit > 0:
+	if chase or flee or hit > 0:
 		slow = slow + dt if absf(v) < 12 else 0.0
 		if slow > 1.2: rev = 0.9; slow = 0
+
+## The race rival: full throttle along path, slowing for the corners.
+func path_drive(city, dt: float) -> void:
+	if pk >= path.size():
+		step(city, -1.0 if v > 5 else 0.0, 0, false, dt); return
+	var w: Vector2 = path[pk]; var dv := w - Vector2(x, y); var d := dv.length()
+	if d < 36: pk += 1; return
+	var hd := atan2(dv.y, dv.x); var diff := wrapf(hd - a, -PI, PI)
+	var steer := clampf(diff * 2.4, -1, 1); var tv := max_speed
+	if absf(diff) > 0.5: tv = 80
+	elif pk + 1 < path.size():
+		var nx: Vector2 = path[pk + 1]
+		if absf(wrapf(atan2(nx.y - w.y, nx.x - w.x) - hd, -PI, PI)) > 0.5: tv = minf(tv, 85 + d * 0.9)
+	var thr := 1.0 if v < tv else -0.7
+	if rev > 0: rev -= dt; thr = -1; steer = -steer
+	step(city, thr, steer, false, dt)
+	slow = slow + dt if absf(v) < 12 else 0.0
+	if slow > 1.2: rev = 0.8; slow = 0

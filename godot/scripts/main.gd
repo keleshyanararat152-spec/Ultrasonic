@@ -1,6 +1,7 @@
 extends Node3D
 ## The Godot port of Pink City. Stage 2: driving and walking, getting in and out of cars, traffic that
-## stops at red lights, pedestrians, police with stars, day and night.
+## stops at red lights, pedestrians, police with stars, day and night. Stage 3 (missions.gd, ui.gd): money,
+## deliveries and taxi fares, the race and escape rings, the story, the radar and the big map.
 
 const S := 0.1
 const CELL := 520
@@ -42,6 +43,8 @@ var head_light: SpotLight3D
 var sig: Array = []                  # traffic signals: { I, J, d }
 var sig_mm: MultiMesh
 var sig_t := -9.0
+var missions
+var ui
 
 func _ready() -> void:
 	randomize()
@@ -57,7 +60,7 @@ func _ready() -> void:
 	var mine := _make_car(ic(3) + 210, ic(3) + 50, 0.0, "mclaren")
 	_fast(mine)
 	for n in 34:
-		var c := _make_car(0, 0, 0, TRAFFIC.pick_random())
+		var c := _make_car(0, 0, 0, TRAFFIC.pick_random() if randf() > 0.12 else "taxi")
 		c.driver = true
 		c.next_leg(randi_range(0, 7), randi_range(0, 7))
 		c.x = c.ai.wx; c.y = c.ai.wy; c.a = c.ai.d * PI / 2
@@ -77,8 +80,9 @@ func _ready() -> void:
 	me_av = People.Avatar.new(people_scenes[0]); add_child(me_av.root)
 	cam = Camera3D.new(); cam.fov = 62; cam.near = 0.2; cam.far = 600
 	add_child(cam)
+	missions = preload("res://scripts/missions.gd").new(); add_child(missions); missions.setup(self)
 	_hud()
-	toast("Մոտեցիր McLaren-ին ու նստիր  (E կամ «Նստել»)", 4)
+	toast(missions.start_text(), 4)
 
 static func ic(i: int) -> float:
 	return i * CELL + 60.0
@@ -247,6 +251,7 @@ func act() -> void:
 		var p := Vector2(pcar.x + sin(pcar.a) * 28, pcar.y - cos(pcar.a) * 28)
 		p = city.push_out(p, 7)
 		me.x = p.x; me.y = p.y; me.a = pcar.a; pcar.v = 0; pcar.steer_in = 0; pcar = null
+		missions.on_exit_car()
 		return
 	var best: Car = null; var bd := 58.0
 	for c: Car in cars:
@@ -259,6 +264,7 @@ func act() -> void:
 	best.driver = false; best.ai = {}; best.stun = 0; best.chase = false
 	pcar = best
 	if not FAST.has(best.model): best.max_speed = maxf(best.max_speed, 330)
+	missions.on_enter_car(best)
 
 func add_heat(n: float) -> void:
 	heat = minf(5, heat + n); evade_t = 0
@@ -268,6 +274,7 @@ func toast(msg: String, dur := 2.4) -> void:
 
 # ------------------------------------------------------------------------ loop ----------
 func _physics_process(dt: float) -> void:
+	if ui.busy(): return   # talking, a panel or the big map: the city waits
 	time += dt
 	var inp: Dictionary = touch_ui.read_input()
 	if pcar:
@@ -307,7 +314,8 @@ func _physics_process(dt: float) -> void:
 				chasing += 1; var d := tgt.distance_to(Vector2(c.x, c.y))
 				if d < 480: near = true
 				if d < (75 if pcar else 46) and spd < 30: close = true
-		if c.driver or c.kind == "police": c.drive(self, cars, blockers, dt)
+		if c.path.size(): c.path_drive(city, dt)
+		elif c.driver or c.kind == "police": c.drive(self, cars, blockers, dt)
 		else: c.v -= c.v * 2.5 * dt; c.step(city, 0, 0, false, dt)
 	for i in cars.size():
 		for j in range(i + 1, cars.size()):
@@ -357,13 +365,14 @@ func _physics_process(dt: float) -> void:
 			if c.kind != "police": continue
 			cops += 1
 			if cops > 2 and Vector2(c.x, c.y).distance_to(tgt) > 900: c.node.queue_free(); cars.remove_at(k)
+	missions.tick(dt)
 
 func _busted() -> void:
 	heat = 0; bust_t = 0
 	if pcar: pcar.v = 0; pcar = null
 	me.x = ic(3) + 96; me.y = ic(3) + 76
 	for c: Car in cars: if c.kind == "police": c.chase = false
-	toast("Բռնվեցիր", 3)
+	missions.on_busted()
 
 func _crash(impact: float) -> void:
 	if crash_cd > 0: return
@@ -380,6 +389,7 @@ func _process(dt: float) -> void:
 		for k in c.anim.lights.size():
 			(c.anim.lights[k] as StandardMaterial3D).albedo_color = (Color("ff5a5f") if (k == 0) == flash else Color("4d8dff")) if c.chase else Color("9aa3ad")
 	for p in peds: _place_ped(p, dt)
+	missions.frame(dt)
 	# you on foot
 	me_av.root.visible = pcar == null
 	if not pcar:
@@ -449,21 +459,23 @@ func _hud() -> void:
 	touch_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	touch_ui.main = self
 	layer.add_child(touch_ui)
+	ui = preload("res://scripts/ui.gd").new(); ui.main = self; layer.add_child(ui)
 	var panel := _panel(); panel.position = Vector2(16, 12)
 	var box := VBoxContainer.new(); panel.add_child(box)
 	var stars := Label.new(); stars.add_theme_font_size_override("font_size", 22)
 	var speed := Label.new(); speed.add_theme_font_size_override("font_size", 18)
 	var clock := Label.new(); clock.add_theme_font_size_override("font_size", 15); clock.add_theme_color_override("font_color", Color("a9a59c"))
-	box.add_child(stars); box.add_child(speed); box.add_child(clock)
+	var cash := Label.new(); cash.add_theme_font_size_override("font_size", 22); cash.add_theme_color_override("font_color", Color("58d68d"))
+	box.add_child(cash); box.add_child(stars); box.add_child(speed); box.add_child(clock)
 	if not DisplayServer.is_touchscreen_available():   # on a computer: how to play with the keyboard
 		var keys := Label.new(); keys.add_theme_font_size_override("font_size", 14); keys.add_theme_color_override("font_color", Color("a9a59c"))
-		keys.text = "W / S — գազ, արգելակ, քայլել\nA / D — ղեկ, շրջվել\nSpace — ձեռքի արգելակ\nE — նստել, իջնել"
+		keys.text = "W / S — գազ, արգելակ, քայլել\nA / D — ղեկ, շրջվել\nSpace — ձեռքի արգելակ\nE — նստել, իջնել\nM — քարտեզ"
 		box.add_child(keys)
 	layer.add_child(panel)
 	var tp := _panel(); tp.set_anchors_preset(Control.PRESET_CENTER_TOP); tp.position = Vector2(-240, 120); tp.custom_minimum_size = Vector2(480, 0)
 	var tl := Label.new(); tl.add_theme_font_size_override("font_size", 20); tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tp.add_child(tl); tp.visible = false; layer.add_child(tp)
-	hud = { "stars": stars, "speed": speed, "clock": clock, "toast": tl, "toast_panel": tp }
+	hud = { "panel": panel, "cash": cash, "stars": stars, "speed": speed, "clock": clock, "toast": tl, "toast_panel": tp }
 
 func _hud_tick(dt: float) -> void:
 	var n := ceili(heat)
@@ -471,6 +483,8 @@ func _hud_tick(dt: float) -> void:
 	hud.stars.add_theme_color_override("font_color", Color("ff5a5f") if n > 0 else Color("a9a59c"))
 	hud.speed.text = ("%d կմ/ժ" % int(absf(pcar.v) * 0.42)) if pcar else "ոտքով"
 	hud.clock.text = clock_text()
+	hud.cash.text = missions.money(missions.cash)
+	hud.panel.visible = not ui.big.visible
 	if toast_t > 0:
 		toast_t -= dt
 		if toast_t <= 0: hud.toast_panel.visible = false
@@ -497,9 +511,17 @@ func _test_tick() -> void:
 			if a == "--drive": _test.drive = true
 			if a.begins_with("--hour="): day_t = fmod((float(a.substr(7)) - 6) / 24.0 + 1, 1)
 			if a == "--heat": heat = 3
+			if a == "--talk": _test.talk = true
+			if a == "--map": _test.map = true
+			if a == "--storytest": _test.story = true
+			if a == "--jobtest": _test.jobs = true
+	if _test.get("story", false): _story_test(); return
+	if _test.get("jobs", false): _job_test(); return
 	if not _test.on: return
 	touch_ui.touched = true
 	_frame += 1
+	if _frame == 40 and _test.get("talk", false): me.x = missions.sp.square.x; me.y = missions.sp.square.y + 10
+	if _frame == 60 and _test.get("map", false): missions.set_waypoint(Vector2(ic(6), ic(1))); ui.toggle_map()
 	if _frame > 30:   # script time per frame, for comparing speed-ups
 		_test.proc = _test.get("proc", 0.0) + Performance.get_monitor(Performance.TIME_PROCESS) * 1000
 		_test.phys = _test.get("phys", 0.0) + Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000
@@ -515,3 +537,82 @@ func _test_tick() -> void:
 		get_viewport().get_texture().get_image().save_png(_test.shot)
 		print("SHOT ", _test.shot, " car ", pcar != null, " me ", me.x, " ", me.y, " heat ", heat, " cars ", cars.size(), " peds ", peds.size())
 		get_tree().quit()
+
+## testing aid: `godot --headless -- --storytest` plays the whole story by teleporting, printing each step
+var _st_last := ""
+func _story_test() -> void:
+	_frame += 1
+	var ms = missions
+	if _frame == 2: ms.prog = ms.prog0(); ms.cash = 0
+	var tag := "ch%d %s" % [ms.prog.story, (ms.act.s.t + str(ms.act.k)) if ms.story_on() and ms.act.get("s") else "-"]
+	if tag != _st_last: _st_last = tag; print("STORY ", _frame, " ", tag, " cash ", ms.cash, " heat ", heat)
+	if ms.story_done() or _frame > 20000:
+		print("STORY END done=", ms.story_done(), " cash ", ms.cash); get_tree().quit(); return
+	if ui.talking():
+		if ui.talk.choice != null: ui._pick(0)
+		else: ui._next()
+		return
+	var put := func(p: Vector2):
+		if pcar: pcar.x = p.x; pcar.y = p.y; pcar.v = 0
+		else: me.x = p.x; me.y = p.y
+	var need_car := func():
+		if pcar == null:
+			var c := _make_car(me.x + 30, me.y, 0.0, "mclaren"); me.x = c.x - 20; act()
+	if not ms.story_on():
+		if heat > 0: heat = 0
+		if pcar and ms.prog.story != 3: act()
+		var g = ms.spos(ms.chs[ms.prog.story].at)
+		if _frame % 30 == 0: put.call(g + Vector2(200, 0))
+		else: put.call(g)
+		return
+	var s: Dictionary = ms.act.s
+	match s.t:
+		"talk":
+			heat = 0
+			var p = ms.spos(s.at)
+			if p != null: put.call(p)
+		"getcar":
+			if pcar: act()
+			me.x = ms.act.car.x; me.y = ms.act.car.y + 20; act()
+		"drive": put.call(ms.sp.garageCar)
+		"multi":
+			need_car.call(); put.call(ms.sp.lav[ms.act.m])
+		"tail":
+			need_car.call()
+			var c: Car = ms.act.car
+			if ms.act.go: ms.act.time = 0.0
+			put.call(Vector2(c.x, c.y) + Vector2(200, 0))
+		"escape": heat = 0
+		"race":
+			need_car.call()
+			if ms.act.phase == "ready": put.call(ms.spos("rival") + Vector2(0, 40))
+			elif ms.act.phase == "go": put.call(Vector2(ms.act.cps[ms.act.ci].x, ms.act.cps[ms.act.ci].y))
+		"chase":
+			need_car.call()
+			var c: Car = ms.act.car
+			put.call(Vector2(c.x, c.y) + Vector2(0, 40))
+
+func _job_test() -> void:   # deliveries, a taxi fare, the race and the escape, by teleporting
+	_frame += 1
+	var ms = missions
+	if _frame == 2:
+		ms.prog.story = 5; ms.cash = 0; ms.act = null
+		var c := _make_car(me.x + 30, me.y, 0.0, "taxi"); me.x = c.x - 20; act(); print("JOB in taxi ", ms.job.kind)
+	if ui.busy():
+		if ui.shop.visible: (ui.shop_list.get_child(0) as Button).pressed.emit()
+		return
+	if ms.act == null and ms.job:
+		if pcar == null: return
+		if _frame < 200:
+			pcar.x = ms.job.p.x; pcar.y = ms.job.p.y; pcar.v = 0
+		elif _frame == 200:
+			print("JOB cash after fares ", ms.cash); pcar.x = ms.places[0].x + 120; pcar.y = ms.places[0].y
+		elif _frame == 210: pcar.x = ms.places[0].x; pcar.y = ms.places[0].y
+		elif _frame == 400:
+			print("JOB cash after race ", ms.cash, " best ", ms.prog.race_best); pcar.x = ms.places[1].x + 120; pcar.y = ms.places[1].y
+		elif _frame == 410: pcar.x = ms.places[1].x; pcar.y = ms.places[1].y
+		elif _frame > 600: print("JOB end cash ", ms.cash); get_tree().quit()
+	elif ms.act != null and ms.act.kind == "race":
+		var c = ms.act.cps[ms.act.k]; pcar.x = c.x; pcar.y = c.y; pcar.v = 0
+	elif ms.act != null and ms.act.kind == "escape":
+		if _frame % 20 == 0: heat = 0
