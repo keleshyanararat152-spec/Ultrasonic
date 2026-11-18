@@ -7,3 +7,5 @@
 - **People** (`assets/people/*.glb`): Microsoft Rocketbox Avatar Library, MIT licence (`assets/people/LICENSE.txt`).
 - **Font**: Noto Sans Armenian, © The Noto Project Authors, SIL Open Font License 1.1 (`fonts/OFL.txt`).
 - **Engine**: Godot Engine 4.3 (MIT), https://godotengine.org
+- **Ground and wall materials** (`assets/tex/ph/`): Poly Haven (https://polyhaven.com), CC0 — asphalt_02,
+  hexagonal_concrete_paving, pavement_02, sandstone_blocks_05. Re-saved as JPEG at quality 86.

@@ -113,6 +113,16 @@ func _crown_mesh() -> Mesh:
 		st.append_from(sp, 0, Transform3D(Basis.IDENTITY, b[0]))
 	return st.commit()
 
+## A Poly Haven texture set (colour, OpenGL normal, roughness), laid in world space; size: one image in Godot units.
+func _ph_mat(name: String, size: float, tint := Color.WHITE, nscale := 1.0) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new(); var base := "res://assets/tex/ph/" + name
+	m.albedo_texture = load(base + "_diff.jpg"); m.albedo_color = tint
+	m.normal_enabled = true; m.normal_texture = load(base + "_nor.jpg"); m.normal_scale = nscale
+	m.roughness_texture = load(base + "_rough.jpg"); m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED; m.roughness = 1.0
+	m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3.ONE / size
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	return m
+
 func _plain(c: Color, rough := 0.9) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new(); m.albedo_color = c; m.roughness = rough; return m
 
@@ -143,7 +153,7 @@ func build() -> void:
 	var ground := MeshInstance3D.new()
 	var pm := PlaneMesh.new(); pm.size = Vector2(WS, WS) * S
 	ground.mesh = pm
-	ground.material_override = _tex_mat("res://assets/tex/asphalt.jpg", Vector3(1.0 / 9.6, 1.0 / 9.6, 1.0 / 9.6), Color(0.82, 0.82, 0.84), 0.88, "res://assets/tex/asphalt_n.png", 0.8)
+	ground.material_override = _ph_mat("asphalt_02", 4.0, Color(0.92, 0.92, 0.95))
 	ground.position = Vector3(WS / 2.0, 0, WS / 2.0) * S
 	add_child(ground)
 	var far := MeshInstance3D.new()   # hills beyond the edge
@@ -186,17 +196,19 @@ func build() -> void:
 					var p := Vector2(rng.randf_range(r.x + 12, r.x + r.w - 12), rng.randf_range(r.y + 12, r.y + r.h - 12))
 					kit.append(_box_xf(p.x, h + 3, p.y, 8, 5, 6)); kit_cols.append(Color("b9bcbf").darkened(rng.randf() * 0.2))
 				ledges.append(_box_xf(r.x + r.w / 2.0, h + 1.6, r.y + r.h / 2.0, r.w + 4.4, 4.2, r.h + 4.4))
-	var paving := _tex_mat("res://assets/tex/paving.jpg", Vector3(1, 1, 1) / 5.7, Color(0.8, 0.76, 0.72), 0.9, "res://assets/tex/paving_n.png")
+	var paving := _ph_mat("hexagonal_concrete_paving", 2.4, Color(0.86, 0.83, 0.82))
 	_multi(unit, paving, slabs, false)
-	_multi(unit, _tex_mat("res://assets/tex/paving.jpg", Vector3(1, 1, 1) / 5.7, Color(0.95, 0.88, 0.8), 0.9, "res://assets/tex/paving_n.png"), plaza, false)
+	_multi(unit, _ph_mat("pavement_02", 3.5), plaza, false)
 	_multi(unit, _plain(Color("6c9659")), parks, false)
 	var fac_uv := Vector3(1.0 / (WIDE * S), 1.0 / (FULL * S), 1.0 / (WIDE * S))
 	for q in 2:
-		var wm := _tex_mat("res://assets/tex/facade%d.jpg" % (q + 1), fac_uv, Color.WHITE, 1.0, "res://assets/tex/facade%d_nm.png" % (q + 1), 1.2)
-		wm.vertex_color_use_as_albedo = true   # each building its own tuff
-		wm.vertex_color_is_srgb = RenderingServer.get_rendering_device() != null   # Forward+ reads instance colours as linear
-		wm.roughness_texture = load("res://assets/tex/facade%d_r.png" % (q + 1)); wm.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
-		wm.metallic_specular = 0.6
+		var wm := ShaderMaterial.new(); wm.shader = load("res://shaders/facade.gdshader")   # windows plus cut tuff blocks
+		wm.set_shader_parameter("facade", load("res://assets/tex/facade%d.jpg" % (q + 1)))
+		wm.set_shader_parameter("facade_r", load("res://assets/tex/facade%d_r.png" % (q + 1)))
+		wm.set_shader_parameter("stone", load("res://assets/tex/ph/sandstone_blocks_05_diff.jpg"))
+		wm.set_shader_parameter("stone_n", load("res://assets/tex/ph/sandstone_blocks_05_nor.jpg"))
+		wm.set_shader_parameter("stone_r", load("res://assets/tex/ph/sandstone_blocks_05_rough.jpg"))
+		wm.set_shader_parameter("fac_size", Vector2(WIDE, FULL) * S); wm.set_shader_parameter("srgb_tint", hi)
 		_multi(unit, wm, walls[q], true, wall_cols[q])
 		# night windows: the same walls a hair larger, the lit-window texture added on top after dusk
 		var glow := _tex_mat("res://assets/tex/facade%d_n.jpg" % (q + 1), fac_uv, Color.BLACK)
