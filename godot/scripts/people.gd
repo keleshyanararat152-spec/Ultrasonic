@@ -94,7 +94,7 @@ class Avatar:
 	## ph: step phase; amp: 0 standing .. 1 walking. Reads the table made at load; cheap.
 	func walk(ph: float, amp: float) -> void:
 		if skel == null or wt == null: return
-		var f := fposmod(ph, TAU) / TAU * WN; var k0 := int(f) % WN; var k1 := (k0 + 1) % WN; var u := f - floor(f)
+		var f := fposmod(ph, TAU) / TAU * WN; var k0 := int(f) % WN; var k1 := (k0 + 1) % WN; var u: float = f - floorf(f)
 		var idx: Array = wt.idx; var a0: Array = wt.step[k0]; var a1: Array = wt.step[k1]; var st: Array = wt.stand
 		for i in idx.size():
 			var b: int = idx[i]
