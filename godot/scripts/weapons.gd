@@ -317,6 +317,13 @@ func pose(dt: float) -> void:
 	var hand: Vector3 = av.skel.global_transform * av.pose_global(hb).origin
 	var n: Node3D = gun_nodes[cur]; n.visible = true
 	var face := Basis(Vector3.UP, -m.me.a)
+	if g.two and aim_k < 0.35:   # a long gun not in use hangs across the back
+		var sb: int = av.bones.get("Spine2", av.bones.get("Spine1", -1))
+		if sb >= 0:
+			var back: Vector3 = av.skel.global_transform * av.pose_global(sb).origin
+			var f3 := Vector3(cos(m.me.a), 0, sin(m.me.a))
+			n.global_transform = Transform3D(face * Basis(Vector3.RIGHT, 0.15) * Basis(Vector3.FORWARD, 2.2), back - f3 * 0.2 + Vector3(0, 0.05, 0))
+			return
 	var down := Basis(Vector3.FORWARD, 1.2 * (1.0 - aim_k) - (pitch + kick * 0.6) * aim_k)   # pointing at the ground when lowered
 	n.global_transform = Transform3D(face * down, hand + Vector3(0, 0.03, 0))
 
