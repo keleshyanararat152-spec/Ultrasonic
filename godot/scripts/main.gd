@@ -454,6 +454,7 @@ func act() -> void:
 	missions.on_enter_car(best)
 
 func add_heat(n: float) -> void:
+	if cheats and cheats.no_wanted: return
 	heat = minf(5, heat + n); evade_t = 0
 
 func toast(msg: String, dur := 2.4) -> void:
