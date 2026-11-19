@@ -21,7 +21,7 @@ var peds: Array = []
 var scenes := {}
 var people_scenes := []
 var pcar: Car = null                 # the car the player drives, or null on foot
-var me := { "x": 0.0, "y": 0.0, "a": 0.0, "walk": 0.0, "moving": 0.0, "spd": 0.0 }
+var me := { "x": 0.0, "y": 0.0, "a": 0.0, "walk": 0.0, "moving": 0.0, "spd": 0.0, "turn": 0.0, "side": 0.0 }
 var me_av                            # the player's avatar
 var cam: Camera3D
 var cam_a := 0.0
@@ -348,6 +348,7 @@ func _rebuild_node(c: Car) -> void:
 	add_child(root)
 	c.node = root
 
+var _lean := 0.0
 var _pf := 0   # frame count for staggering far people's animation
 var _shone := {}
 var car_optics: Array = []           # head- and tail-light materials that glow at night
@@ -471,11 +472,21 @@ func _physics_process(dt: float) -> void:
 		if hit > 70: _crash(hit); fx.spark(pcar.hit_pt, hit / 300.0)
 		me.x = pcar.x; me.y = pcar.y
 	else:   # walking: forward/back moves, sideways turns
+		# a body has weight: it speeds up and slows down over a moment; Shift sprints, aiming walks and side-steps
 		var mv: float = inp.move.y; var tn: float = inp.move.x
-		me.a += tn * 2.8 * dt
-		var spd: float = -mv * (95.0 if mv < 0 else 30.0)
-		me.spd = spd
-		me.x += cos(me.a) * spd * dt; me.y += sin(me.a) * spd * dt
+		var aiming: bool = weapons.aiming
+		var want := 0.0
+		if mv < -0.05: want = -mv * (16.0 if aiming else (75.0 if Input.is_key_pressed(KEY_SHIFT) else 46.0))
+		elif mv > 0.05: want = -mv * 17.0
+		me.spd = move_toward(me.spd, want, (55.0 if absf(want) > absf(me.spd) else 95.0) * dt)
+		var side := 0.0
+		if aiming: side = tn * 15.0   # the mouse turns you while aiming; A / D step sideways
+		else:
+			var tr := tn * lerpf(3.3, 1.8, clampf(absf(me.spd) / 75.0, 0, 1))
+			me.turn = move_toward(me.turn, tr, 14.0 * dt); me.a += me.turn * dt
+		me.side = move_toward(me.side, side, 70.0 * dt)
+		var spd: float = me.spd
+		me.x += cos(me.a) * spd * dt - sin(me.a) * me.side * dt; me.y += sin(me.a) * spd * dt + cos(me.a) * me.side * dt
 		me.moving = absf(mv)
 		if absf(mv) > 0.05: me.walk += dt * 10 * absf(mv) * (1.0 if mv < 0 else -0.7)
 		var p := Vector2(me.x, me.y)
@@ -604,11 +615,12 @@ func _process(dt: float) -> void:
 	me_av.root.visible = pcar == null
 	if not pcar:
 		me_av.root.position = Vector3(me.x, city.ground_y(me.x, me.y), me.y) * S
-		me_av.root.rotation.y = -me.a
 		var ms: float = me.spd * S
-		if absf(ms) < 0.3: me_av.animate(dt, "dance1" if interior.on_floor() else "idle")
-		elif ms > 4.5: me_av.animate(dt, "run", clampf(ms / 4.5, 0.7, 1.9))
-		else: me_av.animate(dt, "walk", absf(ms) / 1.35 * signf(ms))
+		var lean := clampf(me.turn * ms * 0.035, -0.16, 0.16)   # lean into a turn when running
+		_lean += (lean - _lean) * minf(1, dt * 6)
+		me_av.root.rotation = Vector3(_lean, -me.a, 0)
+		if interior.on_floor() and absf(ms) < 0.3: me_av.animate(dt, "dance1")
+		else: me_av.locomote(dt, ms if absf(me.side) < 2 else signf(ms + 0.001) * Vector2(me.spd, me.side).length() * S)
 		me_av.root.position.y += me_av.bob
 	weapons.pose(dt)
 	# camera: behind the car or the walker
@@ -632,6 +644,14 @@ func _process(dt: float) -> void:
 	if _test.get("close", false):   # testing aid: a close side view of you
 		var me3 := Vector3(me.x, city.ground_y(me.x, me.y), me.y) * S; var sd := Vector3(-sin(me.a), 0, cos(me.a))
 		cam.position = me3 + sd * 3.2 + Vector3(cos(me.a), 0, sin(me.a)) * 1.2 + Vector3(0, 1.3, 0); cam.look_at(me3 + Vector3(0, 1.0, 0)); cam.fov = 45
+	if weapons.aiming and not pcar:   # over the right shoulder, looking where the gun points
+		var f3 := Vector3(cos(me.a), 0, sin(me.a)); var r3 := Vector3(-sin(me.a), 0, cos(me.a))
+		var me3 := Vector3(me.x, city.ground_y(me.x, me.y), me.y) * S
+		var cp := me3 - f3 * 2.3 + r3 * 0.7 + Vector3(0, 1.75 - weapons.pitch * 0.8, 0)
+		var pp: Vector2 = city.push_out(Vector2(cp.x / S, cp.z / S), 4); cp.x = pp.x * S; cp.z = pp.y * S
+		cam.position = cam.position.lerp(cp, minf(1, real_dt * 14)); cam.fov = lerpf(cam.fov, 50, minf(1, real_dt * 10))
+		var look := me3 + Vector3(0, 1.55, 0) + r3 * 0.7 + (f3 * cos(weapons.pitch + weapons.kick * 0.5) + Vector3(0, sin(weapons.pitch + weapons.kick * 0.5), 0)) * 20.0
+		cam.look_at(look)
 	cine.camera(real_dt)
 	sun.global_position = cam.global_position
 	_hud_tick(dt)
@@ -667,16 +687,18 @@ func _place_ped(p, dt: float) -> void:
 	var moving: bool = p.down <= 0 and p.act == "" and (p.free_life > 0 or p.cross.is_empty() or not p.cross.wait)
 	if p.umb: p.av.root.get_child(1).visible = weather.cur.rain > 0.3
 	if dc >= (130 if hi else 70): return
-	var kind := "walk"; var rate := 1.0
+	var kind := ""; var v := 0.0   # kind: a standing clip, or "" to walk / run at speed v (m/s)
 	if p.down > 0: kind = "idle"
 	elif not moving: kind = p.act if p.act != "" else "wait"
-	elif p.panic_t > 0 or p.free_life > 0: kind = "run"; rate = clampf((70.0 if p.free_life > 0 else p.sp * 2.8) * S / 4.0, 0.8, 1.8)
+	elif p.free_life > 0: v = 70.0 * S
 	else:
-		var sp: float = p.sp * (1.6 if not p.cross.is_empty() else 1.0) * (1.35 if weather.cur.rain > 0.4 and not p.umb else 1.0)
-		rate = sp * S / 1.35
+		v = p.sp * S * (1.6 if not p.cross.is_empty() else 1.0) * (2.8 if p.panic_t > 0 else (1.35 if weather.cur.rain > 0.4 and not p.umb else 1.0))
 	# far away people move their limbs less often: every frame near, every 2nd, then every 4th
 	p.av.acc_dt += dt; var every := 1 if dc < 40 else (2 if dc < 80 else 4)
-	if (_pf + p.i * 7 + p.j) % every == 0: p.av.animate(p.av.acc_dt, kind, rate); p.av.acc_dt = 0.0
+	if (_pf + p.i * 7 + p.j) % every == 0:
+		if kind == "": p.av.locomote(p.av.acc_dt, v)
+		else: p.av.animate(p.av.acc_dt, kind)
+		p.av.acc_dt = 0.0
 	r.position.y += p.av.bob
 
 # ------------------------------------------------------------------------ HUD ----------
@@ -798,7 +820,7 @@ func _test_tick() -> void:
 		var q: Array = _test.at; me.x = float(q[0]); me.y = float(q[1]); me.a = float(q[2]); cam_a = me.a
 		touch_ui.stick = Vector2(0, -1) if OS.get_cmdline_user_args().has("--walk") else Vector2.ZERO
 		if _frame == 99 or _frame == _test.get("frames", 120): pass
-	if _test.get("aim", false) and _frame >= 5: weapons.give("rifle", false); weapons.holding = true; weapons.aim_t = 0.0
+	if _test.get("aim", false) and _frame >= 5: weapons.give("rifle", false); weapons.holding = true; weapons.aim_t = 0.0; weapons.aiming = OS.get_cmdline_user_args().has("--shoulder")
 	if _test.get("dent", false) and _frame == 30:   # dent the McLaren on its front left corner, twice
 		var c: Car = cars[0]; var f := Vector2(cos(c.a), sin(c.a)); var r := Vector2(-f.y, f.x)
 		_dent(c, Vector2(c.x, c.y) + f * 22 - r * 8, 0.2); _dent(c, Vector2(c.x, c.y) - r * 11 + f * 5, 0.15)
@@ -942,7 +964,9 @@ func _gun_test() -> void:   # buys a pistol, shoots a person and a car, the poli
 		missions.cash = 50000; ws.shop(); (ui.shop_list.get_child(0) as Button).pressed.emit(); ui.close_panel()
 		print("GUN bought ", ws.cur, " ammo ", ws.owned().pistol, " cash ", missions.cash)
 	if _frame == 4:   # stand facing a person 60 units away
-		var p = peds[0]; p.act = "wait"; p.act_t = 99; me.x = p.x - 60; me.y = p.y; me.a = 0.0
+		var p = peds[0]; p.act = "wait"; p.act_t = 99; p.x = ic(2) + 260; p.y = ic(2); me.x = p.x - 60; me.y = p.y; me.a = 0.0
+		for o in peds: if o != p: o.x += 9000
+		for o: Car in cars: if absf(o.y - p.y) < 30 and o.x < p.x and o.x > p.x - 80: o.y += 200
 		ws.cd = 0; ws._try_shot(); print("GUN person down ", p.down > 0, " heat ", snapped(heat, 0.1), " ammo ", ws.owned().pistol)
 	if _frame == 6:
 		var c: Car = cars[5]; c.driver = false; c.v = 0; c.a = 0.0; me.x = c.x - 70; me.y = c.y; me.a = 0.0

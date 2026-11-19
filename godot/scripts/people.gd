@@ -167,12 +167,62 @@ class Avatar:
 	func animate(dt: float, kind: String, rate := 1.0) -> void:
 		if skel == null: return
 		var want := cname(kind)
+		if clip_a == "loco":   # coming out of walking: fade from the walk (or the stand) it was in
+			if loco_k > 0.5: clip_a = cname("walk"); ta = loco_ph * clip_len(clip_a)
+			else: clip_a = cname("idle"); ta = idle_t
 		if want != clip_a:
 			clip_b = clip_a; tb = ta; fade = 1.0 if clip_a != "" else 0.0; clip_a = want
 			ta = randf() * clip_len(want) if not (kind in ["walk", "run", "stroll"]) else 0.0
 		ta += dt * rate
 		if fade > 0: tb += dt; fade = maxf(0.0, fade - dt * 4.0)
 		_pose(clip_a, ta, clip_b, tb, fade)
+
+	## Walking and running driven by speed (m/s, negative walks backwards): the legs turn at the rate that keeps the
+	## feet planted (each clip knows its own ground speed), walk melts into run as you speed up, and both into
+	## standing as you stop. Whatever else was playing fades out.
+	var loco_ph := 0.0
+	var loco_k := 0.0          # 0 standing .. 1 moving, smoothed
+	func locomote(dt: float, v: float) -> void:
+		if skel == null: return
+		var w := cname("walk"); var r := cname("run"); var id := cname("idle")
+		var size := H / 1.75
+		var sw := float(load_clip(w).get("speed", 1.1)) * size; var sr := float(load_clip(r).get("speed", 2.6)) * size
+		var av := absf(v)
+		var k_run := clampf((av - sw * 1.3) / maxf(0.1, sr * 1.1 - sw * 1.3), 0.0, 1.0)
+		var stride := lerpf(sw * clip_len(w), sr * clip_len(r), k_run)
+		loco_ph = fposmod(loco_ph + dt * v / maxf(stride, 0.2), 1.0)
+		loco_k += (clampf(av / 0.6, 0, 1) - loco_k) * minf(1, dt * 8)
+		idle_t += dt
+		var parts := [[w, loco_ph * clip_len(w), loco_k * (1.0 - k_run)], [r, loco_ph * clip_len(r), loco_k * k_run], [id, idle_t, 1.0 - loco_k]]
+		if clip_a != "" and clip_a != "loco":   # fading out of a standing clip (phone, talk ...)
+			clip_b = clip_a; tb = ta; fade = 1.0; clip_a = "loco"
+		if fade > 0 and clip_b != "" and clip_b != "loco":
+			tb += dt; fade = maxf(0.0, fade - dt * 4.0); parts.append([clip_b, tb, fade * 3.0])
+		_blend(parts)
+		# a faster stride lifts the chest less steeply: lean a touch forward when running
+		var sp: int = bones.get("Spine1", -1)
+		if sp >= 0 and k_run > 0.01:
+			var q := skel.get_bone_pose_rotation(sp); var la: Vector3 = (_g_rest_basis(sp).inverse() * lat).normalized()
+			skel.set_bone_pose_rotation(sp, q * Quaternion(la, 0.12 * k_run * signf(v)))
+
+	## Several clips at once, each [clip, time, weight]; the weights need not add up to one.
+	func _blend(parts: Array) -> void:
+		var tot := 0.0; var bb := 0.0; var acc := {}; var first := true
+		for e in parts:
+			var wgt: float = e[2]
+			if wgt < 0.001: continue
+			var A := _table(e[0]); var fa: Array = A.f; var n := fa.size()
+			var x := fposmod(float(e[1]) * A.fps, maxf(1.0, n - 1.0)); var i0 := int(x); var i1 := mini(i0 + 1, n - 1); var u := x - i0
+			var r0: Array = fa[i0]; var r1: Array = fa[i1]; var idx: PackedInt32Array = A.idx
+			tot += wgt; var k := wgt / tot
+			for i in idx.size():
+				var q: Quaternion = (r0[i] as Quaternion).slerp(r1[i], u)
+				acc[idx[i]] = q if first else (acc.get(idx[i], q) as Quaternion).slerp(q, k)
+			var pa: PackedFloat32Array = A.pel
+			bb = lerpf(bb, lerpf(pa[i0], pa[i1], u) * H * 0.47, k)
+			first = false
+		for b in acc: skel.set_bone_pose_rotation(b, acc[b])
+		bob = bb
 
 	## Where a bone is now, in skeleton space, from the poses set this frame (not the engine's cached ones).
 	func pose_global(b: int) -> Transform3D:
@@ -189,14 +239,21 @@ class Avatar:
 		skel.set_bone_pose_rotation(b, (pb.inverse() * nb).get_rotation_quaternion())
 
 	## Arms up holding a gun straight ahead; with two hands the left one comes across to steady it.
-	func aim(two: bool, k := 1.0) -> void:
+	func aim(two: bool, k := 1.0, up := 0.0) -> void:
 		if skel == null or k <= 0.01: return
-		var ahead := (fwd - down * 0.04).normalized()
+		var ahead := (fwd * cos(up) - down * sin(up) - down * 0.04).normalized()
+		_turn_spine(up * 0.4 * k)
 		_point(bones.get("R UpperArm", -1), bones.get("R Forearm", -1), (down * (1.0 - k) + ahead * k + lat * -0.08).normalized())
 		_point(bones.get("R Forearm", -1), bones.get("R Hand", -1), (down * (1.0 - k) + ahead * k).normalized())
 		if two:
 			_point(bones.get("L UpperArm", -1), bones.get("L Forearm", -1), (down * (1.0 - k) * 0.6 + (fwd * 0.75 - lat * 0.35) * k).normalized())
 			_point(bones.get("L Forearm", -1), bones.get("L Hand", -1), (down * (1.0 - k) * 0.4 + (fwd * 0.85 - lat * 0.45) * k).normalized())
+
+	func _turn_spine(ang: float) -> void:   # bend the chest back / forward with the aim
+		var sp: int = bones.get("Spine1", -1)
+		if sp < 0 or absf(ang) < 0.001: return
+		var la: Vector3 = (_g_rest_basis(sp).inverse() * lat).normalized()
+		skel.set_bone_pose_rotation(sp, skel.get_bone_pose_rotation(sp) * Quaternion(la, -ang))
 
 	func cname(kind: String) -> String:   # the clip for this person's sex, or the other's when there is none
 		var n := sex + "_" + kind
@@ -419,6 +476,7 @@ class Ped:
 	var act := ""            # standing still for a while: phone, look, wait, talk, angry
 	var act_t := 0.0
 	var umb := false         # carries an umbrella in the rain
+	var hit_dir := Vector2.ZERO   # where the shot that felled them came from
 	var night_home := false  # goes home after dark
 	var av: Avatar
 

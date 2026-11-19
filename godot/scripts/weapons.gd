@@ -22,6 +22,14 @@ var hp := 100.0
 var armor := 0.0
 var endless := false          # a code: no reloading, no running out
 var holding := false
+var aiming := false           # right mouse button held: over the shoulder, a cross in the middle, the mouse aims
+var pitch := 0.0              # aim up / down while aiming (radians)
+var bloom := 0.0              # spread that grows as you keep firing and settles when you stop
+var kick := 0.0               # the muzzle climbing after each shot
+var cross: Control
+var holes: Array = []         # bullet marks on walls
+var hk := 0
+var shells: GPUParticles3D
 var gun_nodes := {}
 var flash: OmniLight3D
 var flash_q: MeshInstance3D
@@ -47,6 +55,18 @@ func setup(main) -> void:
 	for id in ORDER:
 		var p := AudioStreamPlayer.new(); p.stream = _bang(GUNS[id].pitch, id == "shotgun"); p.max_polyphony = 6; p.volume_db = -3; add_child(p); shot_snd[id] = p
 	var cp := AudioStreamPlayer3D.new(); cp.stream = _bang(1.0, false); cp.max_polyphony = 4; cp.unit_size = 12; add_child(cp); shot_snd["cop"] = cp
+	for k in 24:   # bullet holes: small dark marks projected onto whatever they hit
+		var d := Decal.new(); d.size = Vector3(0.14, 0.3, 0.14); d.texture_albedo = _hole_tex(); d.visible = false; d.cull_mask = 1
+		add_child(d); holes.append(d)
+	shells = GPUParticles3D.new(); shells.amount = 24; shells.lifetime = 1.0; shells.local_coords = false; shells.emitting = false
+	var sp := ParticleProcessMaterial.new(); sp.direction = Vector3(0, 1, 0); sp.spread = 25; sp.initial_velocity_min = 1.5; sp.initial_velocity_max = 2.4
+	sp.gravity = Vector3(0, -9.8, 0); sp.angular_velocity_min = -720; sp.angular_velocity_max = 720
+	shells.process_material = sp
+	var sb := BoxMesh.new(); sb.size = Vector3(0.012, 0.012, 0.03)
+	var bm := StandardMaterial3D.new(); bm.albedo_color = Color(0.85, 0.65, 0.25); bm.metallic = 1.0; bm.roughness = 0.25; sb.material = bm
+	shells.draw_pass_1 = sb; shells.visibility_aabb = AABB(Vector3(-3, -3, -3), Vector3(6, 6, 6)); add_child(shells)
+	cross = Control.new(); cross.set_anchors_preset(Control.PRESET_FULL_RECT); cross.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cross.draw.connect(_draw_cross); cross.visible = false; m.hud_layer.add_child(cross)
 	var have: Dictionary = m.missions.prog.get("weapons", {})
 	if have.size(): cur = ORDER.filter(func(g): return have.has(g))[0]
 
@@ -61,6 +81,25 @@ func _bang(pitch: float, heavy: bool) -> AudioStreamWAV:
 		buf.encode_s16(i * 2, int(clampf(v, -1, 1) * 30000))
 	var w := AudioStreamWAV.new(); w.format = AudioStreamWAV.FORMAT_16_BITS; w.mix_rate = rate; w.data = buf
 	return w
+
+var _hole: ImageTexture
+func _hole_tex() -> ImageTexture:
+	if _hole: return _hole
+	var img := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	for y in 32:
+		for x in 32:
+			var d := Vector2(x - 15.5, y - 15.5).length() / 16.0
+			img.set_pixel(x, y, Color(0.03, 0.03, 0.03, clampf(1.0 - d * 1.6, 0, 1) * 0.9 + (0.25 if d < 1.0 and d > 0.55 and (x * 7 + y * 3) % 5 == 0 else 0.0)))
+	_hole = ImageTexture.create_from_image(img)
+	return _hole
+
+func _draw_cross() -> void:   # four ticks that open up with the spread
+	var c := cross.size / 2.0; var g: float = (GUNS[cur].spread if cur != "" else 0.02) + bloom
+	var gap := 6.0 + g * 260.0
+	for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
+		cross.draw_line(c + d * gap, c + d * (gap + 9), Color(0, 0, 0, 0.6), 4.0)
+		cross.draw_line(c + d * gap, c + d * (gap + 9), Color(1, 1, 1, 0.95), 2.0)
+	cross.draw_circle(c, 1.6, Color(1, 1, 1, 0.9))
 
 func owned() -> Dictionary:
 	if not m.missions.prog.has("weapons") or typeof(m.missions.prog.weapons) != TYPE_DICTIONARY: m.missions.prog.weapons = {}
@@ -88,6 +127,15 @@ func input(e: InputEvent) -> bool:
 	if e is InputEventMouseButton and e.pressed and m.pcar == null:
 		if e.button_index == MOUSE_BUTTON_WHEEL_UP: next_gun(1); return true
 		if e.button_index == MOUSE_BUTTON_WHEEL_DOWN: next_gun(-1); return true
+	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_RIGHT:
+		aiming = e.pressed and can_shoot()
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if aiming else Input.MOUSE_MODE_VISIBLE
+		if not aiming: pitch = 0.0
+		return can_shoot()
+	if e is InputEventMouseMotion and aiming:
+		m.me.a += e.relative.x * 0.0035; m.cam_a = m.me.a
+		pitch = clampf(pitch - e.relative.y * 0.0028, -0.5, 0.6)
+		return true
 	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
 		holding = e.pressed
 		if e.pressed and can_shoot() and not GUNS[cur].auto: _try_shot()
@@ -126,14 +174,26 @@ func _fire(g: Dictionary) -> void:
 	for c: Car in m.cars:
 		var d := Vector2(c.x, c.y) - me; var L := d.length()
 		if L < bd and L > 2 and absf(wrapf(d.angle() - fa, -PI, PI)) < cone * 0.8: bd = L; best = Vector2(c.x, c.y)
+	if aiming:   # aiming yourself: only a light pull, and only to something right under the cross
+		best = null; bd = g.range
+		for p in m.peds:
+			if p.down > 0: continue
+			var d := Vector2(p.x, p.y) - me
+			if d.length() < bd and absf(wrapf(d.angle() - fa, -PI, PI)) < 0.035: bd = d.length(); best = Vector2(p.x, p.y)
 	var base_a: float = (best - me).angle() if best != null else fa
 	var muzzle := _muzzle()
 	for k in int(g.pellets):
-		var a: float = base_a + randf_range(-g.spread, g.spread)
+		var sprd: float = (g.spread + bloom) * (0.55 if aiming else 1.0) * (1.6 if absf(m.me.spd) > 30 else 1.0)
+		var a: float = base_a + randf_range(-sprd, sprd)
 		_ray(me, Vector2.from_angle(a), g, muzzle)
 	flash.global_position = muzzle; flash.light_energy = 6.0; flash_q.global_position = muzzle; flash_q.visible = true
 	(shot_snd[cur] as AudioStreamPlayer).volume_db = linear_to_db(maxf(0.0001, 0.8 * m.snd.master)); (shot_snd[cur] as AudioStreamPlayer).play()
-	m.shake = maxf(m.shake, 0.08 if not g.two else 0.15)
+	m.shake = maxf(m.shake, 0.05 if not g.two else 0.1)
+	bloom = minf(0.12, bloom + g.spread * 0.6 + (0.02 if g.pellets > 1 else 0.0))
+	kick += 0.02 + (0.05 if g.pellets > 1 else 0.0) + (0.02 if g.two else 0.0)
+	var mz := muzzle; shells.global_position = mz - Vector3(cos(m.me.a), 0, sin(m.me.a)) * 0.15
+	(shells.process_material as ParticleProcessMaterial).direction = Vector3(-sin(m.me.a), 1.2, cos(m.me.a)).normalized()
+	shells.amount_ratio = 1.0; shells.emit_particle(shells.global_transform, Vector3(-sin(m.me.a), 1.2, cos(m.me.a)) * 2.0, Color.WHITE, Color.WHITE, GPUParticles3D.EMIT_FLAG_POSITION | GPUParticles3D.EMIT_FLAG_VELOCITY)
 	m.add_heat(0.35 if m.heat < 1 else 0.12)   # gunfire is heard
 	for p in m.peds:
 		if absf(p.x - me.x) < 260 and absf(p.y - me.y) < 260: People.panic(p, me)
@@ -145,22 +205,28 @@ func _muzzle() -> Vector3:
 
 ## Steps along the line of fire (game units) until it meets a person, a car or a wall.
 func _ray(from: Vector2, dir: Vector2, g: Dictionary, muzzle: Vector3) -> void:
-	var t := 4.0; var hit := Vector2.INF; var hy := 1.3
+	var t := 4.0; var hit := Vector2.INF; var hy := 1.3; var wall := false
 	while t < g.range:
 		var p := from + dir * t
 		for q in m.peds:
-			if q.down <= 0 and absf(q.x - p.x) < 5 and absf(q.y - p.y) < 5:
-				q.down = 9.0; m.add_heat(1.0); hit = p; hy = 1.0; break
+			if q.down <= 0 and absf(q.x - p.x) < 5 and absf(q.y - p.y) < 5:   # knocked back the way the shot went
+				q.down = 9.0; q.act = ""; q.a = (-dir).angle(); q.x += dir.x * 7; q.y += dir.y * 7; q.hit_dir = dir
+				m.add_heat(1.0); hit = p; hy = 1.0; break
 		if hit != Vector2.INF: break
 		for c: Car in m.cars:
 			if absf(c.x - p.x) < 22 and absf(c.y - p.y) < 22:
 				var lp := (p - Vector2(c.x, c.y)).rotated(-c.a)
 				if absf(lp.x) < Car.HX and absf(lp.y) < Car.HY: _car_hit(c, p, g.dmg); hit = p; hy = 0.9; break
 		if hit != Vector2.INF: break
-		if m.city.push_out(p, 0.5) != p: hit = p; break
+		if m.city.push_out(p, 0.5) != p: hit = p; wall = true; break
 		t += 6.0
 	if hit == Vector2.INF: hit = from + dir * g.range
 	var end := Vector3(hit.x * m.S, m.city.ground_y(hit.x, hit.y) * m.S + hy, hit.y * m.S)
+	if wall: end.y = clampf(muzzle.y + tan(pitch + kick * 0.5) * muzzle.distance_to(end), 0.05, 30.0)
+	if wall:   # a mark on the wall where it hit
+		var d: Decal = holes[hk]; hk = (hk + 1) % holes.size()
+		var n := -Vector3(dir.x, 0, dir.y)
+		var bx := n.cross(Vector3.UP).normalized(); d.global_transform = Transform3D(Basis(bx, n, bx.cross(n)), end); d.visible = true
 	_tracer(muzzle, end)
 	m.fx.spark(hit, 0.15)
 
@@ -218,6 +284,10 @@ func _down() -> void:   # wake up at the hospital by the square: a bill, no star
 
 func tick(dt: float) -> void:
 	cd -= dt; aim_t += dt; _cops(dt)
+	bloom = maxf(0.0, bloom - dt * 0.12); kick = maxf(0.0, kick - dt * 0.5)
+	if aiming and not can_shoot(): aiming = false; Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	cross.visible = aiming
+	if aiming: cross.queue_redraw()
 	if reload_t > 0:
 		reload_t -= dt
 		if reload_t <= 0 and cur != "":
@@ -235,19 +305,19 @@ func tick(dt: float) -> void:
 func pose(dt: float) -> void:
 	for id in gun_nodes: (gun_nodes[id] as Node3D).visible = false
 	var on_foot: bool = m.pcar == null and m.interior.inside == "" and cur != ""
-	var want := 1.0 if on_foot and (aim_t < 1.6 or holding) else 0.0
+	var want := 1.0 if on_foot and (aim_t < 1.6 or holding or aiming) else 0.0
 	aim_k += (want - aim_k) * minf(1, dt * 10)
 	if not on_foot: return
 	var av = m.me_av
 	if av.skel == null: return
 	var g: Dictionary = GUNS[cur]
-	av.aim(g.two, aim_k)
+	av.aim(g.two, aim_k, pitch + kick * 0.6)
 	var hb: int = av.bones.get("R Hand", -1)
 	if hb < 0: return
 	var hand: Vector3 = av.skel.global_transform * av.pose_global(hb).origin
 	var n: Node3D = gun_nodes[cur]; n.visible = true
 	var face := Basis(Vector3.UP, -m.me.a)
-	var down := Basis(Vector3.FORWARD, 1.2 * (1.0 - aim_k))   # pointing at the ground when lowered
+	var down := Basis(Vector3.FORWARD, 1.2 * (1.0 - aim_k) - (pitch + kick * 0.6) * aim_k)   # pointing at the ground when lowered
 	n.global_transform = Transform3D(face * down, hand + Vector3(0, 0.03, 0))
 
 func hud_text() -> String:
