@@ -27,7 +27,7 @@ func setup(main, layer: CanvasLayer) -> void:
 	_slider(v, "Ղեկի զգայունություն", "steer", 0.5, 1.5)
 	_check(v, "Ամբողջ էկրան", "fullscreen"); _check(v, "V-Sync", "vsync"); _check(v, "Ցույց տալ FPS", "fps")
 	var keys := Label.new(); keys.add_theme_font_size_override("font_size", 15); keys.add_theme_color_override("font_color", Color("a9a59c"))
-	keys.text = "Կառավարում՝ W/S գազ-արգելակ · A/D ղեկ · Space ձեռքի արգելակ · E նստել/իջնել · M քարտեզ\nR վթարի կրկնություն · P ֆոտոռեժիմ · Esc այս մենյուն"
+	keys.text = "Կառավարում՝ W/S գազ-արգելակ · A/D ղեկ · Space ձեռքի արգելակ · E նստել/իջնել · M քարտեզ\nR վթարի կրկնություն · P ֆոտոռեժիմ · Esc այս մենյուն\nԳաղտնի կոդեր (պարզապես տպիր)՝ VOSKI փող ու նորոգում · DILIJAN առանց ոստիկանի · KAYTSAK +2 աստղ · HANGIST աստղերը մաքրել · GAGAT 5 աստղ"
 	v.add_child(keys)
 	var close := Button.new(); close.text = "Շարունակել (Esc)"; close.pressed.connect(toggle); v.add_child(close)
 	layer.add_child(self)

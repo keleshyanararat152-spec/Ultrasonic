@@ -57,6 +57,7 @@ var square
 var neon
 var cine
 var settings
+var cheats
 var steer_k := 1.0
 var hud_layer: CanvasLayer
 var photo_layer: CanvasLayer
@@ -108,6 +109,7 @@ func _ready() -> void:
 	interior = preload("res://scripts/interior.gd").new(); interior.m = self; add_child(interior); interior.build_house()
 	_hud()
 	settings = preload("res://scripts/settings.gd").new(); settings.setup(self, photo_layer)
+	cheats = preload("res://scripts/cheats.gd").new(); add_child(cheats); cheats.setup(self)
 	interior.start()
 	toast(missions.start_text(), 4)
 
@@ -554,6 +556,7 @@ func _physics_process(dt: float) -> void:
 			cops += 1
 			if cops > 2 and Vector2(c.x, c.y).distance_to(tgt) > 900: c.node.queue_free(); cars.remove_at(k)
 	missions.tick(dt)
+	cheats.tick()
 	cine.record()
 
 func _busted() -> void:
@@ -737,6 +740,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		settings.toggle(); return
 	if cine.input(e): return
 	if cine.photo or cine.active: return
+	if e is InputEventKey and e.pressed and not e.echo and cheats.key(e): return
 	if e is InputEventKey and e.pressed and not e.echo and (e.keycode == KEY_E or e.keycode == KEY_F): act()
 	if e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_SPACE and interior.on_floor(): interior.dance_hit()
 
@@ -768,10 +772,12 @@ func _test_tick() -> void:
 			if a == "--jobtest": _test.jobs = true
 			if a == "--shoptest": _test.shop = true
 			if a == "--cinetest": _test.cine = true
+			if a == "--cheattest": _test.cheat = true
 	if _test.get("story", false): _story_test(); return
 	if _test.get("jobs", false): _job_test(); return
 	if _test.get("shop", false): _shop_test(); return
 	if _test.get("cine", false): _cine_test(); return
+	if _test.get("cheat", false): _cheat_test(); return
 	if not _test.on: return
 	touch_ui.touched = true
 	_frame += 1
@@ -905,3 +911,16 @@ func _cine_test() -> void:   # a crash, its replay, then photo mode and back
 	if _frame == 100: print("CINE replay still ", cine.active, " at ", int(cine.pos)); cine.stop_replay(); print("CINE back ", pcar.x)
 	if _frame == 102: cine.toggle_photo(); print("CINE photo ", cine.photo, " hud ", hud_layer.visible)
 	if _frame == 104: cine.toggle_photo(); print("CINE photo off ", cine.photo, " hud ", hud_layer.visible); get_tree().quit()
+
+func _cheat_test() -> void:   # types each code as key presses and prints what changed
+	_frame += 1
+	var type := func(w: String):
+		for ch in w:
+			var e := InputEventKey.new(); e.keycode = OS.find_keycode_from_string(ch); e.pressed = true; cheats.key(e)
+	if _frame == 2: me.x = cars[0].x - 20; me.y = cars[0].y - 40; act(); pcar.dmg = 7; missions.cash = 0
+	if _frame == 4: type.call("XVOSKI"); print("CHEAT ararat cash ", missions.cash, " dmg ", pcar.dmg)
+	if _frame == 6: type.call("KAYTSAK"); print("CHEAT krak heat ", heat)
+	if _frame == 8: type.call("HANGIST"); print("CHEAT hangist heat ", heat)
+	if _frame == 10: type.call("GAGAT"); print("CHEAT aragats heat ", heat)
+	if _frame == 12: type.call("DILIJAN"); add_heat(3)
+	if _frame == 14: print("CHEAT sevan heat ", heat, " on ", cheats.no_wanted); get_tree().quit()
