@@ -50,6 +50,7 @@ var sig_t := -9.0
 var missions
 var ui
 var interior
+var weather
 
 func _ready() -> void:
 	randomize()
@@ -58,6 +59,7 @@ func _ready() -> void:
 	add_child(city)
 	city.generate(); city.keep_out = [preload("res://scripts/interior.gd").house_spot(city).rect]
 	city.build()
+	weather = preload("res://scripts/weather.gd").new(); add_child(weather)
 	_build_signals()
 	for name in MODELS: scenes[name] = load("res://assets/cars/%s.glb" % name)
 	for name in People.AVATARS: people_scenes.append(load("res://assets/people/%s.glb" % name))
@@ -86,6 +88,7 @@ func _ready() -> void:
 	me_av = People.Avatar.new(people_scenes[0]); add_child(me_av.root)
 	cam = Camera3D.new(); cam.fov = 62; cam.near = 0.2; cam.far = 1400 if hi else 600
 	add_child(cam)
+	weather.setup(self)
 	missions = preload("res://scripts/missions.gd").new(); add_child(missions); missions.setup(self)
 	interior = preload("res://scripts/interior.gd").new(); interior.m = self; add_child(interior); interior.build_house()
 	_hud()
@@ -199,6 +202,7 @@ func _day_night(dt: float) -> void:
 			var c: Car = others[k]; var f := Vector3(cos(c.a), 0, sin(c.a))
 			sl.light_energy = night * 2.5; sl.position = Vector3(c.x, city.ground_y(c.x, c.y) + 7, c.y) * S + f * 2.2
 			sl.look_at(sl.position + f * 10 + Vector3(0, -1.2, 0))
+	weather.apply(night)
 	if pcar:
 		var f := Vector3(cos(pcar.a), 0, sin(pcar.a)); var gy: float = city.ground_y(pcar.x, pcar.y)
 		head_light.position = Vector3(pcar.x, gy + 8, pcar.y) * S + f * 2.2
@@ -527,6 +531,7 @@ func _crash(impact: float) -> void:
 
 func _process(dt: float) -> void:
 	_day_night(dt)
+	weather.tick(dt)
 	_paint_signals()
 	var flash := int(time * 6) % 2 == 0
 	for c: Car in cars:
@@ -673,6 +678,7 @@ func _test_tick() -> void:
 			if a == "--drive": _test.drive = true
 			if a.begins_with("--hour="): day_t = fmod((float(a.substr(7)) - 6) / 24.0 + 1, 1)
 			if a == "--heat": heat = 3
+			if a.begins_with("--weather="): weather.auto = false; weather.set_kind(a.substr(10), true)
 			if a == "--talk": _test.talk = true
 			if a == "--map": _test.map = true
 			if a == "--club": _test.club = true

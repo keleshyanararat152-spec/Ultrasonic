@@ -11,6 +11,7 @@ uniform vec3 cloud_col = vec3(1.0);
 uniform float cover = 0.32;
 uniform float night = 0.0;
 uniform float t = 0.0;
+uniform float overcast = 0.0;   // grey rain clouds (weather.gd)
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -41,5 +42,7 @@ void sky() {
 		vec3 lit = cloud_col * (0.85 + 0.3 * pow(sd, 4.0)) * mix(1.0, 0.75, smoothstep(0.55, 0.9, n));
 		col = mix(col, lit, c * 0.8);
 	}
+	float lum = dot(col, vec3(0.3, 0.55, 0.15));
+	col = mix(col, vec3(lum) * vec3(0.92, 0.95, 1.0) * 0.8, overcast * 0.75);
 	COLOR = col;
 }

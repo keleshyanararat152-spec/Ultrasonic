@@ -151,6 +151,19 @@ func _ph_mat(name: String, size: float, tint := Color.WHITE, nscale := 1.0) -> S
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m
 
+var _pnoise: NoiseTexture2D
+## The same Poly Haven set as _ph_mat, but a shader that gets wet in the rain (shaders/wet_ground.gdshader).
+func _wet_mat(name: String, size: float, tint := Color.WHITE, nscale := 1.0, keeps := 1.0) -> ShaderMaterial:
+	if _pnoise == null:
+		var fn := FastNoiseLite.new(); fn.seed = 11; fn.frequency = 0.02; fn.fractal_octaves = 3
+		_pnoise = NoiseTexture2D.new(); _pnoise.width = 512; _pnoise.height = 512; _pnoise.seamless = true; _pnoise.noise = fn
+	var m := ShaderMaterial.new(); m.shader = load("res://shaders/wet_ground.gdshader"); var base := "res://assets/tex/ph/" + name
+	m.set_shader_parameter("diff", load(base + "_diff.jpg")); m.set_shader_parameter("nor", load(base + "_nor.jpg"))
+	m.set_shader_parameter("rough", load(base + "_rough.jpg")); m.set_shader_parameter("pnoise", _pnoise)
+	m.set_shader_parameter("tint", tint); m.set_shader_parameter("size", size); m.set_shader_parameter("nscale", nscale)
+	m.set_shader_parameter("keeps_water", keeps)
+	return m
+
 func _plain(c: Color, rough := 0.9) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new(); m.albedo_color = c; m.roughness = rough; return m
 
@@ -182,7 +195,7 @@ func build() -> void:
 	var ground := MeshInstance3D.new()
 	var pm := PlaneMesh.new(); pm.size = Vector2(WS, WS) * S
 	ground.mesh = pm
-	ground.material_override = _ph_mat("asphalt_02", 4.0, Color(0.92, 0.92, 0.95))
+	ground.material_override = _wet_mat("asphalt_02", 4.0, Color(0.92, 0.92, 0.95))
 	ground.position = Vector3(WS / 2.0, 0, WS / 2.0) * S
 	add_child(ground)
 	var far := MeshInstance3D.new()   # hills beyond the edge
@@ -221,9 +234,9 @@ func build() -> void:
 				wall_cols[n % 2].append(tuff); ledge_cols.append(tuff.lerp(Color.WHITE, 0.45))
 				roofs.append(_box_xf(r.x + r.w / 2.0, h + 0.4, r.y + r.h / 2.0, r.w - 2, 1, r.h - 2))
 				ledges.append(_box_xf(r.x + r.w / 2.0, h + 1.6, r.y + r.h / 2.0, r.w + 4.4, 4.2, r.h + 4.4))
-	var paving := _ph_mat("hexagonal_concrete_paving", 2.4, Color(0.86, 0.83, 0.82))
+	var paving := _wet_mat("hexagonal_concrete_paving", 2.4, Color(0.86, 0.83, 0.82), 1.0, 0.6)
 	_multi(unit, paving, slabs, false)
-	_multi(unit, _ph_mat("pavement_02", 3.5), plaza, false)
+	_multi(unit, _wet_mat("pavement_02", 3.5, Color.WHITE, 1.0, 0.8), plaza, false)
 	_multi(unit, _plain(Color("6c9659")), parks, false)
 	var fac_uv := Vector3(1.0 / (WIDE * S), 1.0 / (FULL * S), 1.0 / (WIDE * S))
 	for q in 2:

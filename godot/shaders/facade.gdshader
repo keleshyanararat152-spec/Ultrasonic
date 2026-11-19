@@ -15,6 +15,7 @@ uniform float stone2_size = 3.0;
 uniform float ground = 0.26;     // pavement height: grime gathers above it               // one stone image, in Godot units
 uniform bool srgb_tint = true;
 uniform bool windows = true;   // false: the walls are all stone; real windows are set on them
+global uniform float wetness;
 varying vec3 wpos;
 varying vec3 wnrm;
 
@@ -56,4 +57,8 @@ void fragment() {
 	vec3 sn = second ? texture(stone2_n, suv2).rgb : texture(stone_n, suv).rgb;
 	NORMAL_MAP = mix(vec3(0.5, 0.5, 1.0), sn, wall);
 	NORMAL_MAP_DEPTH = 1.3;
+	// rain: wet stone is darker and a little glossy, more so low down where the splashes reach
+	float wetk = wetness * wall * (0.55 + 0.45 * (1.0 - smoothstep(0.0, 4.0, wpos.y - ground)));
+	ALBEDO *= 1.0 - 0.38 * wetk;
+	ROUGHNESS = mix(ROUGHNESS, ROUGHNESS * 0.45, wetk);
 }
