@@ -191,6 +191,7 @@ func _build_club() -> void:
 	for c in [["f05", 0.0], ["m06", 1.15], ["f13", 2.3], ["m17", 3.45]]: troupe.append(_person(c[0], VX + 62, VY, 0, v))
 	var gl := OmniLight3D.new(); gl.light_color = Color("ffb67f"); gl.omni_range = 24; gl.light_energy = 1.4; gl.position = Vector3(VX + 58, 58, VY) * S; v.add_child(gl)
 	var gl2 := OmniLight3D.new(); gl2.light_color = Color("d1a1eb"); gl2.omni_range = 26; gl2.light_energy = 0.8; gl2.position = Vector3(VX - 40, 50, VY) * S; v.add_child(gl2)
+	if m.hi: _club_lights(g, v)
 	_make_music()
 
 ## A house loop in A minor, made once: kick, clap, hats, a bass line, an arpeggio and a chord on each bar.
@@ -271,6 +272,55 @@ func _build_home() -> void:
 		var l := OmniLight3D.new(); l.light_color = Color("ffe0b0"); l.omni_range = 34; l.light_energy = 1.3; l.position = Vector3(HX + p[0], 62, HY + p[1]) * S; g.add_child(l)
 		_box(10, 2, 10, _mat(Color("fff3d6"), true), HX + p[0], 66, HY + p[1], g, false)
 	_ring(HX - 136, HY, Color("58d68d"), g); _ring(HX + 40, HY - 64, Color("4d8dff"), g); _ring(HX - 90, HY - 86, Color("b48cff"), g); _ring(HX - 116, HY + 78, Color("ffcf4a"), g)
+	if m.hi: _home_lights(g)
+
+# ------------------------------------------------------------------- lighting (computers) ----------
+## Forward+ lights fall off like real ones, so the rooms need more of them: stronger lamps with soft shadows,
+## light from the windows by day, a warm glow in the corners; in the club, moving spotlights cut through the haze.
+var spots := []          # club moving heads: [SpotLight3D, phase]
+var day_lights := []     # the flat's window light, on by day
+var home_lamps := []
+
+func _boost(g: Node) -> void:
+	for c in g.get_children():
+		if c is OmniLight3D:
+			var l := c as OmniLight3D; l.light_energy *= 2.4; l.omni_range *= 1.35; l.omni_attenuation = 0.8
+		_boost(c)
+
+func _club_lights(g: Node3D, v: Node3D) -> void:
+	_boost(g); _boost(v)
+	for n in 6:   # moving heads on the ceiling truss
+		var sl := SpotLight3D.new(); sl.light_color = [Color("ff4fa3"), Color("35d6e6"), Color("ffcf4a"), Color("8f6bff"), Color("58d68d"), Color("ff7a3a")][n]
+		sl.spot_range = 22; sl.spot_angle = 11; sl.light_energy = 9; sl.light_volumetric_fog_energy = 3.0; sl.shadow_enabled = n < 2
+		sl.position = Vector3(CX - 90 + n * 34, 66, CY + (30 if n % 2 else -30)) * S; g.add_child(sl); spots.append([sl, n * 1.3])
+	for p in [[-100, -60], [-100, 60], [20, -60], [20, 60]]:   # soft fill from above so faces and the floor read
+		var f := OmniLight3D.new(); f.light_color = Color("b48cff"); f.omni_range = 16; f.light_energy = 0.9; f.omni_attenuation = 0.7
+		f.position = Vector3(CX + p[0], 55, CY + p[1]) * S; g.add_child(f)
+	var bar := OmniLight3D.new(); bar.light_color = Color("ffcf8f"); bar.omni_range = 10; bar.light_energy = 2.5; bar.shadow_enabled = true
+	bar.position = Vector3(CX - 30, 40, CY - 108) * S; g.add_child(bar)
+	for p in [[62, 0], [-45, 60], [-45, -60]]:
+		var f := OmniLight3D.new(); f.light_color = Color("ffc48a"); f.omni_range = 15; f.light_energy = 1.6; f.omni_attenuation = 0.8
+		f.position = Vector3(VX + p[0], 52, VY + p[1]) * S; v.add_child(f)
+
+func _home_lights(g: Node3D) -> void:
+	_boost(g)
+	for c in g.get_children(): if c is OmniLight3D: home_lamps.append(c); (c as OmniLight3D).shadow_enabled = true
+	for p in [[-60, -100], [60, -100], [140, -40]]:   # daylight in through the windows
+		var l := OmniLight3D.new(); l.light_color = Color("dce8ff"); l.omni_range = 22; l.omni_attenuation = 0.7; l.light_energy = 0
+		l.position = Vector3(HX + p[0], 40, HY + p[1]) * S; g.add_child(l); day_lights.append(l)
+	var bed := OmniLight3D.new(); bed.light_color = Color("ffcf8f"); bed.omni_range = 7; bed.light_energy = 1.5
+	bed.position = Vector3(HX + 82, 26, HY - 108) * S; g.add_child(bed)
+	for p in [[-100, 60], [100, 80], [-100, -60]]:
+		var f := OmniLight3D.new(); f.light_color = Color("ffe6c8"); f.omni_range = 14; f.light_energy = 0.7; f.omni_attenuation = 0.8
+		f.position = Vector3(HX + p[0], 50, HY + p[1]) * S; g.add_child(f)
+
+func _light_tick() -> void:
+	for s in spots:
+		var sl: SpotLight3D = s[0]; var t: float = m.time * 0.6 + s[1]
+		sl.rotation = Vector3(-PI / 2 + sin(t * 1.3) * 0.55, t, cos(t * 0.9) * 0.45)
+	var day: float = 1.0 - m.night_k
+	for l: OmniLight3D in day_lights: l.light_energy = 2.2 * day
+	for l: OmniLight3D in home_lamps: l.light_energy = 1.6 + 2.4 * m.night_k
 
 # ------------------------------------------------------------------- rooms and rings ----------
 func rings() -> Array:   # the rings of the room you are in: [x, y, hint, short, callable]
@@ -413,7 +463,8 @@ func bounds() -> Rect2:
 func step(dt: float, inp: Dictionary) -> void:   # walking in a room, from main._physics_process
 	var mv: float = inp.move.y; var tn: float = inp.move.x
 	m.me.a += tn * 2.8 * dt
-	var spd: float = -mv * (150.0 if mv < 0 else 80.0)
+	var spd: float = -mv * (60.0 if mv < 0 else 25.0)
+	m.me.spd = spd
 	m.me.x += cos(m.me.a) * spd * dt; m.me.y += sin(m.me.a) * spd * dt
 	m.me.moving = absf(mv)
 	if absf(mv) > 0.05: m.me.walk += dt * 10 * absf(mv) * (1.0 if mv < 0 else -0.7)
@@ -433,17 +484,18 @@ func cam_fix(p: Vector2) -> Vector2:
 	return Vector2(clampf(p.x, room.position.x, room.end.x), clampf(p.y, room.position.y, room.end.y))
 
 func frame(dt: float) -> void:   # from main._process: dancers, lights, tiles
+	if inside != "" and m.hi: _light_tick()
 	if inside == "club" or inside == "vip":
 		var b := beat(); var kick := exp(-maxf(0, (b - floor(b)) * BEAT) * 7)
 		if inside == "club":
 			for n in tiles.instance_count:
 				var h := fmod((n * 31 + int(b) * 53) % 360 / 360.0, 1.0)
 				tiles.set_instance_color(n, Color.from_hsv(h, 0.75, 0.35 + 0.45 * kick + (0.12 if (n + int(b)) % 3 == 0 else 0.0)))
-			for d in dancers:
+			for d in dancers:   # motion-captured dancing, each their own of three
 				var av = d[0]; var tt: float = b + (0.5 if d[4] % 2 else 0.0)
-				var drop: float = av.dance(tt, d[4], 0.85)
-				av.root.position = Vector3(d[1] + sin(tt * PI) * 2.2, -drop / S, d[2] + sin(tt * PI / 2 + d[5]) * 2.5) * S
-				av.root.rotation.y = -d[3] + sin(tt * PI / 4 + d[5]) * 0.35
+				av.animate(dt, "dance%d" % (d[4] % 3 + 1), 1.0)
+				av.root.position = Vector3(d[1] + sin(tt * PI / 4) * 1.5, av.bob / S, d[2] + sin(tt * PI / 8 + d[5]) * 2.0) * S
+				av.root.rotation.y = -d[3] + sin(tt * PI / 8 + d[5]) * 0.5
 			for n in club_lights.size():
 				var l: OmniLight3D = club_lights[n]
 				l.position = Vector3(CX - 12 + cos(m.time * (0.5 + n * 0.2) + n * 2) * 80, 47, CY + sin(m.time * (0.7 + n * 0.14) + n) * 52) * S
@@ -453,13 +505,15 @@ func frame(dt: float) -> void:   # from main._process: dancers, lights, tiles
 				var av = p[0]
 				if p[1] == "dj": av.dance(b, 3, 0.5); av.root.position.y = 7 * S
 				elif p[1] == "tender":
-					av.walk(m.time * 3, 0.25); av.root.position.x = (p[2] + sin(m.time * 0.35) * 38) * S
+					var moving := absf(cos(m.time * 0.35)) > 0.25
+					av.animate(dt, "walk" if moving else "idle", absf(cos(m.time * 0.35)) * 0.38 * 38 * S / 1.35)
+					av.root.position.x = (p[2] + sin(m.time * 0.35) * 38) * S
 					av.root.rotation.y = -(PI if cos(m.time * 0.35) < 0 else 0.0)
 		else:
 			for n in troupe.size():   # a ring that opens and closes, a new move every four bars
 				var av = troupe[n]; var a := n * TAU / troupe.size() + b * 0.12; var rad := 19 + 5 * sin(b * 0.3927)
-				var drop: float = av.dance(b, int(b / 16) % 4, 0.9)
-				av.root.position = Vector3(VX + 62 + cos(a) * rad, 6.5 - drop / S, VY + sin(a) * rad) * S
+				av.animate(dt, "dance%d" % ((int(b / 32) + n) % 3 + 1), 1.0)
+				av.root.position = Vector3(VX + 62 + cos(a) * rad, 6.5 + av.bob / S, VY + sin(a) * rad) * S
 				av.root.rotation.y = PI + 0.25 * sin(b * 0.7854)
 			(built.table as Node3D).visible = m.missions.prog.vip_table
 

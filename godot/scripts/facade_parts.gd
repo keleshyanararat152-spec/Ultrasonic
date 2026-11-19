@@ -42,9 +42,11 @@ func build(city) -> void:
 	var wood := StandardMaterial3D.new(); wood.albedo_color = Color(0.32, 0.18, 0.1); wood.roughness = 0.45
 	var brass := StandardMaterial3D.new(); brass.albedo_color = Color(0.8, 0.62, 0.3); brass.roughness = 0.3; brass.metallic = 1.0
 	lamp_mat = StandardMaterial3D.new(); lamp_mat.albedo_color = Color(1.0, 0.9, 0.7); lamp_mat.emission_enabled = true; lamp_mat.emission = Color(1.0, 0.8, 0.5)
+	var arch := _mesh("res://assets/facade/arch.glb")
 	var door := _mesh("res://assets/facade/door.glb"); _dress(door, { "frame": frame, "wood": wood, "glass": glass_mat, "trim": trim, "brass": brass, "lamp": lamp_mat })
 	# carved stone: the cornice, bands between floors and corner pilasters in a paler tuff; a dark basalt plinth
 	var carved := _stone_mat(true); var basalt := _stone_mat(false); basalt.albedo_color = Color(0.3, 0.29, 0.3)
+	_dress(arch, { "stone": carved, "glass": glass_mat, "frame": shop_frame })
 	var unit := BoxMesh.new()
 	var rng := RandomNumberGenerator.new(); rng.seed = 90210
 	var gy: float = city.CURB * S
@@ -52,14 +54,14 @@ func build(city) -> void:
 		for j in city.N:
 			var b: Dictionary = city.blocks[i][j]
 			if b.type != "b": continue
-			var wins := []; var bals := []; var shops := []; var shop_cols := []; var doors := []
+			var wins := []; var bals := []; var shops := []; var shop_cols := []; var doors := []; var arches := []; var arch_cols := []
 			var bands := []; var band_cols := []; var plinths := []
 			var bx0: float = (i * city.CELL + 142) * S; var bz0: float = (j * city.CELL + 142) * S; var bx1 := bx0 + 35.6; var bz1 := bz0 + 35.6
 			for r in b.rects:
-				var f: float = [1.0, 0.77, 0.62, 0.85][int(r.z) % 4]
-				var H: float = city.FULL * f * S
+				var H: float = city.bheight(r) * S
 				var x0: float = r.x * S; var z0: float = r.y * S; var w: float = r.w * S; var d: float = r.h * S
 				var balc := rng.randf() < 0.6; var awn: Color = AWNINGS[rng.randi() % AWNINGS.size()]
+				var arcade: bool = r.get("court", false) or rng.randf() < 0.28   # some buildings stand on stone arches
 				var pale := Color(r.c).lerp(Color.WHITE, 0.62); var has_door := false
 				var cx := x0 + w / 2; var cz := z0 + d / 2
 				plinths.append(_xf(cx, gy + 0.22, cz, w + 0.24, 0.44, d + 0.24))
@@ -85,6 +87,8 @@ func build(city) -> void:
 						var p := p0 + along * (start + c * COL)
 						if street and not has_door and c == n / 2:   # the way in: one door per building
 							has_door = true; doors.append(Transform3D(basis, p + Vector3(0, gy + 1.61, 0) + nrm * 0.01))
+						elif street and arcade:   # a round stone arch
+							arches.append(Transform3D(basis, p + Vector3(0, gy + 1.75, 0) + nrm * 0.01)); arch_cols.append(pale)
 						elif street:   # a shop front on the ground floor
 							shops.append(Transform3D(basis, p + Vector3(0, gy + 1.75, 0) + nrm * 0.01)); shop_cols.append(awn)
 						var k := 1
@@ -100,6 +104,7 @@ func build(city) -> void:
 			_multi(city, bal, bals, true, null)
 			_multi(city, shop, shops, false, rng, shop_cols)
 			_multi(city, door, doors, true, rng)
+			_multi(city, arch, arches, true, null, arch_cols)
 			_multi(city, unit, bands, true, null, band_cols, carved)
 			_multi(city, unit, plinths, true, null, [], basalt)
 

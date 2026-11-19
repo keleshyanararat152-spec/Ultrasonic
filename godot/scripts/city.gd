@@ -58,8 +58,44 @@ func generate() -> void:
 					var sx := srand() * 18; var sy := srand() * 18; var ex := srand() * 18; var ey := srand() * 18
 					var tc: String = TUFF[int(srand() * TUFF.size())]
 					b.rects.append({ "x": ox + c[0] + sx, "y": oy + c[1] + sy, "w": c[2] - sx - ex, "h": c[3] - sy - ey, "c": tc, "z": 7 + srand() * 10, "d": srand() })
+				if cells.size() == 1 and b.rects[0].d > 0.3: b.rects = _courtyard(b.rects[0])
 			col.append(b)
 		blocks.append(col)
+
+## A big building round a courtyard: four wings, the east one with a gateway through it (no new random numbers,
+## so the rest of the city comes out the same).
+func _courtyard(r: Dictionary) -> Array:
+	var wd := 105.0; var gap := 46.0
+	var mid: float = (r.h - 2 * wd - gap) / 2
+	var out := []
+	for q in [[r.x, r.y, r.w, wd], [r.x, r.y + r.h - wd, r.w, wd], [r.x, r.y + wd, wd, r.h - 2 * wd],
+			[r.x + r.w - wd, r.y + wd, wd, mid], [r.x + r.w - wd, r.y + wd + mid + gap, wd, mid]]:
+		var e := r.duplicate(); e.x = q[0]; e.y = q[1]; e.w = q[2]; e.h = q[3]; e.court = true; out.append(e)
+	return out
+
+var courts: Array = []   # courtyard middles, game units
+
+## A roof terrace: railings round the edge; tall buildings get a glass penthouse set back from it.
+func _roof_extras(r: Dictionary, h: float, rails: Array, pent: Array) -> void:
+	var top := h + 3.7
+	if h > FULL * 0.84:
+		var inset := 40.0; var ph := 30.0
+		pent.append(_box_xf(r.x + r.w / 2.0, top + ph / 2.0, r.y + r.h / 2.0, r.w - inset * 2, ph, r.h - inset * 2))
+		pent.append(_box_xf(r.x + r.w / 2.0, top + ph + 1.0, r.y + r.h / 2.0, r.w - inset * 2 + 6, 2, r.h - inset * 2 + 6))
+	elif h > FULL * 0.6: return
+	for e in [[r.x, r.y, r.x + r.w, r.y], [r.x, r.y + r.h, r.x + r.w, r.y + r.h], [r.x, r.y, r.x, r.y + r.h], [r.x + r.w, r.y, r.x + r.w, r.y + r.h]]:
+		var a := Vector2(e[0], e[1]); var b := Vector2(e[2], e[3]); var L := a.distance_to(b); var c := (a + b) / 2
+		var horiz: bool = e[1] == e[3]
+		rails.append(_box_xf(c.x, top + 9.5, c.y, L if horiz else 0.8, 0.8, 0.8 if horiz else L))
+		rails.append(_box_xf(c.x, top + 4.5, c.y, L if horiz else 0.4, 0.4, 0.4 if horiz else L))
+		var k := 0.0
+		while k <= L:
+			var p := a.lerp(b, k / L); rails.append(_box_xf(p.x, top + 5, p.y, 0.6, 10, 0.6)); k += 14.0
+
+## Each building's height in game units: from two-storey houses to a few towers.
+static func bheight(r: Dictionary) -> float:
+	if r.get("court", false): return FULL * 0.62
+	return FULL * [1.0, 0.77, 0.62, 0.85, 0.42, 0.55, 0.92, 1.3][int(r.z * 7.3) % 8]
 
 ## Keep a circle of radius r out of the buildings of its own block; returns true when it pushed.
 func push_out(p: Vector2, r: float) -> Vector2:
@@ -243,6 +279,9 @@ func _street_furniture(rng: RandomNumberGenerator) -> void:
 					put.bench.append([c, face]); _solid(c, 6); benches.append([c, face])
 				if rng.randf() < 0.5: var c: Vector2 = at.call(124, 4); put.bin.append([c, face]); _solid(c, 4)
 				if rng.randf() < 0.3: var c: Vector2 = at.call(60, 4); put.hydrant.append([c, face + PI / 2]); _solid(c, 3)
+	for cc: Vector2 in courts:   # benches round the courtyard tree
+		for a in [0.0, PI]:
+			var c := cc + Vector2.from_angle(a) * 28; put.bench.append([c, a]); _solid(c, 6); benches.append([c, a])
 	# the square: benches round the pond side, planters at the corners, two kiosks
 	var sx := 3 * CELL + 120.0; var sy := 3 * CELL + 120.0
 	for c in [[sx + 40, sy + 40], [sx + 360, sy + 40], [sx + 40, sy + 360], [sx + 360, sy + 360]]:
@@ -254,6 +293,72 @@ func _street_furniture(rng: RandomNumberGenerator) -> void:
 			var p: Vector2 = e[0]
 			xs.append(Transform3D(Basis(Vector3.UP, -float(e[1])), Vector3(p.x, CURB, p.y) * S))
 		if xs.size(): _multi(kit(kname), null, xs)
+
+## Blades of grass in a 1 m patch: thin bent triangles, the vertex alpha saying how high up the blade.
+func _grass_patch(rng: RandomNumberGenerator, blades: int) -> ArrayMesh:
+	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in blades:
+		var p := Vector3(rng.randf_range(-0.5, 0.5), 0, rng.randf_range(-0.5, 0.5))
+		var a := rng.randf() * TAU; var side := Vector3(cos(a), 0, sin(a)) * rng.randf_range(0.012, 0.022)
+		var lean := Vector3(sin(a), 0, -cos(a)) * rng.randf_range(0.02, 0.12)
+		var h := rng.randf_range(0.14, 0.34); var shade := rng.randf_range(0.8, 1.15)
+		var c0 := Color(shade, shade, shade, 0.0); var c1 := Color(shade, shade, shade, 0.55); var c2 := Color(shade, shade, shade, 1.0)
+		var m := p + Vector3(0, h * 0.55, 0) + lean * 0.4; var top := p + Vector3(0, h, 0) + lean
+		st.set_normal(Vector3.UP)
+		for v in [[p - side, c0], [p + side, c0], [m + side * 0.6, c1], [p - side, c0], [m + side * 0.6, c1], [m - side * 0.6, c1], [m - side * 0.6, c1], [m + side * 0.6, c1], [top, c2]]:
+			st.set_color(v[1]); st.add_vertex(v[0])
+	return st.commit()
+
+## Parks on computers: thick grass with wind, beds of flowers in three colours, a few shrubs.
+func _gardens(rng: RandomNumberGenerator) -> void:
+	var patch := _grass_patch(rng, 70)
+	var gm := ShaderMaterial.new(); gm.shader = load("res://shaders/grass.gdshader")
+	var plants := {}
+	for nm in ["flower_yellow", "flower_orange", "flower_blue", "shrub"]:
+		var root: Node = load("res://assets/plants/%s.glb" % nm).instantiate(); var st := [root]
+		while st.size():
+			var n: Node = st.pop_back(); st.append_array(n.get_children())
+			if n is MeshInstance3D: plants[nm] = (n as MeshInstance3D).mesh; break
+		root.free()
+	for i in N:
+		for j in N:
+			var b: Dictionary = blocks[i][j]
+			if b.type != "park": continue
+			var bx := i * CELL + 144.0; var by := j * CELL + 144.0   # the lawn inside the path ring
+			var xs := []; var cols := []; var fl := { "flower_yellow": [], "flower_orange": [], "flower_blue": [], "shrub": [] }
+			var y := 0.0
+			while y < 352:
+				var x := 0.0
+				while x < 352:
+					var p := Vector2(bx + x + rng.randf_range(-3, 3), by + y + rng.randf_range(-3, 3))
+					var skip := false
+					for r: Rect2 in keep_out: if r.grow(6).has_point(p): skip = true
+					for c in props.get(Vector2i(i, j), []): if p.distance_to(c[0]) < c[1] + 4: skip = true
+					if not skip:
+						xs.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(1.2, rng.randf_range(0.8, 1.3), 1.2)), Vector3(p.x * S, CURB * S + 0.02, p.y * S)))
+						cols.append(Color(rng.randf_range(0.85, 1.1), rng.randf_range(0.9, 1.1), rng.randf_range(0.8, 1.0)))
+					x += 11
+				y += 11
+			for bed in 5:   # round flower beds of one kind each
+				var kind: String = ["flower_yellow", "flower_orange", "flower_blue"][bed % 3]
+				var c := Vector2(bx + rng.randf_range(40, 312), by + rng.randf_range(40, 312))
+				var out := false
+				for r: Rect2 in keep_out: if r.grow(30).has_point(c): out = true
+				if out: continue
+				for k in 46:
+					var q := c + Vector2.from_angle(rng.randf() * TAU) * sqrt(rng.randf()) * 26
+					fl[kind].append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * rng.randf_range(1.6, 2.6)), Vector3(q.x * S, CURB * S, q.y * S)))
+			for k in 8:
+				var q := Vector2(bx + rng.randf_range(10, 342), by + (rng.randf_range(4, 20) if k % 2 else rng.randf_range(332, 348)))
+				var out := false
+				for r: Rect2 in keep_out: if r.grow(15).has_point(q): out = true
+				if not out: fl.shrub.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * rng.randf_range(0.8, 1.2)), Vector3(q.x * S, CURB * S, q.y * S)))
+			var gi := _multi(patch, gm, xs, false, cols)
+			gi.visibility_range_end = 140.0; gi.visibility_range_end_margin = 20.0; gi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+			for kind in fl:
+				if fl[kind].is_empty(): continue
+				var fi := _multi(plants[kind], null, fl[kind], kind == "shrub")
+				fi.visibility_range_end = 160.0 if kind != "shrub" else 400.0
 
 var parts                 # the 3D windows, balconies and shop fronts (computers)
 var keep_out: Array = []   # Rect2s where park trees are left out (the house)
@@ -276,6 +381,7 @@ func build() -> void:
 	var slabs := []; var parks := []; var plaza := []
 	var walls := { 0: [], 1: [] }; var wall_cols := { 0: [], 1: [] }; var roofs := []; var ledges := []; var ledge_cols := []
 	var trunks := []; var crowns := []; var crown_cols := []; var kit := []; var kit_cols := []
+	var rails := []; var pent := []
 	var tree_spots := []   # [x, y, size, block i, block j] for the Blender trees on computers
 	var rng := RandomNumberGenerator.new(); rng.seed = 7041   # looks only: leaves the city's own random numbers alone
 	for i in N:
@@ -294,20 +400,29 @@ func build() -> void:
 					trunks.append(_box_xf(t.x, CURB + 9, t.y, 4, 18, 4))
 					crowns.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(t.r, t.r * 1.15, t.r) * S * 2.0), Vector3(t.x, CURB + 18 + t.r * 0.8, t.y) * S))
 					crown_cols.append(Color("4f7d45").lerp(Color(rng.randf_range(0.3, 0.55), rng.randf_range(0.5, 0.65), 0.25), rng.randf() * 0.6))
+			if b.rects.size() and b.rects[0].get("court", false):   # a tree in the middle of the courtyard
+				var r0: Dictionary = b.rects[0]; var r1: Dictionary = b.rects[1]
+				var cc := Vector2(r0.x + r0.w / 2.0 + 20, (r0.y + r0.h + r1.y) / 2.0)
+				tree_spots.append([cc.x, cc.y, 1.1, i, j]); courts.append(cc)
 			var n := 0
 			for r in b.rects:
 				n += 1
-				var f: float = [1.0, 0.77, 0.62, 0.85][int(r.z) % 4]
-				var h: float = FULL * f
+				var h: float = bheight(r)
+				if hi and not r.get("court", false): _roof_extras(r, h, rails, pent)
 				walls[n % 2].append(_box_xf(r.x + r.w / 2.0, h / 2.0, r.y + r.h / 2.0, r.w, h, r.h))
 				var tuff := Color(r.c).lerp(Color.WHITE, 0.12); tuff.a = 1.0 if r.d > 0.35 else 0.0   # alpha picks the stone
 				wall_cols[n % 2].append(tuff); ledge_cols.append(tuff.lerp(Color.WHITE, 0.45))
 				roofs.append(_box_xf(r.x + r.w / 2.0, h + 0.4, r.y + r.h / 2.0, r.w - 2, 1, r.h - 2))
 				ledges.append(_box_xf(r.x + r.w / 2.0, h + 1.6, r.y + r.h / 2.0, r.w + 4.4, 4.2, r.h + 4.4))
+	if hi and rails.size():   # roof terraces: iron railings, and glass penthouses on the tall ones
+		var iron := _plain(Color(0.12, 0.12, 0.13), 0.4); iron.metallic = 0.7
+		_multi(unit, iron, rails)
+		var gl := _plain(Color(0.16, 0.2, 0.24), 0.05); gl.metallic = 0.4; gl.metallic_specular = 1.0
+		_multi(unit, gl, pent)
 	var paving := _wet_mat("hexagonal_concrete_paving", 2.4, Color(0.86, 0.83, 0.82), 1.0, 0.6)
 	_multi(unit, paving, slabs, false)
 	_multi(unit, _wet_mat("pavement_02", 3.5, Color.WHITE, 1.0, 0.8), plaza, false)
-	_multi(unit, _plain(Color("6c9659")), parks, false)
+	_multi(unit, _wet_mat("leafy_grass", 2.5, Color(0.9, 0.95, 0.85), 1.0, 0.25), parks, false)
 	var fac_uv := Vector3(1.0 / (WIDE * S), 1.0 / (FULL * S), 1.0 / (WIDE * S))
 	for q in 2:
 		var wm := ShaderMaterial.new(); wm.shader = load("res://shaders/facade.gdshader")   # windows plus cut tuff blocks
@@ -360,6 +475,7 @@ func build() -> void:
 			for p in [[bx + 7, by + 7], [bx + 393, by + 7], [bx + 7, by + 393], [bx + 393, by + 393]]: lamps.append(Vector2(p[0], p[1]))
 	var bm := _plain(Color("fff1c9")); bm.emission_enabled = true; bm.emission = Color("ffe6b0"); bm.emission_energy_multiplier = 0.4; bulb_mat = bm
 	_street_furniture(rng)
+	if hi: _gardens(rng)
 	# road markings: a dashed centre line on every street and zebra crossings at every crossroads
 	var dashes := []; var zebra := []
 	for k in N + 1:

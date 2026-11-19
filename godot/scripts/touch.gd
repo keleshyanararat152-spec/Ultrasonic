@@ -72,6 +72,8 @@ func _input(e: InputEvent) -> void:
 			var k := _hit(e.position)
 			if k != "" and k != "act" and k != pedals[e.index]: pedals[e.index] = k
 
+var test_steer := 0.0   # testing aid: a steady turn of the wheel
+
 func read_input() -> Dictionary:
 	var thr := 0.0; var steer := 0.0; var hand := false
 	var up := Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)
@@ -92,6 +94,7 @@ func read_input() -> Dictionary:
 		var a := maxf(0, absf(steer_x) - 0.07) / 0.93
 		if left_id >= 0: steer = signf(steer_x) * pow(a, 1.35) / 0.8
 		if stick.length() > 0.2: move = stick
+	if test_steer != 0.0: steer = test_steer
 	return { "thr": thr, "steer": steer, "hand": hand, "move": move }
 
 func _btn(rect: Rect2, label: String, col: Color, on: bool, round := false, fs := 15) -> void:

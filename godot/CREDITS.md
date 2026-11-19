@@ -21,3 +21,7 @@
 - **Street furniture** (`assets/street/`): Poly Haven models, CC0 — painted_wooden_bench, metal_trash_can,
   fire_hydrant, street_lamp_01, planter_box_01 (trimmed and lightened by `tools/blender/street_kit.py`). The bus stop,
   newspaper kiosk and traffic light are made in Blender by the same script.
+- **Parks** (`assets/plants/`): Poly Haven plants, CC0 — celandine_01, flower_gazania, periwinkle_plant, shrub_02;
+  lawn texture leafy_grass (CC0). Grass blades are made in code (`city.gd`, `_grass_patch`).
+- **Arches** (`assets/facade/arch.glb`): made in Blender by `tools/blender/arch.py`.
+- **Sounds**: all made in code at start (`scripts/sound.gd`, `interior.gd`) — no sound files.

@@ -52,6 +52,7 @@ var ui
 var interior
 var weather
 var fx
+var snd
 
 func _ready() -> void:
 	randomize()
@@ -93,6 +94,7 @@ func _ready() -> void:
 	add_child(cam)
 	weather.setup(self)
 	fx = preload("res://scripts/effects.gd").new(); add_child(fx); fx.setup(self)
+	snd = preload("res://scripts/sound.gd").new(); add_child(snd); snd.setup(self)
 	missions = preload("res://scripts/missions.gd").new(); add_child(missions); missions.setup(self)
 	interior = preload("res://scripts/interior.gd").new(); interior.m = self; add_child(interior); interior.build_house()
 	_hud()
@@ -183,6 +185,12 @@ func _day_night(dt: float) -> void:
 	if interior.inside != "":   # indoors: no sun, the room's own light
 		sun.light_energy = 0.0
 		env.ambient_light_color = Color(0.52, 0.48, 0.44) if interior.inside == "home" else Color(0.32, 0.26, 0.38)
+		if hi:
+			env.ambient_light_energy = 1.5 if interior.inside == "home" else 1.1
+			env.volumetric_fog_density = 0.0 if interior.inside == "home" else 0.02
+			env.volumetric_fog_albedo = Color(0.8, 0.75, 0.9)
+		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	else: env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	for g: Array in city.facade_mats:
 		(g[0] as StandardMaterial3D).albedo_color = Color(1.0, 0.82, 0.55) * night * (1.6 if hi else 1.1); (g[1] as Node3D).visible = night > 0.02
 	city.bulb_mat.emission_energy_multiplier = 0.4 + night * 3.5
@@ -535,6 +543,7 @@ func _busted() -> void:
 func _crash(impact: float) -> void:
 	if crash_cd > 0: return
 	crash_cd = 0.45; shake = minf(1.0, maxf(shake, impact / 260))
+	snd.crash_hit(impact / 300.0)
 	if hi: _dent(pcar, pcar.hit_pt, clampf(impact / 1400.0, 0.03, 0.22))
 	pcar.dmg += 2 if impact > 260 else 1
 	for p in peds:   # people nearby turn to look at the crash
@@ -545,6 +554,7 @@ func _process(dt: float) -> void:
 	_day_night(dt)
 	weather.tick(dt)
 	fx.tick(dt)
+	snd.tick(dt)
 	_paint_signals()
 	var flash := int(time * 6) % 2 == 0
 	for c: Car in cars:
@@ -560,9 +570,9 @@ func _process(dt: float) -> void:
 		me_av.root.position = Vector3(me.x, city.ground_y(me.x, me.y), me.y) * S
 		me_av.root.rotation.y = -me.a
 		var ms: float = me.spd * S
-		if absf(ms) < 0.3: me_av.animate(dt, "idle")
+		if absf(ms) < 0.3: me_av.animate(dt, "dance1" if interior.on_floor() else "idle")
 		elif ms > 4.5: me_av.animate(dt, "run", clampf(ms / 4.5, 0.7, 1.9))
-		else: me_av.animate(dt, "walk", ms / 1.35)
+		else: me_av.animate(dt, "walk", absf(ms) / 1.35 * signf(ms))
 		me_av.root.position.y += me_av.bob
 	# camera: behind the car or the walker
 	var t := target_pos(); var head: float = pcar.a if pcar else me.a
@@ -700,6 +710,7 @@ func _test_tick() -> void:
 			if a.begins_with("--shot="): _test.on = true; _test.shot = a.substr(7)
 			if a.begins_with("--frames="): _test.frames = int(a.substr(9))
 			if a == "--drive": _test.drive = true
+			if a == "--drift": _test.drive = true; _test.drift = true
 			if a.begins_with("--hour="): day_t = fmod((float(a.substr(7)) - 6) / 24.0 + 1, 1)
 			if a == "--heat": heat = 3
 			if a.begins_with("--weather="): weather.auto = false; weather.set_kind(a.substr(10), true)
