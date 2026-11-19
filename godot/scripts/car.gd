@@ -29,6 +29,7 @@ var rev := 0.0
 var slow := 0.0
 var dmg := 0
 var steer_in := 0.0
+var hit_pt := Vector2.INF   # where the last hit landed, game units (for dents)
 var hand := false
 var node: Node3D = null
 var anim := {}
@@ -72,7 +73,7 @@ func step(city, thr: float, steer: float, handbrake: bool, dt: float) -> float:
 		var p := Vector2(x + f.x * s, y + f.y * s)
 		var q: Vector2 = city.push_out(p, 11.5)
 		if q != p:
-			hit = true; var d := q - p; x += d.x; y += d.y; push += d; tq += s * (f.x * d.y - f.y * d.x)
+			hit = true; var d := q - p; x += d.x; y += d.y; push += d; tq += s * (f.x * d.y - f.y * d.x); hit_pt = p - d.normalized() * 10
 	if hit:
 		var n := push.normalized()
 		var wv := f * v + rgt * lat; var vn := wv.dot(n)
@@ -115,6 +116,7 @@ static func collide(p: Car, q: Car) -> float:
 	var t := Vector2(-n.y, n.x); var jt := clampf(-rel.dot(t) / (1 / mp + 1 / mq), -0.35 * j, 0.35 * j)
 	var imp := n * j + t * jt
 	p.kick(-imp, mp, ip, rp, -vn); q.kick(imp, mq, iq, rq, -vn)
+	p.hit_pt = c; q.hit_pt = c
 	return -vn
 
 func world_vel() -> Vector2:

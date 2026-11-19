@@ -188,6 +188,7 @@ func _day_night(dt: float) -> void:
 	head_light.light_energy = night * (3.5 if hi else 2.4) if pcar else 0.0
 	night_k = night
 	_head_mat.albedo_color = Color(0.85, 0.85, 0.8).lerp(Color(2.4, 2.2, 1.8), night)
+	for om: BaseMaterial3D in car_optics: om.emission_energy_multiplier = night * 2.5
 	if hi:   # the nearest other cars light the road too
 		var others: Array = cars.filter(func(c): return c != pcar and c.driver and c.node.visible)
 		others.sort_custom(func(p, q): return Vector2(p.x, p.y).distance_squared_to(t) < Vector2(q.x, q.y).distance_squared_to(t))
@@ -277,7 +278,7 @@ func _rebuild_node(c: Car) -> void:
 	var L: float = spec[0] * 10.5 * S / 2; var Wd: float = box.size.z * k / 2; var Hh: float = box.size.y * k
 	var tail := StandardMaterial3D.new(); tail.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; tail.albedo_color = Color(0.5, 0.02, 0.02)
 	for s in [-1, 1]:
-		var hq := MeshInstance3D.new(); var hb := BoxMesh.new(); hb.size = Vector3(0.04, 0.09, 0.22); hq.mesh = hb; hq.material_override = _head_mat
+		var hq := MeshInstance3D.new(); var hb := BoxMesh.new(); hb.size = Vector3(0.04, 0.09, 0.22); hq.mesh = hb; hq.material_override = _head_mat; hq.visible = not hi
 		hq.position = Vector3(L - 0.06, Hh * 0.42, s * Wd * 0.68); hq.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; tilt.add_child(hq)
 		var tq := MeshInstance3D.new(); var tb := BoxMesh.new(); tb.size = Vector3(0.04, 0.08, 0.26); tq.mesh = tb; tq.material_override = tail
 		tq.position = Vector3(-L + 0.05, Hh * 0.5, s * Wd * 0.7); tq.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; tilt.add_child(tq)
@@ -286,16 +287,61 @@ func _rebuild_node(c: Car) -> void:
 	c.node = root
 
 var _shone := {}
-func _shine(n: Node) -> void:   # car paint gets a clear coat on computers; tyres and plastic stay matt
+var car_optics: Array = []           # head- and tail-light materials that glow at night
+## Car materials by their names: real glass, metallic paint with a clear coat, matt tyres, chrome, lights that glow.
+func _shine(n: Node) -> void:
 	if n is MeshInstance3D:
 		var mi := n as MeshInstance3D
 		for k in mi.get_surface_override_material_count():
 			var mt = mi.get_active_material(k)
-			if mt is BaseMaterial3D and not _shone.has(mt.get_instance_id()):
-				_shone[mt.get_instance_id()] = true
-				if mt.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED and (mt.metallic > 0.1 or mt.roughness < 0.6):
-					mt.clearcoat_enabled = true; mt.clearcoat = 0.7; mt.clearcoat_roughness = 0.12
+			if not (mt is BaseMaterial3D) or _shone.has(mt.get_instance_id()): continue
+			_shone[mt.get_instance_id()] = true
+			var nm := String(mt.resource_name).to_lower()
+			if nm.contains("police_glass_") or nm.contains("decal") or nm.contains("logo"): continue
+			if nm.contains("glass") or nm.contains("window") or mt.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA:
+				mt.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; mt.albedo_color = Color(0.03, 0.04, 0.05, 0.42)
+				mt.metallic = 0.0; mt.roughness = 0.02; mt.metallic_specular = 1.0; mt.cull_mode = BaseMaterial3D.CULL_BACK
+			elif nm.contains("optic") or nm.contains("light") or nm.contains("lamp"):
+				mt.emission_enabled = true; mt.emission = Color.WHITE; mt.emission_energy_multiplier = 0.0
+				if mt.albedo_texture: mt.emission_texture = mt.albedo_texture
+				car_optics.append(mt)
+			elif nm.contains("tire") or nm.contains("tyre") or nm.contains("wheel") or nm.contains("wheek"):
+				mt.metallic = 0.0; mt.roughness = 0.88
+			elif nm.contains("chrome") or nm.contains("silver") or nm.contains("exhaust") or nm.contains("mirror") or nm.contains("metal") or nm.contains("rotor"):
+				mt.metallic = 1.0; mt.roughness = 0.12
+			elif nm.contains("body") or nm.contains("paint") or nm.contains("clearcoat") or nm == "taxi" or nm == "police_sedan" or nm.begins_with("material.00"):
+				mt.metallic = 0.6; mt.roughness = 0.24; mt.clearcoat_enabled = true; mt.clearcoat = 1.0; mt.clearcoat_roughness = 0.04
+			elif mt.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED and mt.roughness < 0.6:
+				mt.clearcoat_enabled = true; mt.clearcoat = 0.5; mt.clearcoat_roughness = 0.1
 	for c in n.get_children(): _shine(c)
+
+## A dent: the car's skin is pushed in round the point it was hit (game units), deeper for harder hits.
+func _dent(c: Car, at: Vector2, depth: float) -> void:
+	if c == null or c.node == null or at == Vector2.INF: return
+	var hit := Vector3(at.x, city.ground_y(at.x, at.y) + 6, at.y) * S
+	var centre := c.node.global_position + Vector3(0, 0.6, 0)
+	var push := centre - hit; push.y = 0; push = push.normalized()
+	var stack := [c.node]
+	while stack.size():
+		var n: Node = stack.pop_back()
+		if n is Node3D and String(n.name).begins_with("WHEEL"): continue
+		stack.append_array(n.get_children())
+		if not (n is MeshInstance3D) or not ((n as MeshInstance3D).mesh is ArrayMesh): continue
+		var mi := n as MeshInstance3D; var inv := mi.global_transform.affine_inverse()
+		var sc := mi.global_transform.basis.get_scale().x
+		var lp := inv * hit; var ld := (inv.basis * push).normalized(); var r := 0.95 / sc; var dl := depth / sc
+		if not mi.get_aabb().grow(r).has_point(lp): continue
+		var src: ArrayMesh = mi.mesh; var out := ArrayMesh.new(); var moved := 0
+		for s in src.get_surface_count():
+			var arr := src.surface_get_arrays(s); var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+			for i in vs.size():
+				var d := vs[i].distance_to(lp)
+				if d < r: var k := 1.0 - d / r; vs[i] += ld * dl * k * k; moved += 1
+			arr[Mesh.ARRAY_VERTEX] = vs
+			out.add_surface_from_arrays(src.surface_get_primitive_type(s), arr)
+			out.surface_set_material(s, src.surface_get_material(s))
+		mi.mesh = out
+		if _test.get("dent", false): print("DENT ", mi.name, " moved ", moved, " r ", r, " lp ", lp, " aabb ", mi.get_aabb())
 
 func _find_wheels(n: Node, out: Array) -> void:
 	for ch in n.get_children():
@@ -402,6 +448,7 @@ func _physics_process(dt: float) -> void:
 			var imp := Car.collide(a, b)
 			if imp > 70 and pcar and (a == pcar or b == pcar):
 				var other: Car = b if a == pcar else a
+				if hi and crash_cd <= 0: _dent(other, other.hit_pt, clampf(imp / 1400.0, 0.03, 0.22))
 				if crash_cd <= 0 and not (other.kind == "police" and other.chase): add_heat(1.5 if other.kind == "police" else (0.8 if imp > 200 else 0.5))
 				_crash(imp)
 	crash_cd -= dt
@@ -456,6 +503,7 @@ func _busted() -> void:
 func _crash(impact: float) -> void:
 	if crash_cd > 0: return
 	crash_cd = 0.45; shake = minf(1.0, maxf(shake, impact / 260))
+	if hi: _dent(pcar, pcar.hit_pt, clampf(impact / 1400.0, 0.03, 0.22))
 	pcar.dmg += 2 if impact > 260 else 1
 	if OS.has_feature("mobile"): Input.vibrate_handheld(int(minf(60, 15 + impact / 8)))
 
@@ -491,6 +539,9 @@ func _process(dt: float) -> void:
 	cam.position = Vector3(p.x, (36 if pcar else 30) * far + gy, p.y) * S
 	cam.look_at(Vector3(t.x + cos(cam_a) * 45, gy + (9 if pcar else 14), t.y + sin(cam_a) * 45) * S)
 	cam.fov = 60 + spd * 0.035
+	if _test.get("carcam", false):   # testing aid: a close look at the McLaren's front corner
+		var c0: Car = cars[0]; var c3 := Vector3(c0.x, city.ground_y(c0.x, c0.y), c0.y) * S; var cf := Vector3(cos(c0.a), 0, sin(c0.a)); var cr := Vector3(-sin(c0.a), 0, cos(c0.a))
+		cam.position = c3 + cf * 4.2 - cr * 3.0 + Vector3(0, 1.4, 0); cam.look_at(c3 + Vector3(0, 0.5, 0)); cam.fov = 50
 	if _test.get("close", false):   # testing aid: a close side view of you
 		var me3 := Vector3(me.x, city.ground_y(me.x, me.y), me.y) * S; var sd := Vector3(-sin(me.a), 0, cos(me.a))
 		cam.position = me3 + sd * 3.2 + Vector3(cos(me.a), 0, sin(me.a)) * 1.2 + Vector3(0, 1.3, 0); cam.look_at(me3 + Vector3(0, 1.0, 0)); cam.fov = 45
@@ -612,6 +663,8 @@ func _test_tick() -> void:
 			if a == "--house": _test.house = true
 			if a.begins_with("--at="): _test.at = a.substr(5).split(",")
 			if a == "--close": _test.close = true
+			if a == "--dent": _test.dent = true
+			if a == "--carcam": _test.carcam = true
 			if a == "--storytest": _test.story = true
 			if a == "--jobtest": _test.jobs = true
 			if a == "--shoptest": _test.shop = true
@@ -629,6 +682,9 @@ func _test_tick() -> void:
 		var q: Array = _test.at; me.x = float(q[0]); me.y = float(q[1]); me.a = float(q[2]); cam_a = me.a
 		touch_ui.stick = Vector2(0, -1) if OS.get_cmdline_user_args().has("--walk") else Vector2.ZERO
 		if _frame == 99 or _frame == _test.get("frames", 120): pass
+	if _test.get("dent", false) and _frame == 30:   # dent the McLaren on its front left corner, twice
+		var c: Car = cars[0]; var f := Vector2(cos(c.a), sin(c.a)); var r := Vector2(-f.y, f.x)
+		_dent(c, Vector2(c.x, c.y) + f * 22 - r * 8, 0.2); _dent(c, Vector2(c.x, c.y) - r * 11 + f * 5, 0.15)
 	if _frame == 3 and _test.get("house", false): me.x = interior.house.x - 30; me.y = interior.house.front - 150; me.a = PI / 2 - 0.3; cam_a = me.a
 	if _frame == 60 and _test.get("map", false): missions.set_waypoint(Vector2(ic(6), ic(1))); ui.toggle_map()
 	if _frame > 30:   # script time per frame, for comparing speed-ups
