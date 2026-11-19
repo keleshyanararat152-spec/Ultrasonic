@@ -1,5 +1,90 @@
 # Վարդագույն քաղաք — ամփոփում նոր չատի համար
 
+Գլխավոր աշխատանքը հիմա **Godot-ի տարբերակն է համակարգչի համար** (`godot/`)։ Բրաուզերի հին տարբերակի մասին՝ ներքևում։
+Ճյուղը՝ **`claude/pink-city-game-pu05t0`** (միայն այստեղ push անել)։ Pull request չբացել, եթե չեն խնդրել։
+
+## Godot տարբերակ — ամփոփում
+
+- **Շարժիչ.** Godot **4.7.2**, Forward+ (Vulkan) համակարգչի վրա։ Հեռախոսի տարբերակը **դադարեցված է** (օգտատիրոջ որոշումը. «միայն կոմպի համար, հետո convert կանենք»)։ Կոդում `hi` դրոշակը = Forward+ (`RenderingServer.get_rendering_device() != null`), բոլոր ծանր էֆեկտները միայն `hi`-ով են։
+- **Build.** GitHub Actions `.github/workflows/android.yml` (անունը՝ «Game build (Windows)»), պատկեր `barichello/godot-ci:4.7.2`, ամեն push-ից `godot/**`-ում. արտեֆակտ՝ **pink-city-windows** (PinkCity.exe, embed pck)։ Վերջին հաջող run-երը տես Actions-ում։
+- **Օգտատերը** խոսում է հայերեն (լատինատառ էլ), ուզում է կարճ պատասխաններ (caveman skill)։ Համակարգիչը՝ MSI Cyborg 15 (RTX)։ Ամեն ինչ միայն **անվճար** (պատրաստի CC0/MIT/CC-BY, չլինի՝ Blender-ով սարքել)։
+
+### Ֆայլերի կառուցվածք (`godot/`)
+- `project.godot` — forward_plus, 4096 ստվեր, aniso 16x, volumetric fog չափեր, Noto Sans Armenian տառատեսակ։
+- `export_presets.cfg` — Windows (x86_64, embed pck) + հին Android (չի օգտագործվում)։
+- `scripts/main.gd` — գլխավոր. միջավայր (SDFGI, SSAO, SSIL, SSR, volumetric fog, glow, TAA, ACES), օր/գիշեր `_day_night`, լուսացույցներ, մեքենաներ (`_make_car`, `_rebuild_node`, `_shine` նյութեր, `_dent` ծռվածք), քայլել/քշել `_physics_process`, ոստիկաններ/աստղեր, տեսախցիկ, HUD, **թեստի դրոշակներ** (`_test_tick`, `_story_test`, `_job_test`, `_shop_test`)։
+- `scripts/city.gd` — քաղաքը (նույն seed-ը, ինչ բրաուզերում), MultiMesh-եր, Poly Haven նյութեր `_ph_mat`, ճակատի shader, ծառեր `_real_trees` (Blender), `push_out` բախումներ։
+- `scripts/facade_parts.gd` — 3D պատուհաններ, պատշգամբներ, ցուցափեղկեր, դռներ, քարե գոտիներ/քիվ/սյուներ/հիմք (միայն hi)։
+- `scripts/car.gd` — մեքենայի ֆիզիկա (v, lat, w, spin), OBB բախում, AI վարորդ (`drive`, `next_leg`, `flee`, `path_drive`), `hit_pt` (ծռվածքի համար)։
+- `scripts/people.gd` — Rocketbox avatar-ներ (MIT, 18 հատ), **սեփական FK շղթա** (`_g`, `_set_global`), քայլքի աղյուսակ մեկ մոդելի համար (`_make_table`), պար `dance`, հետիոտներ (`Ped`, `step`, `panic`)։
+- `scripts/missions.gd` — փող, պահպանում (`user://save.json`), առաքում/տաքսի, մրցարշավ/փախուստ, 5 գլուխ պատմություն, քարտեզի կետեր, երթուղի։
+- `scripts/interior.gd` — Նեոն ակումբ (պար ռիթմով, բար, VIP), տուն ու բնակարան, ավտոսրահ, հագուստ, երաժշտություն (գեներացված WAV)։
+- `scripts/ui.gd` — ռադար, մեծ քարտեզ (M), երկխոսություն, պանելներ, գլխի քարտ։ `scripts/touch.gd` — կառավարում (ստեղնաշար + հին touch)։
+- `shaders/` — `facade.gdshader` (տուֆե բլոկներ, 2 քար, մաշվածություն), `window_glass.gdshader` (գիշերը վառվող սենյակներ), `leaves.gdshader` (քամի, backlight), `sky_photo.gdshader` (Qwantani լուսանկարներ ըստ ժամի + ամպեր), `sky.gdshader` (հին նկարված երկինք)։
+- `assets/` — `cars/` (17 մեքենա, CC BY), `people/` (Rocketbox), `tex/ph/` (Poly Haven ասֆալտ, սալիկ, քար), `facade/` (Blender մասեր), `tree/` (Blender ծառեր, սոսու կեղև, տերևների քարտ ambientCG-ից), `sky/` (Poly Haven Qwantani 6 երկինք)։
+- `tools/blender/facade_parts.py`, `tools/blender/trees.py` — Blender սկրիպտներ (`blender -b -P file.py -- out_dir`)։ Blender 4.0-ը տեղադրվում է `apt-get install blender` (+ `python3-numpy`)։
+- `CREDITS.md` — բոլոր լիցենզիաները։
+
+### Ինչպես թեստավորել
+- Godot 4.7.2-ը ներբեռնիր. `https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip`
+- Vulkan-ի համար՝ `apt-get install -y mesa-vulkan-drivers` (lavapipe), վիրտուալ էկրան՝ `Xvfb :77 -screen 0 1280x720x24 &`։
+- Ներմուծում. `godot --headless --path godot --import` (2 անգամ, առաջինում տառատեսակի սխալ կա)։ Նոր normal map-երի `.import`-ում դնել `compress/normal_map=1`։
+- Սկրիպտի ստուգում. `godot --headless --path godot --check-only --script scripts/X.gd`
+- Տրամաբանության թեստեր (headless, արագ).
+  - `godot --headless --path godot -- --storytest` → պետք է տպի `STORY END done=true cash 20500`
+  - `-- --shoptest` → մեքենա/հագուստ/տուն/ակումբ/VIP (`SHOP ...`)
+  - `--quit-after 3000 -- --jobtest` → առաքում, մրցարշավ, փախուստ (`JOB ...`)
+  - Թեստերից հետո ջնջել `~/.local/share/godot/app_userdata/*/save.json`։
+- Նկարներ (Forward+, դանդաղ ~2-5 րոպե մեկը). `DISPLAY=:77 godot --rendering-driver vulkan --rendering-method forward_plus --path godot --quit-after 3000 -- --shot=/path.png --frames=70 [դրոշակներ]`
+  - `--at=x,y,a` — կանգնեցնել քեզ տեղում (խաղի միավորներով), `--hour=H` — ժամը, `--walk` — քայլի տեղում, `--close` — մոտիկ կողքից տեսախցիկ, `--carcam` — McLaren-ի մոտիկից, `--dent` — ծռել McLaren-ը, `--drive`, `--heat`, `--talk`, `--map`, `--club`, `--vip`, `--home`, `--house`։
+  - Լավ տեսանկյուններ. `--at=1500,1636,0.25 --hour=11` (խաչմերուկ), `--at=1700,1950,-1.2 --hour=16` (հրապարակ), `--at=1660,1636,0.0 --hour=22` (գիշեր), `--at=1610,1380,0.35 --hour=15` (շենքի ճակատ)։
+  - `PROF ms/frame` տողը ցույց է տալիս սկրիպտի ժամանակը (այստեղ վիդեոքարտ չկա, իրական FPS-ը չենք տեսնում)։
+
+### Գտած սխալներ ու դասեր
+- Godot 4.3-ում `get_bone_global_pose`-ը չի թարմանում `set_bone_pose_rotation`-ից անմիջապես հետո → սեփական FK շղթա (`_g`)։
+- Godot 4.7-ում glb avatar-ի mesh-ը կարող է կապված չլինել skeleton-ին → `_bind()`; մարմնի առանցքները հաշվում ենք ոսկորներից (կոնք, ազդրեր), ոչ ֆայլից։
+- 4.7-ում skeleton-ը ունի ծնող «Bip01» node՝ իր transform-ով։
+- `RenderingServer.get_current_rendering_method()` 4.3-ում չկա։
+- Forward+-ում MultiMesh-ի գույները linear են → `vertex_color_is_srgb = true`։
+- Compatibility-ում sky ambient-ը չի թարմանում, triplanar emission-ը սխալ է (հին լուծումներ)։
+- Sapling-ի տերևների UV-ն դատարկ է → Blender սկրիպտում նորից ենք սարքում։
+- Ներքին lambda-ները մի տողում `;`-ով ռիսկային են → օգտագործել անվանված ֆունկցիա + `bind`։
+- GDScript-ում `:=`-ը Variant-ից չի աշխատում (`floor`, Dictionary արժեքներ) → տիպը գրել։
+- Ծանր ֆայլերը (ծառեր) նկարում են դանդաղ. նկարները աշխատեցնել background-ում։
+
+### Ինչ է արված Godot-ում
+Քաղաք, քշել, մեքենաների ֆիզիկա ու բախումներ, 17 մեքենա, քայլել, նստել/իջնել, հետիոտներ (70), լուսացույցներ, ոստիկաններ/աստղեր, օր/գիշեր, փող, առաքում, տաքսի, մրցարշավ, փախուստ, 5 գլուխ պատմություն, ռադար ու մեծ քարտեզ, ակումբ (պար, բար, VIP), տուն ու բնակարան, ավտոսրահ, հագուստ, պահպանում։
+Գրաֆիկա. տուֆի գույներ ամեն շենքի, Poly Haven նյութեր, 3D պատուհաններ/պատշգամբներ/ցուցափեղկեր/դռներ/քիվեր, SDFGI/SSAO/SSIL/SSR/volumetric fog/TAA, լուսանկարված երկինք ըստ ժամի, Blender-ի սոսիներ քամով, մեքենաների ապակի/մետաղ/clearcoat/վառվող լույսեր/ծռվածք, մարդկանց բնական կեցվածք ու քայլք, մաշկի SSS, Godot 4.7.2։
+
+### Հերթական ցուցակ (օգտատիրոջ, հերթով անել)
+1. Անձրև ու թաց քաղաք՝ կաթիլներ, ջրափոսեր, փայլող ճանապարհ
+2. Մարդիկ՝ ավելի բնական շարժումներ (Mixamo չլինի՝ այլ անվճար անիմացիաներ), մարդկանց օրվա կյանք ու արձագանքներ
+3. Փողոցի իրեր՝ նստարաններ, կանգառներ, կրպակներ, լամպեր, լուսացույցներ
+4. Էֆեկտներ՝ անվադողի ծուխ ու հետքեր, կայծեր, արտանետում, շարժման լղոզում
+5. Ակումբն ու տունը լուսավորիր (Forward+-ով մութ են)
+6. Խոտ ու ծաղիկներ այգիներում
+7. Ձայներ՝ շարժիչ, անվադողեր, քաղաք, սիրենա
+8. Եղանակ՝ ամպամած, անձրևոտ, մառախլապատ օրեր, որ ինքնաբերաբար փոխվեն
+9. Ավելի տարբեր շենքեր՝ կամարներ, բակեր, տերասներ, տարբեր բարձրություններ
+10. Հրապարակ՝ շատրվան, նստարաններ, լապտերներ, աղավնիներ
+11. Գիշերային նեոնային ցուցանակներ հայերեն, արտացոլումներ թաց փողոցում
+12. Մեքենաների մեծ վնասվածք՝ ջարդված ապակի, ծուխ կապոտից
+13. Կրկնակի դիտում վթարից հետո ու ֆոտոռեժիմ
+14. Ավելի շատ մեքենաներ ու մարդիկ, հեռուն ավելի պարզ
+15. Կարգավորումների մենյու՝ գրաֆիկայի որակ (ցածր/միջին/բարձր/ուլտրա), ձայն, կառավարում
+16. FPS-ի օպտիմալացում, որ ուլտրա որակով էլ սահուն աշխատի
+17. Ամեն ինչ ստուգիր թեստերով ու ուղղիր սխալները
+
+Աշխատանքի կարգ. ամեն մասից հետո `--storytest`, `--shoptest`, `--jobtest`, մեկ-երկու նկար, commit, push։ Ցանցում թույլատրված են Poly Haven (`api.polyhaven.com`, `dl.polyhaven.org`), ambientCG (`ambientcg.com`, `acg-download.struffelproductions.com`), Sketchfab, OpenGameArt, GitHub releases, apt/pip/npm։
+
+### Ամփոփում ավտոմատ աշխատանքից
+(Այստեղ նոր չատը գրում է, թե ցուցակից ինչ արվեց ու ինչ չստացվեց։)
+
+---
+
+# Բրաուզերի հին տարբերակ (`game/city/index.html`)
+
+
 Այս ֆայլը նախորդ չատի ամբողջ աշխատանքի ամփոփումն է, որ նոր չատում շարունակենք առանց կորուստի։
 
 ## Որտեղ է ամեն ինչ
