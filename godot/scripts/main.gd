@@ -110,7 +110,7 @@ func _environment() -> void:
 	var we := WorldEnvironment.new()
 	env = Environment.new()
 	hi = RenderingServer.get_rendering_device() != null   # Forward+ on computers; phones use Compatibility
-	var sky := Sky.new(); sky_mat = ShaderMaterial.new(); sky_mat.shader = load("res://shaders/sky.gdshader")
+	var sky := Sky.new(); sky_mat = ShaderMaterial.new(); sky_mat.shader = load("res://shaders/sky_photo.gdshader" if hi else "res://shaders/sky.gdshader")
 	sky.sky_material = sky_mat; sky.radiance_size = Sky.RADIANCE_SIZE_128 if hi else Sky.RADIANCE_SIZE_64
 	sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL if hi else Sky.PROCESS_MODE_AUTOMATIC
 	env.background_mode = Environment.BG_SKY; env.sky = sky
@@ -168,6 +168,7 @@ func _day_night(dt: float) -> void:
 	sky_mat.set_shader_parameter("gnd_col", Color("8a7d74") * tint); sky_mat.set_shader_parameter("night", night)
 	sky_mat.set_shader_parameter("cloud_col", Color.WHITE.lerp(Color("ffb48a"), dusk).lerp(Color("2a3046"), night))
 	sky_mat.set_shader_parameter("sun_col", sun.light_color * (0.35 if night > 0.5 else 1.0)); sky_mat.set_shader_parameter("t", time)
+	if hi: _photo_sky(night)
 	env.fog_light_color = Color("f0d2b6") * tint
 	env.ambient_light_color = Color(0.62, 0.66, 0.72).lerp(Color(0.75, 0.55, 0.5), dusk).lerp(Color(0.15, 0.17, 0.27), night)
 	env.ambient_light_energy = (0.75 + 0.5 * night) if hi else 1.0   # SDFGI adds the bounced light on top
@@ -202,6 +203,23 @@ func _day_night(dt: float) -> void:
 		var f := Vector3(cos(pcar.a), 0, sin(pcar.a)); var gy: float = city.ground_y(pcar.x, pcar.y)
 		head_light.position = Vector3(pcar.x, gy + 8, pcar.y) * S + f * 2.2
 		head_light.look_at(head_light.position + f * 10 + Vector3(0, -1.1, 0))
+
+## The photographed skies by the hour: [hour, picture, where its sun is across the picture]
+const SKIES := [[4.8, "night", 0.62], [6.4, "dusk_2", 0.583], [8.5, "morning", 0.604], [12.5, "noon", 0.599], [16.2, "late_afternoon", 0.599],
+	[18.3, "sunset", 0.565], [19.3, "dusk_2", 0.583], [20.6, "night", 0.62], [28.8, "night", 0.62]]
+var _sky_tex := {}
+func _photo_sky(night: float) -> void:
+	var h := fmod(6 + day_t * 24, 24.0)
+	if h < 4.8: h += 24
+	var k := 0
+	while k < SKIES.size() - 2 and h >= SKIES[k + 1][0]: k += 1
+	var a: Array = SKIES[k]; var b: Array = SKIES[k + 1]
+	for e in [a, b]:
+		if not _sky_tex.has(e[1]): _sky_tex[e[1]] = load("res://assets/sky/sky_%s.jpg" % e[1])
+	sky_mat.set_shader_parameter("sky_a", _sky_tex[a[1]]); sky_mat.set_shader_parameter("sky_b", _sky_tex[b[1]])
+	sky_mat.set_shader_parameter("mixk", smoothstep(0.0, 1.0, (h - a[0]) / (b[0] - a[0])))
+	sky_mat.set_shader_parameter("sun_u_a", a[2]); sky_mat.set_shader_parameter("sun_u_b", b[2])
+	sky_mat.set_shader_parameter("bright", lerpf(1.25, 0.32, night)); sky_mat.set_shader_parameter("cover", 0.3)
 
 func clock_text() -> String:
 	var m := int(fmod(6 + day_t * 24, 24) * 60)

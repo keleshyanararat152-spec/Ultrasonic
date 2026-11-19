@@ -104,6 +104,34 @@ func _tex_mat(path: String, uv: Vector3, tint := Color.WHITE, rough := 0.9, norm
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m
 
+## Plane trees grown in Blender (tools/blender/trees.py): bark and leaf cards, one multimesh per block and kind.
+func _real_trees(spots: Array, rng: RandomNumberGenerator) -> void:
+	var bark := StandardMaterial3D.new(); bark.albedo_texture = load("res://assets/tree/bark_diff.jpg"); bark.uv1_scale = Vector3(3, 6, 1)
+	bark.normal_enabled = true; bark.normal_texture = load("res://assets/tree/bark_nor.jpg"); bark.roughness = 0.9
+	var leaf := ShaderMaterial.new(); leaf.shader = load("res://shaders/leaves.gdshader"); leaf.set_shader_parameter("leaves", load("res://assets/tree/leaves.png"))
+	var meshes := []
+	for nm in ["tree_a", "tree_b"]:
+		var root: Node = load("res://assets/tree/%s.glb" % nm).instantiate(); var mesh: ArrayMesh = null
+		var st := [root]
+		while st.size():
+			var n: Node = st.pop_back(); st.append_array(n.get_children())
+			if n is MeshInstance3D and mesh == null: mesh = (n as MeshInstance3D).mesh
+		root.free()
+		for k in mesh.get_surface_count():
+			var m := mesh.surface_get_material(k)
+			mesh.surface_set_material(k, leaf if m and m.resource_name == "leaves" else bark)
+		meshes.append(mesh)
+	var groups := {}
+	for t in spots:
+		var key := Vector3i(t[3], t[4], rng.randi() % meshes.size())
+		if not groups.has(key): groups[key] = [[], []]
+		var sc: float = t[2] * rng.randf_range(0.85, 1.12)
+		groups[key][0].append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * sc), Vector3(t[0] * S, CURB * S, t[1] * S)))
+		groups[key][1].append(Color(rng.randf_range(0.85, 1.05), rng.randf_range(0.9, 1.08), rng.randf_range(0.8, 0.95)))
+	for key: Vector3i in groups:
+		var mi := _multi(meshes[key.z], null, groups[key][0], true, groups[key][1])
+		mi.visibility_range_end = 520.0; mi.visibility_range_end_margin = 50.0; mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+
 ## A tree crown in a unit box: a cluster of lumps instead of one ball.
 func _crown_mesh() -> Mesh:
 	var st := SurfaceTool.new()
@@ -136,7 +164,7 @@ func _multi(mesh: Mesh, mat: Material, xforms: Array, shadows := true, colors :=
 	for k in colors.size(): mm.set_instance_color(k, colors[k])
 	var mi := MultiMeshInstance3D.new()
 	mi.multimesh = mm
-	mi.material_override = mat
+	if mat: mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	return mi
@@ -165,6 +193,7 @@ func build() -> void:
 	var slabs := []; var parks := []; var plaza := []
 	var walls := { 0: [], 1: [] }; var wall_cols := { 0: [], 1: [] }; var roofs := []; var ledges := []; var ledge_cols := []
 	var trunks := []; var crowns := []; var crown_cols := []; var kit := []; var kit_cols := []
+	var tree_spots := []   # [x, y, size, block i, block j] for the Blender trees on computers
 	var rng := RandomNumberGenerator.new(); rng.seed = 7041   # looks only: leaves the city's own random numbers alone
 	for i in N:
 		for j in N:
@@ -178,6 +207,7 @@ func build() -> void:
 					var out := false
 					for r: Rect2 in keep_out: if r.grow(t.r).has_point(Vector2(t.x, t.y)): out = true
 					if out: continue
+					tree_spots.append([t.x, t.y, 0.8 + t.r / 50.0, i, j])
 					trunks.append(_box_xf(t.x, CURB + 9, t.y, 4, 18, 4))
 					crowns.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(t.r, t.r * 1.15, t.r) * S * 2.0), Vector3(t.x, CURB + 18 + t.r * 0.8, t.y) * S))
 					crown_cols.append(Color("4f7d45").lerp(Color(rng.randf_range(0.3, 0.55), rng.randf_range(0.5, 0.65), 0.25), rng.randf() * 0.6))
@@ -236,14 +266,17 @@ func build() -> void:
 			for t in [100, 200, 300]:
 				for p in [[bx + t, by + 6], [bx + t, by + 394], [bx + 6, by + t], [bx + 394, by + t]]:
 					var sz := 9 + srand() * 4
+					tree_spots.append([p[0], p[1], 0.62 + sz / 60.0, i, j])
 					trunks.append(_box_xf(p[0], CURB + 22, p[1], 2.6, 44, 2.6))
 					crowns.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sz * 1.25, sz, sz * 1.25) * S * 2.0), Vector3(p[0], CURB + 42 + sz, p[1]) * S))
 					crown_cols.append(Color("4f7d45").lerp(Color(rng.randf_range(0.3, 0.55), rng.randf_range(0.5, 0.65), 0.25), rng.randf() * 0.6))
 	var trunk := CylinderMesh.new(); trunk.top_radius = 0.3; trunk.bottom_radius = 0.5; trunk.height = 1.0; trunk.radial_segments = 7; trunk.rings = 1
-	_multi(trunk, _plain(Color("6b4a35")), trunks)
-	var cm := _plain(Color.WHITE, 0.85); cm.vertex_color_use_as_albedo = true; cm.vertex_color_is_srgb = RenderingServer.get_rendering_device() != null
-	_multi(_crown_mesh(), cm, crowns, true, crown_cols)
-	var km := _plain(Color.WHITE); km.vertex_color_use_as_albedo = true; km.vertex_color_is_srgb = cm.vertex_color_is_srgb
+	if hi: _real_trees(tree_spots, rng)
+	else:
+		_multi(trunk, _plain(Color("6b4a35")), trunks)
+		var cm := _plain(Color.WHITE, 0.85); cm.vertex_color_use_as_albedo = true; cm.vertex_color_is_srgb = false
+		_multi(_crown_mesh(), cm, crowns, true, crown_cols)
+	var km := _plain(Color.WHITE); km.vertex_color_use_as_albedo = true; km.vertex_color_is_srgb = hi
 	_multi(unit, km, kit, true, kit_cols)
 	var posts := []; var bulbs := []
 	for i in N:

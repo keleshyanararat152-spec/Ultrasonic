@@ -11,3 +11,6 @@
   hexagonal_concrete_paving, pavement_02, sandstone_blocks_05. Re-saved as JPEG at quality 86.
 - **Second wall stone**: Poly Haven rough_block_wall, CC0.
 - **Facade parts** (`assets/facade/*.glb`): made for this game in Blender by `tools/blender/facade_parts.py`.
+- **Trees** (`assets/tree/`): grown in Blender with the Sapling add-on by `tools/blender/trees.py`; bark from Poly Haven
+  (bark_platanus, CC0); the leaf card is made from ambientCG LeafSet010 (CC0).
+- **Skies** (`assets/sky/`): Poly Haven, the Qwantani pure-sky series (CC0), tonemapped and resized to 4096 x 2048.
