@@ -58,6 +58,7 @@ var neon
 var cine
 var settings
 var cheats
+var weapons
 var steer_k := 1.0
 var hud_layer: CanvasLayer
 var photo_layer: CanvasLayer
@@ -110,6 +111,7 @@ func _ready() -> void:
 	_hud()
 	settings = preload("res://scripts/settings.gd").new(); settings.setup(self, photo_layer)
 	cheats = preload("res://scripts/cheats.gd").new(); add_child(cheats); cheats.setup(self)
+	weapons = preload("res://scripts/weapons.gd").new(); add_child(weapons); weapons.setup(self)
 	interior.start()
 	toast(missions.start_text(), 4)
 
@@ -557,6 +559,7 @@ func _physics_process(dt: float) -> void:
 			if cops > 2 and Vector2(c.x, c.y).distance_to(tgt) > 900: c.node.queue_free(); cars.remove_at(k)
 	missions.tick(dt)
 	cheats.tick()
+	weapons.tick(dt)
 	cine.record()
 
 func _busted() -> void:
@@ -607,6 +610,7 @@ func _process(dt: float) -> void:
 		elif ms > 4.5: me_av.animate(dt, "run", clampf(ms / 4.5, 0.7, 1.9))
 		else: me_av.animate(dt, "walk", absf(ms) / 1.35 * signf(ms))
 		me_av.root.position.y += me_av.bob
+	weapons.pose(dt)
 	# camera: behind the car or the walker
 	var t := target_pos(); var head: float = pcar.a if pcar else me.a
 	var spd := absf(pcar.v) if pcar else 0.0
@@ -698,10 +702,11 @@ func _hud() -> void:
 	var speed := Label.new(); speed.add_theme_font_size_override("font_size", 18)
 	var clock := Label.new(); clock.add_theme_font_size_override("font_size", 15); clock.add_theme_color_override("font_color", Color("a9a59c"))
 	var cash := Label.new(); cash.add_theme_font_size_override("font_size", 22); cash.add_theme_color_override("font_color", Color("58d68d"))
-	box.add_child(cash); box.add_child(stars); box.add_child(speed); box.add_child(clock)
+	var life := Label.new(); life.add_theme_font_size_override("font_size", 18); life.add_theme_color_override("font_color", Color("ff8a8a"))
+	box.add_child(cash); box.add_child(life); box.add_child(stars); box.add_child(speed); box.add_child(clock)
 	if not DisplayServer.is_touchscreen_available():   # on a computer: how to play with the keyboard
 		var keys := Label.new(); keys.add_theme_font_size_override("font_size", 14); keys.add_theme_color_override("font_color", Color("a9a59c"))
-		keys.text = "W / S — գազ, արգելակ, քայլել\nA / D — ղեկ, շրջվել\nSpace — ձեռքի արգելակ\nE — նստել, իջնել\nM — քարտեզ"
+		keys.text = "W / S — գազ, արգելակ, քայլել\nA / D — ղեկ, շրջվել\nSpace — ձեռքի արգելակ\nE — նստել, իջնել\nM — քարտեզ\nՄկնիկ — կրակել, Tab — զենք, Q — լիցք"
 		box.add_child(keys)
 	layer.add_child(panel)
 	var tp := _panel(); tp.set_anchors_preset(Control.PRESET_CENTER_TOP); tp.position = Vector2(-240, 120); tp.custom_minimum_size = Vector2(480, 0)
@@ -709,7 +714,7 @@ func _hud() -> void:
 	tp.add_child(tl); tp.visible = false; layer.add_child(tp)
 	var hp := _panel(); hp.visible = false
 	var hl := Label.new(); hl.add_theme_font_size_override("font_size", 17); hp.add_child(hl); layer.add_child(hp)
-	hud = { "hint": hl, "hint_panel": hp, "panel": panel, "cash": cash, "stars": stars, "speed": speed, "clock": clock, "toast": tl, "toast_panel": tp }
+	hud = { "life": life, "hint": hl, "hint_panel": hp, "panel": panel, "cash": cash, "stars": stars, "speed": speed, "clock": clock, "toast": tl, "toast_panel": tp }
 
 func _hud_tick(dt: float) -> void:
 	var n := ceili(heat)
@@ -717,6 +722,7 @@ func _hud_tick(dt: float) -> void:
 	hud.stars.add_theme_color_override("font_color", Color("ff5a5f") if n > 0 else Color("a9a59c"))
 	hud.speed.text = interior.status() if interior.inside != "" else (("%d կմ/ժ" % int(absf(pcar.v) * 0.42)) if pcar else "ոտքով")
 	hud.clock.text = clock_text()
+	if weapons: hud.life.text = weapons.hud_text()
 	hud.cash.text = missions.money(missions.cash)
 	hud.panel.visible = not ui.big.visible
 	if toast_t > 0:
@@ -773,11 +779,14 @@ func _test_tick() -> void:
 			if a == "--shoptest": _test.shop = true
 			if a == "--cinetest": _test.cine = true
 			if a == "--cheattest": _test.cheat = true
+			if a == "--guntest": _test.gun = true
+			if a == "--gun": _test.aim = true
 	if _test.get("story", false): _story_test(); return
 	if _test.get("jobs", false): _job_test(); return
 	if _test.get("shop", false): _shop_test(); return
 	if _test.get("cine", false): _cine_test(); return
 	if _test.get("cheat", false): _cheat_test(); return
+	if _test.get("gun", false): _gun_test(); return
 	if not _test.on: return
 	touch_ui.touched = true
 	_frame += 1
@@ -789,6 +798,7 @@ func _test_tick() -> void:
 		var q: Array = _test.at; me.x = float(q[0]); me.y = float(q[1]); me.a = float(q[2]); cam_a = me.a
 		touch_ui.stick = Vector2(0, -1) if OS.get_cmdline_user_args().has("--walk") else Vector2.ZERO
 		if _frame == 99 or _frame == _test.get("frames", 120): pass
+	if _test.get("aim", false) and _frame >= 5: weapons.give("rifle", false); weapons.holding = true; weapons.aim_t = 0.0
 	if _test.get("dent", false) and _frame == 30:   # dent the McLaren on its front left corner, twice
 		var c: Car = cars[0]; var f := Vector2(cos(c.a), sin(c.a)); var r := Vector2(-f.y, f.x)
 		_dent(c, Vector2(c.x, c.y) + f * 22 - r * 8, 0.2); _dent(c, Vector2(c.x, c.y) - r * 11 + f * 5, 0.15)
@@ -924,3 +934,23 @@ func _cheat_test() -> void:   # types each code as key presses and prints what c
 	if _frame == 10: type.call("GAGAT"); print("CHEAT aragats heat ", heat)
 	if _frame == 12: type.call("DILIJAN"); add_heat(3)
 	if _frame == 14: print("CHEAT sevan heat ", heat, " on ", cheats.no_wanted); get_tree().quit()
+
+func _gun_test() -> void:   # buys a pistol, shoots a person and a car, the police shoot back, the hospital
+	_frame += 1
+	var ws = weapons
+	if _frame == 2:
+		missions.cash = 50000; ws.shop(); (ui.shop_list.get_child(0) as Button).pressed.emit(); ui.close_panel()
+		print("GUN bought ", ws.cur, " ammo ", ws.owned().pistol, " cash ", missions.cash)
+	if _frame == 4:   # stand facing a person 60 units away
+		var p = peds[0]; p.act = "wait"; p.act_t = 99; me.x = p.x - 60; me.y = p.y; me.a = 0.0
+		ws.cd = 0; ws._try_shot(); print("GUN person down ", p.down > 0, " heat ", snapped(heat, 0.1), " ammo ", ws.owned().pistol)
+	if _frame == 6:
+		var c: Car = cars[5]; c.driver = false; c.v = 0; c.a = 0.0; me.x = c.x - 70; me.y = c.y; me.a = 0.0
+		for p in peds: p.x += 9000   # out of the line of fire for this test
+		for o: Car in cars: if o != c and absf(o.y - c.y) < 30 and o.x < c.x and o.x > c.x - 80: o.y += 200
+		for k in 14: ws.cd = 0; ws.reload_t = 0; ws.owned().pistol[0] = 12; ws._try_shot()
+		print("GUN car hp ", c.anim.get("hp"), " wreck ", c.anim.get("wreck", false))
+	if _frame == 8: ws.next_gun(1); print("GUN switch ", ws.cur); ws.cur = "pistol"; ws.owned().pistol = [0, 20]; ws.cd = 0; ws._try_shot()
+	if _frame == 200: print("GUN reloaded ", ws.owned().pistol, " t ", ws.reload_t, " cur ", ws.cur)
+	if _frame == 202: heat = 4; ws.hurt(250); print("GUN after down hp ", ws.hp, " heat ", heat, " cash ", missions.cash)
+	if _frame == 204: print("GUN hud ", ws.hud_text()); get_tree().quit()

@@ -309,7 +309,7 @@ func _arrow(c: Control, p: Vector2, a: float, s: float) -> void:
 	var ol := out.duplicate(); ol.append(out[0])
 	c.draw_colored_polygon(out, Color.WHITE); c.draw_polyline(ol, Color(0.05, 0.05, 0.07, 0.9), 2.5, true)
 
-const GLYPH := { "club": "Ն", "race": "Մ", "escape": "Փ", "story": "!", "rival": "Լ", "square": "Հ" }
+const GLYPH := { "guns": "Զ", "club": "Ն", "race": "Մ", "escape": "Փ", "story": "!", "rival": "Լ", "square": "Հ" }
 func _badge(c: Control, kind: String, p: Vector2, r: float, n: int) -> void:
 	var col := Color(main.missions.ICON.get(kind, "ffffff"))
 	c.draw_circle(p, r + 2.5, Color(0.05, 0.05, 0.07, 0.85))

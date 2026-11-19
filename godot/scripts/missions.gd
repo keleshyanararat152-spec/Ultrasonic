@@ -33,9 +33,9 @@ const CAST := {
 	"levon": { "gen": "Լևոնի", "name": "Լևոն", "nom": "Լևոնը", "av": "m17", "col": "35d6e6" },
 	"lilit": { "gen": "Լիլիթի", "name": "Լիլիթ", "nom": "Լիլիթը", "av": "f13", "col": "b48cff" },
 	"you": { "name": "Դու", "col": "f1ede6" } }
-const ICON := { "dealer": "4d8dff", "clothes": "b48cff", "home": "58d68d", "race": "35d6e6", "escape": "ff5a5f", "pickup": "ffcf4a", "deliver": "58d68d",
+const ICON := { "guns": "c0392b", "dealer": "4d8dff", "clothes": "b48cff", "home": "58d68d", "race": "35d6e6", "escape": "ff5a5f", "pickup": "ffcf4a", "deliver": "58d68d",
 	"cp": "35d6e6", "wp": "ff9f1c", "square": "4f9fc0", "story": "ff4fa3", "rival": "35d6e6", "club": "ff4fa3" }
-const PLACE_NAME := { "square": "Հրապարակ", "club": "Նեոն ակումբ", "race": "Մրցարշավ", "escape": "Փախուստ", "dealer": "Ավտոսրահ", "clothes": "Հագուստ", "home": "Տուն" }
+const PLACE_NAME := { "guns": "Զենքի խանութ", "square": "Հրապարակ", "club": "Նեոն ակումբ", "race": "Մրցարշավ", "escape": "Փախուստ", "dealer": "Ավտոսրահ", "clothes": "Հագուստ", "home": "Տուն" }
 const GOODS := ["լավաշ", "ծաղիկներ", "ծանրոց", "խորոված", "ուղևոր", "դեղորայք", "ծիրան"]
 
 var chs: Array = []
@@ -85,7 +85,7 @@ func _sign(x: float, y: float, text: String, col: Color) -> void:
 
 func _build_places() -> void:
 	var defs := [{ "id": "dealer", "b": [1, 2], "car": false }, { "id": "clothes", "b": [2, 4], "car": false }, { "id": "home", "b": [4, 1], "car": false },
-		{ "id": "race", "b": [5, 5], "car": true }, { "id": "escape", "b": [1, 5], "car": true }]
+		{ "id": "race", "b": [5, 5], "car": true }, { "id": "escape", "b": [1, 5], "car": true }, { "id": "guns", "b": [5, 2], "car": false }]
 	var ci := int(club_rect.x / CELL); var cj := int(club_rect.y / CELL)
 	for d in defs:
 		var i: int = d.b[0]; var j: int = (d.b[1] + 1) % N if (d.b[0] == ci and d.b[1] == cj) else d.b[1]
@@ -189,6 +189,7 @@ func _place_check(tg: Vector2) -> void:
 
 func _open_place(pl) -> void:
 	if pl.id in ["dealer", "clothes", "home"]: m.interior.open_place(pl); return
+	if pl.id == "guns": m.weapons.shop(); return
 	if pl.id == "race":
 		m.ui.panel("Մրցարշավ", "Անցիր 6 ստուգակետով ժամանակին։ Մրցանակ՝ 2 500 ֏, գումարած 50 ֏ մնացած ամեն վայրկյանի համար։" + (" Ռեկորդդ՝ " + fmt_t(prog.race_best) + "։" if prog.race_best > 0 else ""),
 			[{ "label": "Սկսել", "go": _go_race.bind(pl) }])

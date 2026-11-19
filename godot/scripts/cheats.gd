@@ -5,8 +5,11 @@ extends Node
 ##   KAYTSAK    — two more stars
 ##   HANGIST  — the stars are gone
 ##   GAGAT    — all five stars at once
+##   ZINANOTS — every gun with ammunition
+##   HAVITYAN — guns never run out or reload (type again to turn it off)
+##   ANVTANG  — full health and a full vest
 
-const CODES := { "VOSKI": "_rich", "DILIJAN": "_sevan", "KAYTSAK": "_krak", "HANGIST": "_calm", "GAGAT": "_all_stars" }   # no E, M, P, R or F: those keys do other things
+const CODES := { "VOSKI": "_rich", "DILIJAN": "_sevan", "KAYTSAK": "_krak", "HANGIST": "_calm", "GAGAT": "_all_stars", "ZINANOTS": "_guns", "HAVITYAN": "_endless", "ANVTANG": "_health" }   # no E, M, P, R or F: those keys do other things
 var m
 var typed := ""
 var no_wanted := false
@@ -46,3 +49,14 @@ func _all_stars() -> void:
 
 func tick() -> void:
 	if no_wanted and m.heat > 0: m.heat = 0
+
+func _guns() -> void:
+	for id in m.weapons.ORDER: m.weapons.give(id, false)
+	m.missions.save(); m.toast("Կոդ՝ բոլոր զենքերը")
+
+func _endless() -> void:
+	m.weapons.endless = not m.weapons.endless
+	m.toast("Կոդ՝ անվերջ փամփուշտ" if m.weapons.endless else "Կոդ՝ փամփուշտը նորից հաշվվում է")
+
+func _health() -> void:
+	m.weapons.hp = 100.0; m.weapons.armor = 100.0; m.toast("Կոդ՝ առողջություն ու զրահ")

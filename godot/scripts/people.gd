@@ -174,6 +174,30 @@ class Avatar:
 		if fade > 0: tb += dt; fade = maxf(0.0, fade - dt * 4.0)
 		_pose(clip_a, ta, clip_b, tb, fade)
 
+	## Where a bone is now, in skeleton space, from the poses set this frame (not the engine's cached ones).
+	func pose_global(b: int) -> Transform3D:
+		if b < 0: return Transform3D.IDENTITY
+		return pose_global(skel.get_bone_parent(b)) * skel.get_bone_pose(b)
+
+	func _point(b: int, child: int, want: Vector3) -> void:   # turn bone b so it points along want
+		if b < 0 or child < 0: return
+		var g := pose_global(b); var gb := g.basis.orthonormalized()
+		var cur := (gb * skel.get_bone_rest(child).origin).normalized()
+		if cur.length() < 0.5: return
+		var nb := Basis(Quaternion(cur, want.normalized())) * gb
+		var pb := pose_global(skel.get_bone_parent(b)).basis.orthonormalized()
+		skel.set_bone_pose_rotation(b, (pb.inverse() * nb).get_rotation_quaternion())
+
+	## Arms up holding a gun straight ahead; with two hands the left one comes across to steady it.
+	func aim(two: bool, k := 1.0) -> void:
+		if skel == null or k <= 0.01: return
+		var ahead := (fwd - down * 0.04).normalized()
+		_point(bones.get("R UpperArm", -1), bones.get("R Forearm", -1), (down * (1.0 - k) + ahead * k + lat * -0.08).normalized())
+		_point(bones.get("R Forearm", -1), bones.get("R Hand", -1), (down * (1.0 - k) + ahead * k).normalized())
+		if two:
+			_point(bones.get("L UpperArm", -1), bones.get("L Forearm", -1), (down * (1.0 - k) * 0.6 + (fwd * 0.75 - lat * 0.35) * k).normalized())
+			_point(bones.get("L Forearm", -1), bones.get("L Hand", -1), (down * (1.0 - k) * 0.4 + (fwd * 0.85 - lat * 0.45) * k).normalized())
+
 	func cname(kind: String) -> String:   # the clip for this person's sex, or the other's when there is none
 		var n := sex + "_" + kind
 		if FileAccess.file_exists("res://assets/anim/%s.json" % n) or _clips.has(n): return n
