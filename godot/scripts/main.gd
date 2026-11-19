@@ -21,7 +21,7 @@ var peds: Array = []
 var scenes := {}
 var people_scenes := []
 var pcar: Car = null                 # the car the player drives, or null on foot
-var me := { "x": 0.0, "y": 0.0, "a": 0.0, "walk": 0.0, "moving": 0.0 }
+var me := { "x": 0.0, "y": 0.0, "a": 0.0, "walk": 0.0, "moving": 0.0, "spd": 0.0 }
 var me_av                            # the player's avatar
 var cam: Camera3D
 var cam_a := 0.0
@@ -51,6 +51,7 @@ var missions
 var ui
 var interior
 var weather
+var fx
 
 func _ready() -> void:
 	randomize()
@@ -83,12 +84,15 @@ func _ready() -> void:
 	var lite := OS.has_feature("mobile")
 	for n in (26 if lite else (70 if hi else 40)):
 		var p := People.Ped.new()
-		p.i = randi_range(0, 6); p.j = randi_range(0, 6); p.t = randf_range(0, 1512); p.dir = 1 if randf() < 0.5 else -1; p.sp = randf_range(32, 50)
+		p.i = randi_range(0, 6); p.j = randi_range(0, 6); p.t = randf_range(0, 1512); p.dir = 1 if randf() < 0.5 else -1; p.sp = randf_range(13, 19)
+		p.umb = randf() < 0.55; p.night_home = randf() < 0.5
 		_ped_avatar(p); peds.append(p)
+		if p.umb: p.av.root.add_child(People.umbrella())
 	me_av = People.Avatar.new(people_scenes[0]); add_child(me_av.root)
 	cam = Camera3D.new(); cam.fov = 62; cam.near = 0.2; cam.far = 1400 if hi else 600
 	add_child(cam)
 	weather.setup(self)
+	fx = preload("res://scripts/effects.gd").new(); add_child(fx); fx.setup(self)
 	missions = preload("res://scripts/missions.gd").new(); add_child(missions); missions.setup(self)
 	interior = preload("res://scripts/interior.gd").new(); interior.m = self; add_child(interior); interior.build_house()
 	_hud()
@@ -182,13 +186,14 @@ func _day_night(dt: float) -> void:
 	for g: Array in city.facade_mats:
 		(g[0] as StandardMaterial3D).albedo_color = Color(1.0, 0.82, 0.55) * night * (1.6 if hi else 1.1); (g[1] as Node3D).visible = night > 0.02
 	city.bulb_mat.emission_energy_multiplier = 0.4 + night * 3.5
+	for g: BaseMaterial3D in city.lamp_glow: g.emission_energy_multiplier = night * 6.0
 	if city.parts: city.parts.glass_mat.set_shader_parameter("night", night); city.parts.lamp_mat.emission_energy_multiplier = 0.2 + night * 4.0
 	var t := target_pos()
 	var near: Array = city.lamps.duplicate()
 	near.sort_custom(func(p, q): return p.distance_squared_to(t) < q.distance_squared_to(t))
 	for k in lamp_lights.size():
 		var l: OmniLight3D = lamp_lights[k]; l.light_energy = night * (4.0 if hi else 1.2); l.omni_range = 30 if hi else 20; l.omni_attenuation = 1.2 if hi else 1.6
-		l.position = Vector3(near[k].x, city.CURB + 44, near[k].y) * S
+		l.position = Vector3(near[k].x, city.CURB + 40, near[k].y) * S
 	head_light.light_energy = night * (3.5 if hi else 2.4) if pcar else 0.0
 	night_k = night
 	_head_mat.albedo_color = Color(0.85, 0.85, 0.8).lerp(Color(2.4, 2.2, 1.8), night)
@@ -236,22 +241,23 @@ func light_at(I: int, J: int, d: int) -> String:
 	if d % 2 == 0: return "g" if ph < 6.5 else ("y" if ph < 8 else "r")
 	return "g" if ph >= 8 and ph < 14.5 else ("y" if ph >= 14.5 else "r")
 
-func _build_signals() -> void:   # one signal on the near right corner of every approach
-	var posts := []; var heads := []; var lamps := []
+func _build_signals() -> void:   # one signal on the near right corner of every approach, facing the cars that come
+	var posts := []; var lamps := []
 	for I in N + 1:
 		for J in N + 1:
 			var X := I * CELL; var Y := J * CELL
 			for e in [[0, I > 0, X - 16, Y + 138], [1, J > 0, X - 16, Y - 18], [2, I < N, X + 136, Y - 18], [3, J < N, X + 136, Y + 138]]:
 				if not e[1]: continue
 				sig.append({ "I": I, "J": J, "d": e[0] })
-				posts.append(Transform3D(Basis.from_scale(Vector3(1.8, 34, 1.8) * S), Vector3(e[2], city.CURB + 17, e[3]) * S))
-				heads.append(Transform3D(Basis.from_scale(Vector3(4.4, 11, 4.4) * S), Vector3(e[2], city.CURB + 37, e[3]) * S))
-				lamps.append(Transform3D(Basis.from_scale(Vector3(5, 5, 5) * S), Vector3(e[2], city.CURB + 38.5, e[3]) * S))
-	var unit := BoxMesh.new()
-	city._multi(unit, city._plain(Color("2a2c31")), posts)
-	city._multi(unit, city._plain(Color("1d1e22")), heads)
+				var dv: Vector2i = Car.DV[e[0]]; var f := Vector3(-dv.x, 0, -dv.y)
+				var bas := Basis(Vector3.UP, atan2(-f.z, f.x))
+				var base := Vector3(e[2] * S, city.CURB * S, e[3] * S)
+				posts.append(Transform3D(bas, base))
+				for k in 3: lamps.append(Transform3D(bas.scaled(Vector3(0.05, 0.22, 0.22)), base + f * 0.21 + Vector3(0, 3.74 - k * 0.31, 0)))
+				city._solid(Vector2(e[2], e[3]), 2.5)
+	city._multi(city.kit("signal"), null, posts)
 	var mm := MultiMesh.new(); mm.transform_format = MultiMesh.TRANSFORM_3D; mm.use_colors = true
-	var sp := SphereMesh.new(); sp.radius = 0.5; sp.height = 1; sp.radial_segments = 8; sp.rings = 4
+	var sp := SphereMesh.new(); sp.radius = 0.5; sp.height = 1; sp.radial_segments = 10; sp.rings = 5
 	mm.mesh = sp; mm.instance_count = lamps.size()
 	for k in lamps.size(): mm.set_instance_transform(k, lamps[k])
 	var mat := StandardMaterial3D.new(); mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; mat.vertex_color_use_as_albedo = true
@@ -261,8 +267,11 @@ func _build_signals() -> void:   # one signal on the near right corner of every 
 func _paint_signals() -> void:
 	if time - sig_t < 0.2: return
 	sig_t = time
-	var col := { "r": Color("ff3b30"), "y": Color("ffcc00"), "g": Color("34e07a") }
-	for k in sig.size(): sig_mm.set_instance_color(k, col[light_at(sig[k].I, sig[k].J, sig[k].d)])
+	var on := [Color(2.2, 0.25, 0.18), Color(2.2, 1.6, 0.1), Color(0.25, 2.0, 0.8)]
+	var off := [Color(0.12, 0.02, 0.02), Color(0.12, 0.09, 0.01), Color(0.02, 0.1, 0.05)]
+	for k in sig.size():
+		var l := "ryg".find(light_at(sig[k].I, sig[k].J, sig[k].d))
+		for q in 3: sig_mm.set_instance_color(k * 3 + q, on[q] if q == l else off[q])
 
 # ------------------------------------------------------------------------ cars ----------
 func _make_car(x: float, y: float, a: float, model: String) -> Car:
@@ -425,12 +434,13 @@ func _physics_process(dt: float) -> void:
 	if interior.inside != "": interior.step(dt, inp); return   # in the club or at home the city waits too
 	if pcar:
 		var hit := pcar.step(city, inp.thr, inp.steer * 0.8, inp.hand, dt)
-		if hit > 70: _crash(hit)
+		if hit > 70: _crash(hit); fx.spark(pcar.hit_pt, hit / 300.0)
 		me.x = pcar.x; me.y = pcar.y
 	else:   # walking: forward/back moves, sideways turns
 		var mv: float = inp.move.y; var tn: float = inp.move.x
 		me.a += tn * 2.8 * dt
-		var spd: float = -mv * (150.0 if mv < 0 else 80.0)
+		var spd: float = -mv * (95.0 if mv < 0 else 30.0)
+		me.spd = spd
 		me.x += cos(me.a) * spd * dt; me.y += sin(me.a) * spd * dt
 		me.moving = absf(mv)
 		if absf(mv) > 0.05: me.walk += dt * 10 * absf(mv) * (1.0 if mv < 0 else -0.7)
@@ -527,11 +537,14 @@ func _crash(impact: float) -> void:
 	crash_cd = 0.45; shake = minf(1.0, maxf(shake, impact / 260))
 	if hi: _dent(pcar, pcar.hit_pt, clampf(impact / 1400.0, 0.03, 0.22))
 	pcar.dmg += 2 if impact > 260 else 1
+	for p in peds:   # people nearby turn to look at the crash
+		if absf(p.x - pcar.x) < 220 and absf(p.y - pcar.y) < 220: People.react(p, Vector2(pcar.x, pcar.y), "look")
 	if OS.has_feature("mobile"): Input.vibrate_handheld(int(minf(60, 15 + impact / 8)))
 
 func _process(dt: float) -> void:
 	_day_night(dt)
 	weather.tick(dt)
+	fx.tick(dt)
 	_paint_signals()
 	var flash := int(time * 6) % 2 == 0
 	for c: Car in cars:
@@ -546,7 +559,11 @@ func _process(dt: float) -> void:
 	if not pcar:
 		me_av.root.position = Vector3(me.x, city.ground_y(me.x, me.y), me.y) * S
 		me_av.root.rotation.y = -me.a
-		me_av.walk(me.walk * 0.85, minf(1, me.moving * 1.5)); me_av.root.position.y += me_av.bob
+		var ms: float = me.spd * S
+		if absf(ms) < 0.3: me_av.animate(dt, "idle")
+		elif ms > 4.5: me_av.animate(dt, "run", clampf(ms / 4.5, 0.7, 1.9))
+		else: me_av.animate(dt, "walk", ms / 1.35)
+		me_av.root.position.y += me_av.bob
 	# camera: behind the car or the walker
 	var t := target_pos(); var head: float = pcar.a if pcar else me.a
 	var spd := absf(pcar.v) if pcar else 0.0
@@ -595,14 +612,21 @@ func _place_ped(p, dt: float) -> void:
 	var r: Node3D = p.av.root
 	r.position = Vector3(p.x, city.ground_y(p.x, p.y), p.y) * S
 	var dc := (r.position - cam.position).length()
-	r.visible = dc < (220 if hi else 130)
+	r.visible = dc < (220 if hi else 130) and not (p.night_home and night_k > 0.75 and dc > 40)   # half the people go home at night
 	if not r.visible: return
 	r.rotation = Vector3(0, -p.a, PI / 2 if p.down > 0 else 0.0)
 	if p.down > 0: r.position.y += 0.3
-	var moving: bool = p.down <= 0 and (p.free_life > 0 or p.cross.is_empty() or not p.cross.wait)
-	var rate := (17.0 if p.panic_t > 0 or p.free_life > 0 else 11.0)
-	p.av.phase += dt * rate * (1.0 if moving else 0.0)
-	if dc < (130 if hi else 70): p.av.walk(p.av.phase, 1.0 if moving else 0.0); r.position.y += p.av.bob
+	var moving: bool = p.down <= 0 and p.act == "" and (p.free_life > 0 or p.cross.is_empty() or not p.cross.wait)
+	if p.umb: p.av.root.get_child(1).visible = weather.cur.rain > 0.3
+	if dc >= (130 if hi else 70): return
+	var kind := "walk"; var rate := 1.0
+	if p.down > 0: kind = "idle"
+	elif not moving: kind = p.act if p.act != "" else "wait"
+	elif p.panic_t > 0 or p.free_life > 0: kind = "run"; rate = clampf((70.0 if p.free_life > 0 else p.sp * 2.8) * S / 4.0, 0.8, 1.8)
+	else:
+		var sp: float = p.sp * (1.6 if not p.cross.is_empty() else 1.0) * (1.35 if weather.cur.rain > 0.4 and not p.umb else 1.0)
+		rate = sp * S / 1.35
+	p.av.animate(dt, kind, rate); r.position.y += p.av.bob
 
 # ------------------------------------------------------------------------ HUD ----------
 func _panel() -> PanelContainer:

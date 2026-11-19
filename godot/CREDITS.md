@@ -14,3 +14,10 @@
 - **Trees** (`assets/tree/`): grown in Blender with the Sapling add-on by `tools/blender/trees.py`; bark from Poly Haven
   (bark_platanus, CC0); the leaf card is made from ambientCG LeafSet010 (CC0).
 - **Skies** (`assets/sky/`): Poly Haven, the Qwantani pure-sky series (CC0), tonemapped and resized to 4096 x 2048.
+- **Motion capture** (`assets/anim/*.json`): Microsoft Rocketbox animation library, MIT licence
+  (https://github.com/microsoft/Microsoft-Rocketbox, `Assets/Animations`): walks, runs, idles, phone calls, talking,
+  waiting, sitting, cheering, anger, dancing. Turned into small per-bone clips by `tools/blender/rocketbox_anims.py`
+  and retargeted onto the avatars in `scripts/people.gd`.
+- **Street furniture** (`assets/street/`): Poly Haven models, CC0 — painted_wooden_bench, metal_trash_can,
+  fire_hydrant, street_lamp_01, planter_box_01 (trimmed and lightened by `tools/blender/street_kit.py`). The bus stop,
+  newspaper kiosk and traffic light are made in Blender by the same script.

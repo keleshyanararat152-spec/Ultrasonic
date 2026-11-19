@@ -585,7 +585,7 @@ func frame(dt: float) -> void:   # from main._process: characters, the beam and 
 		var av = npc[id]; seen[id] = true; av.root.visible = true
 		var t: Vector2 = m.target_pos(); var face := atan2(t.y - p.y, t.x - p.x) if t.distance_to(p) < 160 else -PI / 2
 		av.root.position = Vector3(p.x, m.city.ground_y(p.x, p.y), p.y) * S; av.root.rotation.y = -face
-		av.walk(0.0, 0.0)
+		av.animate(dt, "talk" if t.distance_to(p) < 160 else "idle"); av.root.position.y += av.bob
 	for id in npc: if not seen.has(id): npc[id].root.visible = false
 	var giver = null
 	if not story_on() and not story_done() and not m.ui.talking(): giver = spos(chs[prog.story].at)

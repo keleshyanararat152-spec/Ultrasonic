@@ -31,7 +31,21 @@ class Avatar:
 		"Pelvis", "Spine1", "Head", "L Foot", "R Foot", "L Hand", "R Hand",
 		"L Finger1", "L Finger11", "L Finger2", "L Finger21", "L Finger3", "L Finger31", "L Finger4", "L Finger41",
 		"R Finger1", "R Finger11", "R Finger2", "R Finger21", "R Finger3", "R Finger31", "R Finger4", "R Finger41", "L Finger0", "R Finger0"]
+	const CHILD := { "Spine": "Spine1", "Spine1": "Spine2", "Spine2": "Neck", "Neck": "Head", "L Clavicle": "L UpperArm", "R Clavicle": "R UpperArm",
+		"L UpperArm": "L Forearm", "R UpperArm": "R Forearm", "L Forearm": "L Hand", "R Forearm": "R Hand", "L Hand": "L Finger2", "R Hand": "R Finger2",
+		"L Thigh": "L Calf", "R Thigh": "R Calf", "L Calf": "L Foot", "R Calf": "R Foot", "L Foot": "L Toe0", "R Foot": "R Toe0",
+		"L Finger0": "L Finger01", "L Finger1": "L Finger11", "L Finger2": "L Finger21", "L Finger3": "L Finger31", "L Finger4": "L Finger41",
+		"R Finger0": "R Finger01", "R Finger1": "R Finger11", "R Finger2": "R Finger21", "R Finger3": "R Finger31", "R Finger4": "R Finger41" }
 	var bob := 0.0                   # how high the body rides in the step, Godot units
+	var key := ""                    # the model's file: clip tables are worked out once per model
+	var sex := "m"
+	# motion-capture clips (assets/anim, Rocketbox): the clip playing, the one fading out, and how far each has run
+	var clip_a := ""
+	var ta := 0.0
+	var clip_b := ""
+	var tb := 0.0
+	var fade := 0.0
+	var idle_t := 0.0
 	var wt = null                    # { idx: bone indices, stand: [Quaternion], step: [[Quaternion]] }
 
 	func _init(scene: PackedScene) -> void:
@@ -76,9 +90,9 @@ class Avatar:
 			var pel: int = bones.get("Pelvis", -1)
 			var so := skel.get_bone_global_rest(ua).origin.dot(lat) - (skel.get_bone_global_rest(pel).origin.dot(lat) if pel >= 0 else 0.0)
 			outward[s] = lat * signf(so)
-		var key := scene.resource_path
-		if not _walk_tables.has(key): _walk_tables[key] = _make_table()
-		wt = _walk_tables[key]
+		key = scene.resource_path
+		sex = "f" if key.get_file().begins_with("f") else "m"
+		idle_t = randf() * 30.0
 
 	func _bind(n: Node) -> void:
 		if n is MeshInstance3D and (n as MeshInstance3D).skin != null:
@@ -140,24 +154,114 @@ class Avatar:
 	func _rot(g: Transform3D, axis: Vector3, ang: float) -> Transform3D:
 		return Transform3D(Basis(axis, ang) * g.basis, g.origin)
 
-	## ph: step phase; amp: 0 standing .. 1 walking. Reads the table made at load; cheap.
+	## ph: step phase (one stride per TAU); amp: 0 standing .. 1 walking. The walk clip blended with standing.
 	func walk(ph: float, amp: float) -> void:
-		if skel == null or wt == null: return
-		var f := fposmod(ph, TAU) / TAU * WN; var k0 := int(f) % WN; var k1 := (k0 + 1) % WN; var u: float = f - floorf(f)
-		bob = absf(cos(ph)) * 0.035 * clampf(amp, 0, 1)
-		var idx: Array = wt.idx; var a0: Array = wt.step[k0]; var a1: Array = wt.step[k1]; var st: Array = wt.stand
+		if skel == null: return
+		var w := cname("walk"); var L := clip_len(w)
+		idle_t += 1.0 / 60.0
+		_pose(w, fposmod(ph, TAU) / TAU * L, cname("idle"), idle_t, 1.0 - clampf(amp, 0, 1))
+
+	## Plays a clip by kind (walk, run, stroll, idle, look, phone, talk, sit, wait, angry, cheer, umbrella),
+	## fading over a quarter second from whatever played before; rate speeds the clip up or down.
+	func animate(dt: float, kind: String, rate := 1.0) -> void:
+		if skel == null: return
+		var want := cname(kind)
+		if want != clip_a:
+			clip_b = clip_a; tb = ta; fade = 1.0 if clip_a != "" else 0.0; clip_a = want
+			ta = randf() * clip_len(want) if not (kind in ["walk", "run", "stroll"]) else 0.0
+		ta += dt * rate
+		if fade > 0: tb += dt; fade = maxf(0.0, fade - dt * 4.0)
+		_pose(clip_a, ta, clip_b, tb, fade)
+
+	func cname(kind: String) -> String:   # the clip for this person's sex, or the other's when there is none
+		var n := sex + "_" + kind
+		if FileAccess.file_exists("res://assets/anim/%s.json" % n) or _clips.has(n): return n
+		return ("m_" if sex == "f" else "f_") + kind
+
+	static var _clips := {}
+	static func load_clip(n: String) -> Dictionary:
+		if _clips.has(n): return _clips[n]
+		var d = JSON.parse_string(FileAccess.get_file_as_string("res://assets/anim/%s.json" % n))
+		if not (d is Dictionary): d = { "fps": 15, "frames": 1, "bones": {}, "pel": [[0, 0, 0]] }
+		_clips[n] = d
+		return d
+
+	func clip_len(n: String) -> float:
+		var c := load_clip(n)
+		return maxf(0.1, (float(c.frames) - 1.0) / float(c.fps))
+
+	static var _tables := {}
+	## The clip on this model: for each frame the local rotation of every bone. Each bone takes the clip's turn from
+	## its rest, then is swung to point where the clip's bone points, so a different rest pose does not matter.
+	func _table(n: String) -> Dictionary:
+		var tk := key + ":" + n
+		if _tables.has(tk): return _tables[tk]
+		var c := load_clip(n)
+		var bm := Basis(lat, -down, fwd); var bq := bm.get_rotation_quaternion(); var bqi := bq.inverse()
+		var names: Array = []; var idx := PackedInt32Array()
+		for bn in c.bones:
+			var b := skel.find_bone("Bip01 " + bn)
+			if b >= 0: names.append(bn); idx.append(b)
+		var inset := {}
+		for k in idx.size(): inset[idx[k]] = k
+		var rest_w := {}   # global rest rotation of every bone
+		for b in skel.get_bone_count(): rest_w[b] = skel.get_bone_global_rest(b).basis.get_rotation_quaternion()
+		var child := {}
+		for k in names.size():
+			var cn: String = CHILD.get(names[k], "")
+			child[k] = skel.find_bone("Bip01 " + cn) if cn != "" else -1
+		var frames := []
+		for f in int(c.frames):
+			var world := {}
+			var target := {}
+			for k in names.size():
+				var bd: Dictionary = c.bones[names[k]]; var qv: Array = bd.q[f]
+				var dq := bq * Quaternion(qv[0], qv[1], qv[2], qv[3]) * bqi
+				var w: Quaternion = dq * rest_w[idx[k]]
+				if bd.has("d") and child[k] >= 0:
+					var dv: Array = bd.d[f]
+					var cur := (w * skel.get_bone_rest(child[k]).origin).normalized()
+					var tgt := (bm * Vector3(dv[0], dv[1], dv[2])).normalized()
+					if cur.length() > 0.5 and cur.dot(tgt) > -0.999: w = Quaternion(cur, tgt) * w
+				target[idx[k]] = w.normalized()
+			var locs := []
+			for k in names.size():
+				var b := idx[k]
+				locs.append((_world_of(skel.get_bone_parent(b), target, world, rest_w).inverse() * target[b]).normalized())
+			frames.append(locs)
+		var pel := PackedFloat32Array()
+		for v: Array in c.pel: pel.append(float(v[1]))
+		var t := { "idx": idx, "f": frames, "pel": pel, "fps": float(c.fps) }
+		_tables[tk] = t
+		return t
+
+	func _world_of(b: int, target: Dictionary, world: Dictionary, rest_w: Dictionary) -> Quaternion:
+		if b < 0: return Quaternion.IDENTITY
+		if target.has(b): return target[b]
+		if world.has(b): return world[b]
+		var p := skel.get_bone_parent(b)
+		var w: Quaternion = _world_of(p, target, world, rest_w) * skel.get_bone_rest(b).basis.get_rotation_quaternion() if p >= 0 else rest_w[b]
+		world[b] = w
+		return w
+
+	## Sets the pose: clip a at time ta, faded with clip b at time tb by k (1 = all b).
+	func _pose(a: String, t_a: float, b: String, t_b: float, k: float) -> void:
+		var A := _table(a); var fa: Array = A.f; var n := fa.size()
+		var x := fposmod(t_a * A.fps, maxf(1.0, n - 1.0)); var i0 := int(x); var i1 := mini(i0 + 1, n - 1); var u := x - i0
+		var r0: Array = fa[i0]; var r1: Array = fa[i1]
+		var idx: PackedInt32Array = A.idx
+		var B = null; var j0 := 0; var j1 := 0; var v := 0.0
+		if k > 0.001 and b != "":
+			B = _table(b); var nb: int = (B.f as Array).size()
+			var y := fposmod(t_b * B.fps, maxf(1.0, nb - 1.0)); j0 = int(y); j1 = mini(j0 + 1, nb - 1); v = y - j0
 		for i in idx.size():
-			var b: int = idx[i]
-			if b < 0: continue
-			var q: Quaternion = (a0[i] as Quaternion).slerp(a1[i], u)
-			if amp < 0.999: q = (st[i] as Quaternion).slerp(q, clampf(amp, 0, 1))
-			skel.set_bone_pose_rotation(b, q)
-		if amp < 0.3:   # standing: the chest rises and falls a little
-			var sp: int = idx[9]
-			if sp >= 0:
-				var t := Time.get_ticks_msec() * 0.001 + phase * 0.37
-				var la: Vector3 = (_g_rest_basis(sp).inverse() * lat).normalized()
-				skel.set_bone_pose_rotation(sp, (st[9] as Quaternion) * Quaternion(la, sin(t * 1.6) * 0.025 * (1.0 - amp / 0.3)))
+			var q: Quaternion = (r0[i] as Quaternion).slerp(r1[i], u)
+			if B != null and i < (B.idx as PackedInt32Array).size() and B.idx[i] == idx[i]:
+				q = q.slerp((B.f[j0][i] as Quaternion).slerp(B.f[j1][i], v), k)
+			skel.set_bone_pose_rotation(idx[i], q)
+		var pa: PackedFloat32Array = A.pel
+		bob = lerpf(pa[i0], pa[i1], u) * H * 0.47
+		if B != null: bob = lerpf(bob, lerpf(B.pel[j0], B.pel[j1], v) * H * 0.47, k)
 
 	func _g_rest_basis(b: int) -> Basis:
 		return skel.get_bone_global_rest(b).basis
@@ -249,6 +353,21 @@ class Avatar:
 			if fa >= 0: _set_global(fa, _rot(ug * skel.get_bone_rest(fa), lat, bend * amp))
 		return bounce * 0.07
 
+static var _umb_mesh: Mesh
+## An umbrella held over the head (a child of the avatar's root, shown in the rain).
+static func umbrella() -> MeshInstance3D:
+	if _umb_mesh == null:
+		var st := SurfaceTool.new()
+		var top := CylinderMesh.new(); top.top_radius = 0.03; top.bottom_radius = 0.58; top.height = 0.26; top.radial_segments = 8; top.rings = 1; top.cap_bottom = false
+		st.append_from(top, 0, Transform3D(Basis.IDENTITY, Vector3(0, 2.12, 0)))
+		var stick := CylinderMesh.new(); stick.top_radius = 0.012; stick.bottom_radius = 0.012; stick.height = 0.9; stick.radial_segments = 5; stick.rings = 1
+		st.append_from(stick, 0, Transform3D(Basis.IDENTITY, Vector3(0, 1.6, 0)))
+		_umb_mesh = st.commit()
+	var mi := MeshInstance3D.new(); mi.mesh = _umb_mesh; mi.position = Vector3(0.12, 0, 0.16)
+	var m := StandardMaterial3D.new(); m.albedo_color = [Color("1d2330"), Color("7a1f2b"), Color("2b4a6b"), Color("3a3a3a"), Color("6b4c8a"), Color("c9a227")].pick_random()
+	m.roughness = 0.35; m.cull_mode = BaseMaterial3D.CULL_DISABLED; mi.material_override = m; mi.visible = false
+	return mi
+
 # --------------------------------------------------------------------- pedestrians ----------
 class Ped:
 	var i := 0
@@ -263,6 +382,10 @@ class Ped:
 	var panic_t := 0.0
 	var cross := {}
 	var free_life := 0.0     # a driver who ran from a stolen car
+	var act := ""            # standing still for a while: phone, look, wait, talk, angry
+	var act_t := 0.0
+	var umb := false         # carries an umbrella in the rain
+	var night_home := false  # goes home after dark
 	var av: Avatar
 
 static func loop_pos(i: int, j: int, t: float) -> Vector2:
@@ -288,13 +411,19 @@ static func start_cross(p: Ped, k: int) -> void:   # from block corner k, over t
 static func step(p: Ped, world, dt: float) -> void:
 	if p.panic_t > 0: p.panic_t -= dt
 	var run := 2.8 if p.panic_t > 0 else 1.0
+	if p.act != "":   # a moment of the day: on the phone, looking round, chatting, cross at a driver
+		p.act_t -= dt
+		if p.act_t <= 0 or p.panic_t > 0: p.act = ""
+		else: return
+	if run == 1.0 and p.cross.is_empty() and randf() < dt * 0.02: _stop_awhile(p, world); if p.act != "": return
+	if world.weather.cur.rain > 0.4 and not p.umb: run = 1.35   # no umbrella: hurry through the rain
 	if not p.cross.is_empty():
 		var cr := p.cross
 		if cr.wait:
 			cr.wait_t += dt
 			if world.light_at(cr.I, cr.J, cr.d) == "r" or cr.wait_t > 24: cr.wait = false
 			return
-		var d := Vector2(cr.x1 - p.x, cr.y1 - p.y); var L := d.length(); var st := p.sp * 1.25 * run * dt
+		var d := Vector2(cr.x1 - p.x, cr.y1 - p.y); var L := d.length(); var st := p.sp * 1.6 * run * dt
 		p.a = atan2(d.y, d.x)
 		if L <= st:
 			p.i = cr.i; p.j = cr.j; p.t = fposmod(cr.k * 378.0 + p.dir * 0.5, 1512.0); p.cross = {}
@@ -309,9 +438,24 @@ static func step(p: Ped, world, dt: float) -> void:
 	var q := loop_pos(p.i, p.j, p.t); p.x = q.x; p.y = q.y
 	p.a = floor(p.t / 378.0) * PI / 2 + (PI if p.dir < 0 else 0.0)
 
+static func _stop_awhile(p: Ped, world) -> void:
+	for o in world.peds:   # someone close by who is also free: they stop and talk
+		if o != p and o.act == "" and o.cross.is_empty() and o.panic_t <= 0 and o.down <= 0 and absf(o.x - p.x) < 40 and absf(o.y - p.y) < 40:
+			var t := randf_range(6, 14)
+			p.act = "talk"; p.act_t = t; o.act = "talk"; o.act_t = t
+			p.a = atan2(o.y - p.y, o.x - p.x); o.a = p.a + PI
+			return
+	p.act = ["phone", "look", "wait", "idle"].pick_random(); p.act_t = randf_range(4, 11)
+	p.a += randf_range(-1.2, 1.2)
+
+## A car came too close: a shake of the fist at the driver, or a look at a crash.
+static func react(p: Ped, from: Vector2, kind: String) -> void:
+	if p.down > 0 or p.panic_t > 0 or p.act == "angry" or not p.cross.is_empty(): return
+	p.act = kind; p.act_t = 2.5 if kind == "angry" else 3.5; p.a = atan2(from.y - p.y, from.x - p.x)
+
 static func panic(p: Ped, from: Vector2) -> void:   # run away from a fast car or a car-jacking
 	if p.down > 0: return
-	p.panic_t = 2.2
+	p.panic_t = 2.2; p.act = ""
 	if p.cross.is_empty():
 		var fa := loop_pos(p.i, p.j, fposmod(p.t + 6, 1512.0)); var fb := loop_pos(p.i, p.j, fposmod(p.t - 6, 1512.0))
 		p.dir = 1 if fa.distance_to(from) > fb.distance_to(from) else -1

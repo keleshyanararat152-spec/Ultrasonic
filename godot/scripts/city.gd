@@ -78,6 +78,9 @@ func push_out(p: Vector2, r: float) -> Vector2:
 				elif m == rr: p.x = b.x + b.w + r
 				elif m == t: p.y = b.y - r
 				else: p.y = b.y + b.h + r
+		for c in props.get(Vector2i(i, j), []):   # benches, bins, lamps, kiosks
+			var d: Vector2 = p - c[0]; var rr: float = c[1] + r
+			if d.length_squared() < rr * rr and d.length_squared() > 0.0001: p = c[0] + d.normalized() * rr
 	p.x = clampf(p.x, 8, WS - 8); p.y = clampf(p.y, 8, WS - 8)
 	return p
 
@@ -185,6 +188,73 @@ func _multi(mesh: Mesh, mat: Material, xforms: Array, shadows := true, colors :=
 func _box_xf(cx: float, cy: float, cz: float, sx: float, sy: float, sz: float) -> Transform3D:  # centre and size in game units
 	return Transform3D(Basis.from_scale(Vector3(sx, sy, sz) * S), Vector3(cx, cy, cz) * S)
 
+var props := {}           # Vector2i(block) -> [[centre, radius]]: street furniture you cannot walk through
+var lamp_glow: Array = []   # lamp glass that lights up at night
+var benches: Array = []     # [position, facing angle] in game units, for people to sit on
+
+## The first mesh in a model file, with its own materials.
+func kit(name: String) -> Mesh:
+	var root: Node = load("res://assets/street/%s.glb" % name).instantiate(); var mesh: Mesh = null
+	var st := [root]
+	while st.size() and mesh == null:
+		var n: Node = st.pop_back(); st.append_array(n.get_children())
+		if n is MeshInstance3D: mesh = (n as MeshInstance3D).mesh
+	root.free()
+	return mesh
+
+func _solid(at: Vector2, r: float) -> void:
+	var k := Vector2i(int(floor(at.x / CELL)), int(floor(at.y / CELL)))
+	if not props.has(k): props[k] = []
+	props[k].append([at, r])
+
+## Lamps at the corners, and along the pavements benches, bins, hydrants, bus stops; kiosks in the parks.
+func _street_furniture(rng: RandomNumberGenerator) -> void:
+	var lamp := kit("lamp")
+	for k in lamp.get_surface_count():   # the lantern's glass and bulb glow after dusk
+		var m = lamp.surface_get_material(k)
+		if m is BaseMaterial3D and (String(m.resource_name).contains("glass") or String(m.resource_name).contains("bulb")):
+			var g: BaseMaterial3D = m.duplicate(); g.emission_enabled = true; g.emission = Color("ffd9a0"); g.emission_energy_multiplier = 0.0
+			lamp.surface_set_material(k, g); lamp_glow.append(g)
+	var lx := []
+	for p: Vector2 in lamps:
+		lx.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * 1.2), Vector3(p.x, CURB, p.y) * S)); _solid(p, 3)
+	_multi(lamp, null, lx)
+	var put := { "bench": [], "bin": [], "hydrant": [], "busstop": [], "kiosk": [], "planter": [] }
+	var stops := 0
+	for i in N:
+		for j in N:
+			var b: Dictionary = blocks[i][j]
+			var bx := i * CELL + 120.0; var by := j * CELL + 120.0
+			if b.type == "park":   # a kiosk at one corner of the park
+				var c := rng.randi() % 4; var cx := bx + (60.0 if c % 2 == 0 else 340.0); var cy := by + (60.0 if c < 2 else 340.0)
+				put.kiosk.append([Vector2(cx, cy), atan2(by + 200 - cy, bx + 200 - cx) + PI]); _solid(Vector2(cx, cy), 17)
+			if b.type == "plaza": continue
+			for side in 4:
+				var n: Vector2 = [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)][side]
+				var along := Vector2(-n.y, n.x)
+				var mid := Vector2(bx + 200, by + 200) + n * 200   # the kerb at the middle of this side
+				var at := func(t: float, off: float) -> Vector2: return mid + along * (t - 200) - n * off
+				var face := atan2(n.y, n.x)
+				if stops < 12 and rng.randf() < 0.18 and b.type != "park":
+					stops += 1; var c: Vector2 = at.call(250, 10)
+					put.busstop.append([c, face]); _solid(c - along * 15, 8); _solid(c + along * 15, 8)
+				elif rng.randf() < 0.55:
+					var t := 150.0 if rng.randf() < 0.5 else 250.0; var c: Vector2 = at.call(t, 5)
+					put.bench.append([c, face]); _solid(c, 6); benches.append([c, face])
+				if rng.randf() < 0.5: var c: Vector2 = at.call(124, 4); put.bin.append([c, face]); _solid(c, 4)
+				if rng.randf() < 0.3: var c: Vector2 = at.call(60, 4); put.hydrant.append([c, face + PI / 2]); _solid(c, 3)
+	# the square: benches round the pond side, planters at the corners, two kiosks
+	var sx := 3 * CELL + 120.0; var sy := 3 * CELL + 120.0
+	for c in [[sx + 40, sy + 40], [sx + 360, sy + 40], [sx + 40, sy + 360], [sx + 360, sy + 360]]:
+		for q in [Vector2(22, 0), Vector2(0, 22)]: put.planter.append([Vector2(c[0], c[1]) + q, 0.0])
+	put.kiosk.append([Vector2(sx + 70, sy + 330), -PI / 4]); put.kiosk.append([Vector2(sx + 330, sy + 70), PI * 3 / 4])
+	for kname in put:
+		var xs := []
+		for e in put[kname]:
+			var p: Vector2 = e[0]
+			xs.append(Transform3D(Basis(Vector3.UP, -float(e[1])), Vector3(p.x, CURB, p.y) * S))
+		if xs.size(): _multi(kit(kname), null, xs)
+
 var parts                 # the 3D windows, balconies and shop fronts (computers)
 var keep_out: Array = []   # Rect2s where park trees are left out (the house)
 
@@ -283,21 +353,13 @@ func build() -> void:
 		_multi(trunk, _plain(Color("6b4a35")), trunks)
 		var cm := _plain(Color.WHITE, 0.85); cm.vertex_color_use_as_albedo = true; cm.vertex_color_is_srgb = false
 		_multi(_crown_mesh(), cm, crowns, true, crown_cols)
-	var posts := []; var bulbs := []
-	for i in N:
-		for j in N:
-			var bx := i * CELL + 120.0; var by := j * CELL + 120.0
-			for p in [[bx + 7, by + 7], [bx + 393, by + 7], [bx + 7, by + 393], [bx + 393, by + 393]]:
-				posts.append(_box_xf(p[0], CURB + 23, p[1], 1.6, 46, 1.6))
-				bulbs.append(_box_xf(p[0], CURB + 47, p[1], 4, 4, 4))
-	_multi(unit, _plain(Color("2f3238")), posts)
-	var bm := _plain(Color("fff1c9")); bm.emission_enabled = true; bm.emission = Color("ffe6b0"); bm.emission_energy_multiplier = 0.4; bulb_mat = bm
 	lamps.clear()
 	for i in N:
 		for j in N:
 			var bx := i * CELL + 120.0; var by := j * CELL + 120.0
 			for p in [[bx + 7, by + 7], [bx + 393, by + 7], [bx + 7, by + 393], [bx + 393, by + 393]]: lamps.append(Vector2(p[0], p[1]))
-	_multi(unit, bm, bulbs, false)
+	var bm := _plain(Color("fff1c9")); bm.emission_enabled = true; bm.emission = Color("ffe6b0"); bm.emission_energy_multiplier = 0.4; bulb_mat = bm
+	_street_furniture(rng)
 	# road markings: a dashed centre line on every street and zebra crossings at every crossroads
 	var dashes := []; var zebra := []
 	for k in N + 1:
