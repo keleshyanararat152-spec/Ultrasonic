@@ -50,7 +50,7 @@ func build(city) -> void:
 	var unit := BoxMesh.new()
 	var rng := RandomNumberGenerator.new(); rng.seed = 90210
 	var gy: float = city.CURB * S
-	for i in city.N:
+	for i in city.NX:
 		for j in city.N:
 			var b: Dictionary = city.blocks[i][j]
 			if b.type != "b": continue

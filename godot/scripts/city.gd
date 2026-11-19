@@ -12,6 +12,9 @@ const FULL := 390.0        # height the baked facade texture covers, in game uni
 const WIDE := 562.0        # width it covers
 
 var WS: int = N * CELL + 120
+const NX := 10             # block columns: 0..6 the old city, 7 the river, 8..9 the district over the bridges
+var WX: int = NX * CELL + 120
+var world                  # the river, the bridges and the hills (world.gd)
 const TUFF := ["d98f7a", "c9755f", "e0a989", "b8695a", "8d5a52", "a8a39d", "e6b39a", "5b5560"]   # the tuff stone of each building
 var blocks: Array = []     # blocks[i][j] = { type, rects: [ {x, y, w, h, z, d} ], trees: [ {x, y, r} ] }
 var _seed: int = 20261116
@@ -61,6 +64,34 @@ func generate() -> void:
 				if cells.size() == 1 and b.rects[0].d > 0.3: b.rects = _courtyard(b.rects[0])
 			col.append(b)
 		blocks.append(col)
+	_east()
+
+## The river's column and the new district on the far bank (its own random numbers: the old city stays the same).
+func _east() -> void:
+	var rng := RandomNumberGenerator.new(); rng.seed = 7777
+	var river: Array = []
+	for j in N: river.append({ "type": "river", "rects": [], "trees": [] })
+	blocks.append(river)
+	for i: int in [8, 9]:
+		var col: Array = []
+		for j in N:
+			var ox: float = i * CELL + 142.0; var oy: float = j * CELL + 142.0
+			var b := { "type": "b", "rects": [], "trees": [] }
+			if (i == 8 and j == 3) or (i == 9 and j == 5):
+				b.type = "park"
+				for t in 11: b.trees.append({ "x": ox + 20 + rng.randf() * 316, "y": oy + 20 + rng.randf() * 316, "r": 14 + rng.randf() * 12 })
+			else:
+				var lay := rng.randf()
+				var cells: Array
+				if lay < 0.3: cells = [[0, 0, 356, 356]]
+				elif lay < 0.6: cells = [[0, 0, 170, 356], [186, 0, 170, 356]]
+				else: cells = [[0, 0, 170, 170], [186, 0, 170, 170], [0, 186, 170, 170], [186, 186, 170, 170]]
+				for c in cells:
+					var sx := rng.randf() * 18; var sy := rng.randf() * 18; var ex := rng.randf() * 18; var ey := rng.randf() * 18
+					b.rects.append({ "x": ox + c[0] + sx, "y": oy + c[1] + sy, "w": c[2] - sx - ex, "h": c[3] - sy - ey, "c": TUFF[rng.randi() % TUFF.size()], "z": 7 + rng.randf() * 10, "d": rng.randf() })
+				if cells.size() == 1 and b.rects[0].d > 0.4: b.rects = _courtyard(b.rects[0])
+			col.append(b)
+		blocks.append(col)
 
 ## A big building round a courtyard: four wings, the east one with a gateway through it (no new random numbers,
 ## so the rest of the city comes out the same).
@@ -102,7 +133,8 @@ static func bheight(r: Dictionary) -> float:
 ## Keep a circle of radius r out of the buildings of its own block; returns true when it pushed.
 func push_out(p: Vector2, r: float) -> Vector2:
 	var i := int(floor(p.x / CELL)); var j := int(floor(p.y / CELL))
-	if i >= 0 and j >= 0 and i < N and j < N:
+	p = preload("res://scripts/world.gd").river_push(p, r)
+	if i >= 0 and j >= 0 and i < blocks.size() and j < N:
 		for b in blocks[i][j].rects:
 			var cx := clampf(p.x, b.x, b.x + b.w); var cy := clampf(p.y, b.y, b.y + b.h)
 			var dx := p.x - cx; var dy := p.y - cy; var d2 := dx * dx + dy * dy
@@ -119,11 +151,14 @@ func push_out(p: Vector2, r: float) -> Vector2:
 		for c in props.get(Vector2i(i, j), []):   # benches, bins, lamps, kiosks
 			var d: Vector2 = p - c[0]; var rr: float = c[1] + r
 			if d.length_squared() < rr * rr and d.length_squared() > 0.0001: p = c[0] + d.normalized() * rr
-	p.x = clampf(p.x, 8, WS - 8); p.y = clampf(p.y, 8, WS - 8)
+	p.x = clampf(p.x, -1380, WX - 8); p.y = clampf(p.y, 8, 7740)
+	if p.x < 8 and p.y < 3760: p.x = 8   # west of the city only the hills reach out
 	return p
 
-func ground_y(x: float, y: float) -> float:   # pavements are raised
-	return CURB if x > 120 and y > 120 and x < WS and y < WS and fmod(x, CELL) >= 120 and fmod(y, CELL) >= 120 else 0.0
+func ground_y(x: float, y: float) -> float:   # pavements are raised; the hills south of the city have their own ground
+	if y > 3760.0 and world: return world.height(x, y)
+	if x > 3760.0 and x < 4160.0: return 0.0   # the bridges
+	return CURB if x > 120 and y > 120 and x < WX and y < WS and fmod(x, CELL) >= 120 and fmod(y, CELL) >= 120 else 0.0
 
 func road_point() -> Vector2:  # a random spot in the middle of a street
 	var k := randi_range(0, N); var m := randi_range(0, N - 1); var t := ic(m) + randf_range(150, 370)
@@ -167,7 +202,8 @@ func _real_trees(spots: Array, rng: RandomNumberGenerator) -> void:
 		var key := Vector3i(t[3], t[4], rng.randi() % meshes.size())
 		if not groups.has(key): groups[key] = [[], []]
 		var sc: float = t[2] * rng.randf_range(0.85, 1.12)
-		groups[key][0].append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * sc), Vector3(t[0] * S, CURB * S, t[1] * S)))
+		var gy: float = (t[5] if t.size() > 5 else CURB) * S   # hill trees carry their own ground height
+		groups[key][0].append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * sc), Vector3(t[0] * S, gy, t[1] * S)))
 		groups[key][1].append(Color(rng.randf_range(0.85, 1.05), rng.randf_range(0.9, 1.08), rng.randf_range(0.8, 0.95)))
 	for key: Vector3i in groups:
 		var mi := _multi(meshes[key.z], null, groups[key][0], true, groups[key][1])
@@ -259,9 +295,10 @@ func _street_furniture(rng: RandomNumberGenerator) -> void:
 	_multi(lamp, null, lx)
 	var put := { "bench": [], "bin": [], "hydrant": [], "busstop": [], "kiosk": [], "planter": [] }
 	var stops := 0
-	for i in N:
+	for i in NX:
 		for j in N:
 			var b: Dictionary = blocks[i][j]
+			if b.type == "river": continue
 			var bx := i * CELL + 120.0; var by := j * CELL + 120.0
 			if b.type == "park":   # a kiosk at one corner of the park
 				var c := rng.randi() % 4; var cx := bx + (60.0 if c % 2 == 0 else 340.0); var cy := by + (60.0 if c < 2 else 340.0)
@@ -322,7 +359,7 @@ func _gardens(rng: RandomNumberGenerator) -> void:
 			var n: Node = st.pop_back(); st.append_array(n.get_children())
 			if n is MeshInstance3D: plants[nm] = (n as MeshInstance3D).mesh; break
 		root.free()
-	for i in N:
+	for i in NX:
 		for j in N:
 			var b: Dictionary = blocks[i][j]
 			if b.type != "park": continue
@@ -369,16 +406,16 @@ func build() -> void:
 	if blocks.is_empty(): generate()
 	var unit := BoxMesh.new()   # 1 x 1 x 1, scaled per instance
 	# ground: asphalt everywhere, the blocks sit on it as raised slabs
-	var ground := MeshInstance3D.new()
-	var pm := PlaneMesh.new(); pm.size = Vector2(WS, WS) * S
-	ground.mesh = pm
-	ground.material_override = _wet_mat("asphalt_02", 4.0, Color(0.92, 0.92, 0.95))
-	ground.position = Vector3(WS / 2.0, 0, WS / 2.0) * S
-	add_child(ground)
-	var far := MeshInstance3D.new()   # hills beyond the edge
-	var fm := PlaneMesh.new(); fm.size = Vector2(1400, 1400)
-	far.mesh = fm; far.material_override = _plain(Color("76866a")); far.position = Vector3(WS / 2.0 * S, -0.1, WS / 2.0 * S)
+	var asphalt := _wet_mat("asphalt_02", 4.0, Color(0.92, 0.92, 0.95))
+	for g in [[0.0, 3760.0], [4160.0, float(WX)]]:   # the old city, and the district over the river
+		var ground := MeshInstance3D.new(); var pm := PlaneMesh.new(); pm.size = Vector2(g[1] - g[0], WS) * S
+		ground.mesh = pm; ground.material_override = asphalt; ground.position = Vector3((g[0] + g[1]) / 2.0, 0, WS / 2.0) * S
+		add_child(ground)
+	var far := MeshInstance3D.new()   # fields beyond the edge
+	var fm := PlaneMesh.new(); fm.size = Vector2(2400, 2400)
+	far.mesh = fm; far.material_override = _plain(Color("76866a")); far.position = Vector3(WX / 2.0 * S, -0.6, WS / 2.0 * S)
 	add_child(far)
+	world = preload("res://scripts/world.gd").new(); add_child(world); world.build(self)
 
 	var slabs := []; var parks := []; var plaza := []
 	var walls := { 0: [], 1: [] }; var wall_cols := { 0: [], 1: [] }; var roofs := []; var ledges := []; var ledge_cols := []
@@ -386,9 +423,10 @@ func build() -> void:
 	var rails := []; var pent := []
 	var tree_spots := []   # [x, y, size, block i, block j] for the Blender trees on computers
 	var rng := RandomNumberGenerator.new(); rng.seed = 7041   # looks only: leaves the city's own random numbers alone
-	for i in N:
+	for i in NX:
 		for j in N:
 			var b: Dictionary = blocks[i][j]
+			if b.type == "river": continue
 			var xf := _box_xf(i * CELL + 320, CURB / 2.0, j * CELL + 320, 400, CURB, 400)
 			if b.type == "plaza": plaza.append(xf)
 			else: slabs.append(xf)
@@ -457,8 +495,9 @@ func build() -> void:
 	var lm := _plain(Color.WHITE); lm.vertex_color_use_as_albedo = true; lm.vertex_color_is_srgb = RenderingServer.get_rendering_device() != null
 	_multi(unit, lm, ledges, true, ledge_cols)
 	# trees: the park trees plus a row along every pavement, and three-headed lamps at the corners
-	for i in N:
+	for i in NX:
 		for j in N:
+			if blocks[i][j].type == "river": continue
 			var bx := i * CELL + 120.0; var by := j * CELL + 120.0
 			for t in [100, 200, 300]:
 				for p in [[bx + t, by + 6], [bx + t, by + 394], [bx + 6, by + t], [bx + 394, by + t]]:
@@ -473,32 +512,37 @@ func build() -> void:
 		_multi(trunk, _plain(Color("6b4a35")), trunks)
 		var cm := _plain(Color.WHITE, 0.85); cm.vertex_color_use_as_albedo = true; cm.vertex_color_is_srgb = false
 		_multi(_crown_mesh(), cm, crowns, true, crown_cols)
+	var bridge_lamps: Array = lamps.duplicate()   # the bridges put theirs in already
 	lamps.clear()
-	for i in N:
+	for i in NX:
 		for j in N:
+			if blocks[i][j].type == "river": continue
 			var bx := i * CELL + 120.0; var by := j * CELL + 120.0
 			for p in [[bx + 7, by + 7], [bx + 393, by + 7], [bx + 7, by + 393], [bx + 393, by + 393]]: lamps.append(Vector2(p[0], p[1]))
+	lamps.append_array(bridge_lamps)
 	var bm := _plain(Color("fff1c9")); bm.emission_enabled = true; bm.emission = Color("ffe6b0"); bm.emission_energy_multiplier = 0.4; bulb_mat = bm
 	_street_furniture(rng)
 	if hi: _gardens(rng)
 	# road markings: a dashed centre line on every street and zebra crossings at every crossroads
 	var dashes := []; var zebra := []
-	for k in N + 1:
+	var river := func(x: float) -> bool: return x > 3760 and x < 4160
+	for k in NX + 1:
 		var c := ic(k)
 		var pos := 0.0
-		while pos < WS:
+		while pos < WX:
 			var inside := fmod(pos, CELL)
 			if inside > 150 and inside < 510:
-				dashes.append(_box_xf(c, 0.15, pos + 9, 2.5, 0.3, 18))
-				dashes.append(_box_xf(pos + 9, 0.15, c, 18, 0.3, 2.5))
+				if pos < WS and not river.call(c): dashes.append(_box_xf(c, 0.15, pos + 9, 2.5, 0.3, 18))
+				if k <= N and (not river.call(pos + 9) or k in [2, 5]): dashes.append(_box_xf(pos + 9, 0.15, c, 18, 0.3, 2.5))
 			pos += 40
-	for i in N + 1:
+	for i in NX + 1:
 		for j in N + 1:
 			var X := i * CELL; var Y := j * CELL
+			if river.call(X + 60): continue
 			for s in 6:
 				var o := 8 + s * 19
-				zebra.append(_box_xf(X - 15, 0.15, Y + o + 4.5, 16, 0.3, 9))
-				zebra.append(_box_xf(X + 135, 0.15, Y + o + 4.5, 16, 0.3, 9))
+				if not river.call(X - 15): zebra.append(_box_xf(X - 15, 0.15, Y + o + 4.5, 16, 0.3, 9))
+				if not river.call(X + 135): zebra.append(_box_xf(X + 135, 0.15, Y + o + 4.5, 16, 0.3, 9))
 				zebra.append(_box_xf(X + o + 4.5, 0.15, Y - 15, 9, 0.3, 16))
 				zebra.append(_box_xf(X + o + 4.5, 0.15, Y + 135, 9, 0.3, 16))
 	var paint := _plain(Color("e9e7e1"), 0.8)

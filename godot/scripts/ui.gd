@@ -9,6 +9,10 @@ var main
 var font: Font
 var base: ImageTexture          # the whole city, drawn once
 var WS := float(N * CELL + 120)
+const MO := Vector2(-1400, 0)   # the map covers the city, the river district and the hills: from MO, MW wide and tall
+const MW := 7800.0
+func _mp(p: Vector2) -> Vector2:   # world (game units) -> big map pixels
+	return (p - MO) * (big_draw.size.x / MW)
 
 var job_panel: PanelContainer
 var job_text: Label
@@ -90,36 +94,51 @@ func _panel(col: Color) -> PanelContainer:
 func _label(fs: int) -> Label:
 	var l := Label.new(); l.add_theme_font_size_override("font_size", fs); return l
 
-func _build_base() -> void:   # the city map: streets, pavements, buildings, parks, the square
-	var R := 512; var k := R / WS; var img := Image.create(R, R, false, Image.FORMAT_RGBA8)
-	img.fill(Color("474a52"))
+func _build_base() -> void:   # the map: streets, pavements, buildings, parks, the square, the river, the hills and their road
+	var R := 1024; var k := R / MW; var img := Image.create(R, R, false, Image.FORMAT_RGBA8)
+	img.fill(Color("6d7f5e"))
 	var city = main.city if main else null
-	for i in N:
+	var px := func(x: float, y: float) -> Vector2i: return Vector2i(int((x - MO.x) * k), int((y - MO.y) * k))
+	var rect := func(x: float, y: float, w: float, h: float, col: Color) -> void:
+		var a: Vector2i = px.call(x, y); img.fill_rect(Rect2i(a, Vector2i(maxi(1, int(w * k) + 1), maxi(1, int(h * k) + 1))), col)
+	if city and city.world:   # the hills, darker the higher
+		var w = city.world
+		var step := 4
+		for py in range(int((3760 - MO.y) * k), R, step):
+			for qx in range(0, R, step):
+				var x := qx / k + MO.x; var y := py / k + MO.y
+				if not w.in_hills(x, y): continue
+				var h: float = w.height(x, y)
+				img.fill_rect(Rect2i(qx, py, step, step), Color("7e9a64").lerp(Color("5a6a48"), clampf(h / 900.0, 0, 1)).lerp(Color("8f8a7c"), clampf((h - 700) / 500.0, 0, 1)))
+	rect.call(0, 0, city.WX if city else WS, WS, Color("474a52"))
+	rect.call(3760, -100, 400, 7900, Color("4f8fa8"))   # the river
+	for j in [2, 5]: rect.call(3760, j * CELL, 400, 120, Color("7d776e"))   # the bridges
+	if city == null: base = ImageTexture.create_from_image(img); return
+	for i in city.blocks.size():
 		for j in N:
-			img.fill_rect(Rect2i(int((i * CELL + 120) * k), int((j * CELL + 120) * k), int(400 * k) + 1, int(400 * k) + 1), Color("9b948a"))
-			if city == null: continue
 			var b: Dictionary = city.blocks[i][j]; var o := Vector2(i * CELL + 142, j * CELL + 142)
+			if b.type == "river": continue
+			rect.call(i * CELL + 120, j * CELL + 120, 400, 400, Color("9b948a"))
 			if b.type == "park":
-				img.fill_rect(Rect2i(int(o.x * k), int(o.y * k), int(356 * k), int(356 * k)), Color("5f9a52"))
-				for t in b.trees:
-					var c := Vector2(t.x, t.y) * k; var r: float = t.r * k * 1.2
-					img.fill_rect(Rect2i(int(c.x - r), int(c.y - r), int(r * 2), int(r * 2)), Color("467a3e"))
+				rect.call(o.x, o.y, 356, 356, Color("5f9a52"))
+				for t in b.trees: rect.call(t.x - t.r, t.y - t.r, t.r * 2, t.r * 2, Color("467a3e"))
 			elif b.type == "plaza":
-				img.fill_rect(Rect2i(int(o.x * k), int(o.y * k), int(356 * k), int(356 * k)), Color("d8c7ad"))
-				var c := (o + Vector2(178, 178)) * k
-				for y in range(-8, 9):
-					for x in range(-8, 9):
-						if x * x + y * y <= 64: img.set_pixel(int(c.x) + x, int(c.y) + y, Color("6fb5c9"))
+				rect.call(o.x, o.y, 356, 356, Color("d8c7ad"))
+				var c: Vector2i = px.call(o.x + 178, o.y + 178)
+				for y in range(-6, 7):
+					for x in range(-6, 7):
+						if x * x + y * y <= 36: img.set_pixel(c.x + x, c.y + y, Color("6fb5c9"))
 			else:
 				for r in b.rects:
-					var rr := Rect2i(int(r.x * k), int(r.y * k), int(r.w * k), int(r.h * k))
-					img.fill_rect(rr, Color("6b4a44"))
-					img.fill_rect(rr.grow(-1), Color(r.get("c", "b98576")))
-	if city:
-		var m = main.missions if main else null
-		if m and not m.club_rect.is_empty():
-			var r: Dictionary = m.club_rect
-			img.fill_rect(Rect2i(int(r.x * k), int(r.y * k), int(r.w * k), int(r.h * k)), Color("ff7ab8"))
+					rect.call(r.x, r.y, r.w, r.h, Color("6b4a44")); rect.call(r.x + 6, r.y + 6, r.w - 12, r.h - 12, Color(r.get("c", "b98576")))
+	if city.world:   # the mountain road and its viewpoint
+		for e in city.world.road:
+			var c: Vector2i = px.call(e[0].x, e[0].y); img.fill_rect(Rect2i(c - Vector2i(4, 4), Vector2i(8, 8)), Color("474a52"))
+		var sm: Vector2i = px.call(city.world.summit.x, city.world.summit.y); img.fill_rect(Rect2i(sm - Vector2i(9, 9), Vector2i(18, 18)), Color("d8c7ad"))
+	var m = main.missions if main else null
+	if m and not m.club_rect.is_empty():
+		var r: Dictionary = m.club_rect
+		rect.call(r.x, r.y, r.w, r.h, Color("ff7ab8"))
 	base = ImageTexture.create_from_image(img)
 
 func _clear_wp() -> void:
@@ -245,7 +264,7 @@ func _draw_radar() -> void:
 	var ctr: Vector2 = main.map_pos()
 	var X := Transform2D(th, Vector2(z, z), 0, Vector2(R, R)) * Transform2D(0, -ctr)
 	c.draw_set_transform_matrix(X)
-	c.draw_texture_rect(base, Rect2(0, 0, WS, WS), false)
+	c.draw_texture_rect(base, Rect2(MO, Vector2(MW, MW)), false)
 	c.draw_set_transform_matrix(Transform2D.IDENTITY)
 	var ms = main.missions
 	if ms.wp != null:
@@ -263,39 +282,39 @@ func _draw_radar() -> void:
 	_arrow(c, Vector2(R, R), head + th, 13)
 
 func _draw_big() -> void:
-	var c := big_draw; var S := c.size.x; var k := S / WS
+	var c := big_draw; var S := c.size.x
 	c.draw_texture_rect(base, Rect2(0, 0, S, S), false)
 	var ms = main.missions; var flash := int(main.time * 6) % 2 == 0
 	if ms.wp != null:
 		var pts := PackedVector2Array()
-		for p in ms.route(main.map_pos()): pts.append(p * k)
+		for p in ms.route(main.map_pos()): pts.append(_mp(p))
 		_stroke(c, pts, 7)
 	for car in main.cars:
-		if car.kind == "police" and car.chase: c.draw_circle(Vector2(car.x, car.y) * k, 7, Color("ff5a5f") if flash else Color("4d8dff"))
+		if car.kind == "police" and car.chase: c.draw_circle(_mp(Vector2(car.x, car.y)), 7, Color("ff5a5f") if flash else Color("4d8dff"))
 	if ms.act != null and ms.act.get("cps"):
 		var cur: int = ms.act.ci if ms.story_on() else ms.act.k
 		for n in ms.act.cps.size():
-			if n > cur: _badge(c, "cp", Vector2(ms.act.cps[n].x, ms.act.cps[n].y) * k, 12, n + 1)
+			if n > cur: _badge(c, "cp", _mp(Vector2(ms.act.cps[n].x, ms.act.cps[n].y)), 12, n + 1)
 	for it in ms.map_items():
-		var q: Vector2 = it.p * k
+		var q: Vector2 = _mp(it.p)
 		_badge(c, it.kind, q, 17 if it.get("big", false) else 14, it.get("n", 0))
 		if it.has("name"):
 			var w := font.get_string_size(it.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 			c.draw_string_outline(font, q + Vector2(-w / 2, 34), it.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, 5, Color(0.05, 0.05, 0.07, 0.9))
 			c.draw_string(font, q + Vector2(-w / 2, 34), it.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
 	var head: float = main.pcar.a if main.pcar else main.me.a
-	_arrow(c, main.map_pos() * k, head, 16)
+	_arrow(c, _mp(main.map_pos()), head, 16)
 
 func _big_input(e: InputEvent) -> void:
 	var pos := Vector2.INF
 	if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT: pos = e.position
 	elif e is InputEventScreenTouch and e.pressed: pos = e.position
 	if pos == Vector2.INF: return
-	var ms = main.missions; var k := big_draw.size.x / WS
-	if ms.wp != null and (ms.wp * k).distance_to(pos) < 26: ms.set_waypoint(null); return
+	var ms = main.missions; var k := big_draw.size.x / MW
+	if ms.wp != null and _mp(ms.wp).distance_to(pos) < 26: ms.set_waypoint(null); return
 	for it in ms.map_items():
-		if it.kind != "wp" and (it.p * k).distance_to(pos) < 26: ms.set_waypoint(it.p); return
-	ms.set_waypoint(ms.snap_road(pos / k).p)
+		if it.kind != "wp" and _mp(it.p).distance_to(pos) < 26: ms.set_waypoint(it.p); return
+	ms.set_waypoint(ms.snap_road(pos / k + MO).p)
 
 func _stroke(c: Control, pts: PackedVector2Array, w: float) -> void:
 	if pts.size() < 2: return

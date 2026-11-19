@@ -59,6 +59,7 @@ var cine
 var settings
 var cheats
 var weapons
+var mods
 var steer_k := 1.0
 var hud_layer: CanvasLayer
 var photo_layer: CanvasLayer
@@ -96,7 +97,7 @@ func _ready() -> void:
 	var lite := OS.has_feature("mobile")
 	for n in (26 if lite else (110 if hi else 40)):
 		var p := People.Ped.new()
-		p.i = randi_range(0, 6); p.j = randi_range(0, 6); p.t = randf_range(0, 1512); p.dir = 1 if randf() < 0.5 else -1; p.sp = randf_range(13, 19)
+		p.i = randi_range(0, 6) if n % 6 != 5 else randi_range(8, 9); p.j = randi_range(0, 6); p.t = randf_range(0, 1512); p.dir = 1 if randf() < 0.5 else -1; p.sp = randf_range(13, 19)
 		p.umb = randf() < 0.55; p.night_home = randf() < 0.5
 		_ped_avatar(p); peds.append(p)
 		if p.umb: p.av.root.add_child(People.umbrella())
@@ -109,9 +110,10 @@ func _ready() -> void:
 	missions = preload("res://scripts/missions.gd").new(); add_child(missions); missions.setup(self)
 	interior = preload("res://scripts/interior.gd").new(); interior.m = self; add_child(interior); interior.build_house()
 	_hud()
-	settings = preload("res://scripts/settings.gd").new(); settings.setup(self, photo_layer)
 	cheats = preload("res://scripts/cheats.gd").new(); add_child(cheats); cheats.setup(self)
 	weapons = preload("res://scripts/weapons.gd").new(); add_child(weapons); weapons.setup(self)
+	mods = preload("res://scripts/mods.gd").new(); add_child(mods); mods.setup(self)
+	settings = preload("res://scripts/settings.gd").new(); settings.setup(self, photo_layer)
 	interior.start()
 	toast(missions.start_text(), 4)
 
@@ -274,10 +276,11 @@ func light_at(I: int, J: int, d: int) -> String:
 
 func _build_signals() -> void:   # one signal on the near right corner of every approach, facing the cars that come
 	var posts := []; var lamps := []
-	for I in N + 1:
+	for I: int in city.NX + 1:
 		for J in N + 1:
-			var X := I * CELL; var Y := J * CELL
-			for e in [[0, I > 0, X - 16, Y + 138], [1, J > 0, X - 16, Y - 18], [2, I < N, X + 136, Y - 18], [3, J < N, X + 136, Y + 138]]:
+			var X: int = I * CELL; var Y: int = J * CELL
+			var bridge := J in World.BRIDGES
+			for e in [[0, I > 0 and (I != 8 or bridge), X - 16, Y + 138], [1, J > 0, X - 16, Y - 18], [2, I < city.NX and (I != 7 or bridge), X + 136, Y - 18], [3, J < N, X + 136, Y + 138]]:
 				if not e[1]: continue
 				sig.append({ "I": I, "J": J, "d": e[0] })
 				var dv: Vector2i = Car.DV[e[0]]; var f := Vector3(-dv.x, 0, -dv.y)
@@ -469,6 +472,10 @@ func _physics_process(dt: float) -> void:
 	var inp: Dictionary = touch_ui.read_input()
 	if interior.inside != "": interior.step(dt, inp); return   # in the club or at home the city waits too
 	if pcar:
+		if pcar.y > 3760.0:   # uphill slows you, downhill pulls you on
+			var f := Vector2(cos(pcar.a), sin(pcar.a))
+			var slope: float = (city.ground_y(pcar.x + f.x * 15, pcar.y + f.y * 15) - city.ground_y(pcar.x - f.x * 15, pcar.y - f.y * 15)) / 30.0
+			pcar.v -= slope * 98.0 * dt
 		var hit := pcar.step(city, inp.thr, clampf(inp.steer * 0.8 * steer_k, -1, 1), inp.hand, dt)
 		if hit > 70: _crash(hit); fx.spark(pcar.hit_pt, hit / 300.0)
 		me.x = pcar.x; me.y = pcar.y
@@ -637,6 +644,7 @@ func _process(dt: float) -> void:
 		var k := shake * shake * 6; p += Vector2(randf_range(-k, k), randf_range(-k, k)); shake = maxf(0, shake - dt * 2.5)
 	var gy: float = city.ground_y(t.x, t.y)
 	cam.position = Vector3(p.x, (36 if pcar else 30) * far + gy, p.y) * S
+	cam.position.y = maxf(cam.position.y, (city.ground_y(p.x, p.y) + 12.0) * S)   # never inside a hill
 	cam.look_at(Vector3(t.x + cos(cam_a) * 45, gy + (9 if pcar else 14), t.y + sin(cam_a) * 45) * S)
 	cam.fov = 60 + spd * 0.035
 	if _test.get("carcam", false):   # testing aid: a close look at the McLaren's front corner
@@ -661,7 +669,13 @@ func _process(dt: float) -> void:
 func _place(c: Car, dt: float) -> void:
 	var gy: float = city.ground_y(c.x, c.y)
 	c.node.position = Vector3(c.x, gy, c.y) * S
-	c.node.rotation.y = -c.a
+	if c.y > 3700.0:   # in the hills the car follows the slope under its wheels
+		var f := Vector2(cos(c.a), sin(c.a)); var r := Vector2(-f.y, f.x)
+		var hf: float = city.ground_y(c.x + f.x * 20, c.y + f.y * 20); var hb: float = city.ground_y(c.x - f.x * 20, c.y - f.y * 20)
+		var hl: float = city.ground_y(c.x + r.x * 9, c.y + r.y * 9); var hr: float = city.ground_y(c.x - r.x * 9, c.y - r.y * 9)
+		c.node.position.y = (hf + hb) / 2.0 * S
+		c.node.rotation = Vector3(atan2(hr - hl, 18.0), -c.a, atan2(hf - hb, 40.0))
+	else: c.node.rotation = Vector3(0, -c.a, 0)
 	var u: Dictionary = c.anim
 	var dc := (c.node.position - cam.position).length()
 	c.node.visible = dc < 260
