@@ -1,7 +1,7 @@
-# Builds the Godot game (godot/) for Windows on every push to the game branches.
-# Download it from the run's "Artifacts" section on GitHub (Actions tab): pink-city-windows.
-# The phone build is paused while the work is on the computer version.
-name: Game build (Windows)
+# Builds the Godot game (godot/) for Windows and for Android phones on every push to the game branches.
+# Download them from the run's "Artifacts" section on GitHub (Actions tab): pink-city-windows, pink-city-apk.
+# The phone build uses the lighter Compatibility renderer (no SDFGI, grass or the other computer-only effects).
+name: Game build (Windows + Android)
 
 on:
   push:
@@ -34,4 +34,30 @@ jobs:
         with:
           name: pink-city-windows
           path: godot/build/windows/
+          retention-days: 30
+
+  apk:
+    runs-on: ubuntu-22.04
+    container:
+      image: barichello/godot-ci:4.7.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Godot for Android
+        run: |
+          mkdir -v -p ~/.local/share/godot/export_templates/ ~/.config/
+          mv /root/.config/godot ~/.config/godot || true
+          mv /root/.local/share/godot/export_templates/4.7.2.stable ~/.local/share/godot/export_templates/4.7.2.stable || true
+      - name: Import
+        working-directory: godot
+        run: godot --headless --import || true
+      - name: Export debug APK
+        working-directory: godot
+        run: |
+          mkdir -p build
+          godot --headless --verbose --export-debug "Android" build/pink-city.apk
+          ls -la build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pink-city-apk
+          path: godot/build/pink-city.apk
           retention-days: 30

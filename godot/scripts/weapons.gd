@@ -294,6 +294,7 @@ func tick(dt: float) -> void:
 			var a: Array = owned()[cur]; var need: int = GUNS[cur].mag - int(a[0]); var take := mini(need, int(a[1]))
 			a[0] = int(a[0]) + take; a[1] = int(a[1]) - take
 	if holding and can_shoot() and GUNS[cur].auto: _try_shot()
+	if can_shoot() and m.touch_ui.pedals.values().has("fire"): _try_shot()   # the phone's fire button
 	flash.light_energy = maxf(0.0, flash.light_energy - dt * 120); flash_q.visible = flash.light_energy > 1.0
 	for t in tracers:
 		if t[1] > 0:

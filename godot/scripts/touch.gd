@@ -34,13 +34,21 @@ func _rects() -> Dictionary:
 	var hand := Rect2(rev.position.x - 12 - 66, s.y - m - 66, 66, 66)
 	var act := Rect2(s.x - m - 84, s.y - m - (140 + 14 + 70 if driving else 84), 84 if not driving else 70, 84 if not driving else 70)
 	if driving: act.position.x = s.x - m - 70
-	return { "gas": gas, "rev": rev, "hand": hand, "act": act }
+	var fire := Rect2(s.x - m - 110, s.y - m - 84 - 14 - 110, 110, 110)   # on foot with a gun: hold to fire, tap to change gun
+	var gun := Rect2(fire.position.x - 14 - 70, s.y - m - 84 - 14 - 70, 70, 70)
+	return { "gas": gas, "rev": rev, "hand": hand, "act": act, "fire": fire, "gun": gun }
+
+func _armed() -> bool:
+	return main != null and main.weapons != null and not driving and main.weapons.owned().size() > 0 and main.interior.inside == ""
 
 func _hit(p: Vector2) -> String:
 	var r := _rects()
 	if act_label != "" and (r.act as Rect2).grow(8).has_point(p): return "act"
 	if driving:
 		for k in ["gas", "rev", "hand"]:
+			if (r[k] as Rect2).grow(10).has_point(p): return k
+	elif _armed():
+		for k in ["fire", "gun"]:
 			if (r[k] as Rect2).grow(10).has_point(p): return k
 	return ""
 
@@ -52,7 +60,9 @@ func _input(e: InputEvent) -> void:
 		touched = true
 		if e.pressed:
 			var k := _hit(e.position)
-			if k == "act":
+			if k == "gun":
+				main.weapons.next_gun(1)
+			elif k == "act":
 				if main: main.act()
 				if OS.has_feature("mobile"): Input.vibrate_handheld(10)
 			elif k != "":
@@ -113,6 +123,9 @@ func _draw() -> void:
 		_btn(r.rev, "Արգելակ", Color("ff5a5f"), vals.has("rev"), false, 14)
 		_btn(r.hand, "Ձեռքի", Color("f1ede6"), vals.has("hand"), true, 13)
 	if act_label != "": _btn(r.act, act_label, Color("ffcf4a"), false, true, 15)
+	if _armed():
+		_btn(r.fire, "Կրակ", Color("ff5a5f"), vals.has("fire"), true, 18)
+		_btn(r.gun, "Զենք", Color("f1ede6"), false, true, 14)
 	if left_id >= 0:
 		var o := left_origin
 		if driving:   # the steering track under the left thumb
