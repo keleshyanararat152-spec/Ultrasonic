@@ -196,7 +196,7 @@ func _day_night(dt: float) -> void:
 		sun.light_energy = 0.0
 		env.ambient_light_color = Color(0.52, 0.48, 0.44) if interior.inside == "home" else Color(0.32, 0.26, 0.38)
 		if hi:
-			env.ambient_light_energy = 1.5 if interior.inside == "home" else 1.1
+			env.ambient_light_energy = 1.5 if interior.inside == "home" else 1.7
 			env.volumetric_fog_density = 0.0 if interior.inside == "home" else 0.02
 			env.volumetric_fog_albedo = Color(0.8, 0.75, 0.9)
 		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED

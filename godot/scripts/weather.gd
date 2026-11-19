@@ -32,9 +32,9 @@ func setup(main) -> void:
 	rain_mat.direction = Vector3(0.08, -1, 0.04); rain_mat.spread = 2.0; rain_mat.initial_velocity_min = 22; rain_mat.initial_velocity_max = 28
 	rain_mat.gravity = Vector3(0, -9.8, 0)
 	drops.process_material = rain_mat
-	var q := QuadMesh.new(); q.size = Vector2(0.018, 0.75)
+	var q := QuadMesh.new(); q.size = Vector2(0.012, 0.6)
 	var dm := StandardMaterial3D.new(); dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	dm.albedo_color = Color(0.78, 0.82, 0.9, 0.4); dm.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y; dm.disable_receive_shadows = true
+	dm.albedo_color = Color(0.78, 0.82, 0.9, 0.28); dm.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y; dm.disable_receive_shadows = true
 	q.material = dm; drops.draw_pass_1 = q
 	drops.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; drops.emitting = false
 	add_child(drops)
