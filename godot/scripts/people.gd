@@ -184,6 +184,15 @@ class Avatar:
 		if _clips.has(n): return _clips[n]
 		var d = JSON.parse_string(FileAccess.get_file_as_string("res://assets/anim/%s.json" % n))
 		if not (d is Dictionary): d = { "fps": 15, "frames": 1, "bones": {}, "pel": [[0, 0, 0]] }
+		elif int(d.frames) > 120:   # long idles: every other frame is plenty, and halves the work of fitting them
+			for bn in d.bones:
+				for key in d.bones[bn]:
+					var arr: Array = d.bones[bn][key]; var out := []
+					for i in range(0, arr.size(), 2): out.append(arr[i])
+					d.bones[bn][key] = out
+			var pl := []
+			for i in range(0, (d.pel as Array).size(), 2): pl.append(d.pel[i])
+			d.pel = pl; d.frames = pl.size(); d.fps = float(d.fps) / 2.0
 		_clips[n] = d
 		return d
 
