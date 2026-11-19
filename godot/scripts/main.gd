@@ -53,6 +53,8 @@ var interior
 var weather
 var fx
 var snd
+var square
+var neon
 
 func _ready() -> void:
 	randomize()
@@ -62,6 +64,8 @@ func _ready() -> void:
 	city.generate(); city.keep_out = [preload("res://scripts/interior.gd").house_spot(city).rect]
 	city.build()
 	weather = preload("res://scripts/weather.gd").new(); add_child(weather)
+	square = preload("res://scripts/square.gd").new(); add_child(square); square.build(self)
+	neon = preload("res://scripts/neon.gd").new(); add_child(neon); neon.build(self)
 	_build_signals()
 	for name in MODELS: scenes[name] = load("res://assets/cars/%s.glb" % name)
 	for name in People.AVATARS: people_scenes.append(load("res://assets/people/%s.glb" % name))
@@ -546,6 +550,7 @@ func _crash(impact: float) -> void:
 	snd.crash_hit(impact / 300.0)
 	if hi: _dent(pcar, pcar.hit_pt, clampf(impact / 1400.0, 0.03, 0.22))
 	pcar.dmg += 2 if impact > 260 else 1
+	fx.damage_look(pcar)
 	for p in peds:   # people nearby turn to look at the crash
 		if absf(p.x - pcar.x) < 220 and absf(p.y - pcar.y) < 220: People.react(p, Vector2(pcar.x, pcar.y), "look")
 	if OS.has_feature("mobile"): Input.vibrate_handheld(int(minf(60, 15 + impact / 8)))
@@ -555,6 +560,8 @@ func _process(dt: float) -> void:
 	weather.tick(dt)
 	fx.tick(dt)
 	snd.tick(dt)
+	square.frame(dt)
+	neon.frame(dt)
 	_paint_signals()
 	var flash := int(time * 6) % 2 == 0
 	for c: Car in cars:

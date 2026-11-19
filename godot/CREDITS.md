@@ -25,3 +25,4 @@
   lawn texture leafy_grass (CC0). Grass blades are made in code (`city.gd`, `_grass_patch`).
 - **Arches** (`assets/facade/arch.glb`): made in Blender by `tools/blender/arch.py`.
 - **Sounds**: all made in code at start (`scripts/sound.gd`, `interior.gd`) — no sound files.
+- **Fountain and pigeons** (`assets/street/fountain.glb`, `pigeon.glb`): made in Blender by `tools/blender/fountain.py`.

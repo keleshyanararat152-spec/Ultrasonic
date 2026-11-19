@@ -91,6 +91,7 @@ func build(city) -> void:
 							arches.append(Transform3D(basis, p + Vector3(0, gy + 1.75, 0) + nrm * 0.01)); arch_cols.append(pale)
 						elif street:   # a shop front on the ground floor
 							shops.append(Transform3D(basis, p + Vector3(0, gy + 1.75, 0) + nrm * 0.01)); shop_cols.append(awn)
+							if c == 1 or (n <= 2 and c == 0): city.sign_spots.append(Transform3D(basis, p + Vector3(0, gy + 4.35, 0) + nrm * 0.12))
 						var k := 1
 						while true:
 							var y := gy + 0.9 + k * FLOOR + 1.0

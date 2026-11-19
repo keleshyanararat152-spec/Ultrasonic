@@ -73,7 +73,8 @@ func _courtyard(r: Dictionary) -> Array:
 		var e := r.duplicate(); e.x = q[0]; e.y = q[1]; e.w = q[2]; e.h = q[3]; e.court = true; out.append(e)
 	return out
 
-var courts: Array = []   # courtyard middles, game units
+var courts: Array = []
+var sign_spots: Array = []   # over a shop front: where a neon sign can hang (Godot units, +z out of the wall)   # courtyard middles, game units
 
 ## A roof terrace: railings round the edge; tall buildings get a glass penthouse set back from it.
 func _roof_extras(r: Dictionary, h: float, rails: Array, pent: Array) -> void:

@@ -118,9 +118,10 @@ func tick(dt: float) -> void:
 	exhaust.emitting = absf(c.v) < 200
 	exhaust.global_position = base - f * 2.35 + r * 0.45 + Vector3(0, 0.35, 0)
 	exhaust.rotation.y = -c.a
-	if c.dmg >= 4:   # a battered car smokes from under the bonnet
+	if c.dmg >= 4:   # a battered car smokes from under the bonnet, darker the worse it is
 		hood.emitting = true; hood.global_position = base + f * 1.5 + Vector3(0, 1.0, 0)
 		hood.amount_ratio = clampf((c.dmg - 3) / 6.0, 0.2, 1.0)
+		var q: QuadMesh = hood.draw_pass_1; (q.material as StandardMaterial3D).albedo_color = Color(0.55, 0.55, 0.57, 0.5).lerp(Color(0.12, 0.12, 0.13, 0.7), clampf((c.dmg - 4) / 6.0, 0, 1))
 
 func _lay(a: Vector3, b: Vector3) -> void:   # one strip of rubber from a to b
 	var d := b - a; d.y = 0; var L := d.length()
@@ -129,3 +130,61 @@ func _lay(a: Vector3, b: Vector3) -> void:   # one strip of rubber from a to b
 	var xf := Transform3D(Basis(Vector3.UP, ang).scaled(Vector3(L + 0.05, 1, 0.24)), (a + b) / 2 + Vector3(0, 0.025, 0))
 	marks.set_instance_transform(mark_k, xf); marks.set_instance_color(mark_k, Color(0.02, 0.02, 0.02, 0.55))
 	mark_k = (mark_k + 1) % MARKS
+
+# ------------------------------------------------------------------ heavy damage ----------
+var _crack_tex: ImageTexture
+var glass_burst: GPUParticles3D
+
+## A spider-web of cracks drawn once: white lines out from a few impact points.
+func _cracks() -> ImageTexture:
+	if _crack_tex: return _crack_tex
+	var img := Image.create(256, 256, false, Image.FORMAT_RGBA8); img.fill(Color(1, 1, 1, 0))
+	var rng := RandomNumberGenerator.new(); rng.seed = 77
+	for hit in 3:
+		var c := Vector2(rng.randf_range(50, 206), rng.randf_range(50, 206))
+		for k in 14:
+			var a := k * TAU / 14 + rng.randf_range(-0.2, 0.2); var p := c
+			for s in 40:
+				a += rng.randf_range(-0.25, 0.25); p += Vector2.from_angle(a) * 3.0
+				if p.x < 0 or p.y < 0 or p.x > 255 or p.y > 255: break
+				img.set_pixelv(Vector2i(p), Color(1, 1, 1, 0.85))
+		for ring in [10.0, 22.0, 38.0]:
+			for k in 60:
+				var p: Vector2 = c + Vector2.from_angle(k * TAU / 60) * ring * rng.randf_range(0.85, 1.15)
+				if p.x >= 0 and p.y >= 0 and p.x < 256 and p.y < 256: img.set_pixelv(Vector2i(p), Color(1, 1, 1, 0.7))
+	_crack_tex = ImageTexture.create_from_image(img)
+	return _crack_tex
+
+## Called after each hit on your car: past a few hits the glass cracks, after many it is gone, in a shower of bits.
+func damage_look(c: Car) -> void:
+	if c == null or c.node == null: return
+	var stage := 2 if c.dmg >= 9 else (1 if c.dmg >= 4 else 0)
+	if stage <= int(c.anim.get("glass", 0)): return
+	c.anim.glass = stage
+	var stack := [c.node]
+	while stack.size():
+		var n: Node = stack.pop_back(); stack.append_array(n.get_children())
+		if not (n is MeshInstance3D): continue
+		var mi := n as MeshInstance3D
+		for k in mi.get_surface_override_material_count():
+			var mt = mi.get_active_material(k)
+			if not (mt is BaseMaterial3D): continue
+			var nm := String(mt.resource_name).to_lower()
+			if not (nm.contains("glass") or nm.contains("window")) or nm.contains("police_glass_"): continue
+			if stage == 1:
+				var cr: BaseMaterial3D = mt.duplicate(); cr.albedo_texture = _cracks(); cr.albedo_color = Color(0.75, 0.78, 0.8, 0.75)
+				cr.roughness = 0.35; cr.uv1_triplanar = true; cr.uv1_scale = Vector3(0.9, 0.9, 0.9); cr.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				mi.set_surface_override_material(k, cr)
+			else:
+				var gone := StandardMaterial3D.new(); gone.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; gone.albedo_color = Color(0, 0, 0, 0)
+				mi.set_surface_override_material(k, gone)
+	if glass_burst == null:
+		glass_burst = GPUParticles3D.new(); glass_burst.amount = 120; glass_burst.lifetime = 1.2; glass_burst.one_shot = true; glass_burst.explosiveness = 1.0
+		glass_burst.local_coords = false
+		var pm := ParticleProcessMaterial.new(); pm.direction = Vector3(0, 1, 0); pm.spread = 75; pm.initial_velocity_min = 2; pm.initial_velocity_max = 5
+		pm.gravity = Vector3(0, -9.8, 0); pm.angular_velocity_min = -500; pm.angular_velocity_max = 500; pm.scale_min = 0.4; pm.scale_max = 1.0
+		glass_burst.process_material = pm
+		var q := BoxMesh.new(); q.size = Vector3(0.04, 0.005, 0.03)
+		var gm := StandardMaterial3D.new(); gm.albedo_color = Color(0.8, 0.9, 0.95); gm.metallic = 0.8; gm.roughness = 0.05; q.material = gm
+		glass_burst.draw_pass_1 = q; glass_burst.visibility_aabb = AABB(Vector3(-10, -5, -10), Vector3(20, 15, 20)); add_child(glass_burst)
+	glass_burst.global_position = c.node.global_position + Vector3(0, 1.1, 0); glass_burst.restart(); glass_burst.emitting = true
