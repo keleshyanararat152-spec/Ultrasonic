@@ -55,6 +55,9 @@ var fx
 var snd
 var square
 var neon
+var cine
+var hud_layer: CanvasLayer
+var photo_layer: CanvasLayer
 
 func _ready() -> void:
 	randomize()
@@ -440,6 +443,8 @@ func toast(msg: String, dur := 2.4) -> void:
 
 # ------------------------------------------------------------------------ loop ----------
 func _physics_process(dt: float) -> void:
+	if cine.photo: return
+	if cine.active: cine.step(dt); return
 	if ui.busy(): return   # talking, a panel or the big map: the city waits
 	time += dt
 	var inp: Dictionary = touch_ui.read_input()
@@ -536,6 +541,7 @@ func _physics_process(dt: float) -> void:
 			cops += 1
 			if cops > 2 and Vector2(c.x, c.y).distance_to(tgt) > 900: c.node.queue_free(); cars.remove_at(k)
 	missions.tick(dt)
+	cine.record()
 
 func _busted() -> void:
 	heat = 0; bust_t = 0
@@ -548,6 +554,7 @@ func _crash(impact: float) -> void:
 	if crash_cd > 0: return
 	crash_cd = 0.45; shake = minf(1.0, maxf(shake, impact / 260))
 	snd.crash_hit(impact / 300.0)
+	cine.crashed(impact)
 	if hi: _dent(pcar, pcar.hit_pt, clampf(impact / 1400.0, 0.03, 0.22))
 	pcar.dmg += 2 if impact > 260 else 1
 	fx.damage_look(pcar)
@@ -556,6 +563,8 @@ func _crash(impact: float) -> void:
 	if OS.has_feature("mobile"): Input.vibrate_handheld(int(minf(60, 15 + impact / 8)))
 
 func _process(dt: float) -> void:
+	var real_dt := dt
+	if cine.photo: dt = 0.0   # photo mode: everything holds still
 	_day_night(dt)
 	weather.tick(dt)
 	fx.tick(dt)
@@ -602,6 +611,7 @@ func _process(dt: float) -> void:
 	if _test.get("close", false):   # testing aid: a close side view of you
 		var me3 := Vector3(me.x, city.ground_y(me.x, me.y), me.y) * S; var sd := Vector3(-sin(me.a), 0, cos(me.a))
 		cam.position = me3 + sd * 3.2 + Vector3(cos(me.a), 0, sin(me.a)) * 1.2 + Vector3(0, 1.3, 0); cam.look_at(me3 + Vector3(0, 1.0, 0)); cam.fov = 45
+	cine.camera(real_dt)
 	sun.global_position = cam.global_position
 	_hud_tick(dt)
 	_test_tick()
@@ -654,7 +664,9 @@ func _panel() -> PanelContainer:
 	return panel
 
 func _hud() -> void:
-	var layer := CanvasLayer.new(); add_child(layer)
+	var layer := CanvasLayer.new(); add_child(layer); hud_layer = layer
+	photo_layer = CanvasLayer.new(); photo_layer.layer = 5; add_child(photo_layer)
+	cine = preload("res://scripts/cinema.gd").new(); add_child(cine); cine.setup(self, layer)
 	touch_ui = preload("res://scripts/touch.gd").new()
 	touch_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	touch_ui.main = self
@@ -704,6 +716,8 @@ func _car_near() -> bool:
 	return false
 
 func _unhandled_input(e: InputEvent) -> void:
+	if cine.input(e): return
+	if cine.photo or cine.active: return
 	if e is InputEventKey and e.pressed and not e.echo and (e.keycode == KEY_E or e.keycode == KEY_F): act()
 	if e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_SPACE and interior.on_floor(): interior.dance_hit()
 
@@ -734,9 +748,11 @@ func _test_tick() -> void:
 			if a == "--storytest": _test.story = true
 			if a == "--jobtest": _test.jobs = true
 			if a == "--shoptest": _test.shop = true
+			if a == "--cinetest": _test.cine = true
 	if _test.get("story", false): _story_test(); return
 	if _test.get("jobs", false): _job_test(); return
 	if _test.get("shop", false): _shop_test(); return
+	if _test.get("cine", false): _cine_test(); return
 	if not _test.on: return
 	touch_ui.touched = true
 	_frame += 1
@@ -861,3 +877,12 @@ func _shop_test() -> void:   # buys a car, an outfit and the house, then goes ho
 	if _frame > 14 and _frame < 300 and _frame % 7 == 0: interior.dance_hit()
 	if _frame == 300: interior._drink(); interior._to_vip(); interior._table(); print("SHOP vip ", interior.inside, " table ", ms.prog.vip_table, " cash ", ms.cash)
 	if _frame == 310: interior._from_vip(); interior._leave_club(); print("SHOP left ", interior.inside); get_tree().quit()
+
+func _cine_test() -> void:   # a crash, its replay, then photo mode and back
+	_frame += 1
+	if _frame == 2: me.x = cars[0].x - 20; me.y = cars[0].y - 40; act(); pcar.v = 300
+	if _frame == 60: _crash(400); print("CINE crash_at ", cine.crash_at, " buf ", cine.buf.size(), " dmg ", pcar.dmg)
+	if _frame == 62: cine.start_replay(); print("CINE replay ", cine.active, " from ", cine.pos)
+	if _frame == 100: print("CINE replay still ", cine.active, " at ", int(cine.pos)); cine.stop_replay(); print("CINE back ", pcar.x)
+	if _frame == 102: cine.toggle_photo(); print("CINE photo ", cine.photo, " hud ", hud_layer.visible)
+	if _frame == 104: cine.toggle_photo(); print("CINE photo off ", cine.photo, " hud ", hud_layer.visible); get_tree().quit()
