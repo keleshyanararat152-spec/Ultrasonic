@@ -58,8 +58,10 @@ def grow(name, seed, height, branches, leaves):
     for lo in leafobj:
         lo.data.materials.clear()
         lo.data.materials.append(mat("leaves", (0.3, 0.5, 0.2)))
-        if not lo.data.uv_layers:   # one card, one whole image
-            uv = lo.data.uv_layers.new()
+        while lo.data.uv_layers:   # Sapling's own leaf UVs come out empty: one card, one whole image
+            lo.data.uv_layers.remove(lo.data.uv_layers[0])
+        if True:
+            uv = lo.data.uv_layers.new(name="UVMap")
             for poly in lo.data.polygons:
                 for k, li in enumerate(poly.loop_indices):
                     uv.data[li].uv = [(0, 0), (1, 0), (1, 1), (0, 1)][k % 4]
