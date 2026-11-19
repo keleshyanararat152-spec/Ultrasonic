@@ -412,6 +412,9 @@ func build() -> void:
 				var h: float = bheight(r)
 				if hi and not r.get("court", false): _roof_extras(r, h, rails, pent)
 				walls[n % 2].append(_box_xf(r.x + r.w / 2.0, h / 2.0, r.y + r.h / 2.0, r.w, h, r.h))
+				if hi:   # buildings hide what is behind them: the GPU skips drawing it (occlusion culling)
+					var oc := OccluderInstance3D.new(); var bo := BoxOccluder3D.new(); bo.size = Vector3(r.w - 4, h - 2, r.h - 4) * S
+					oc.occluder = bo; oc.position = Vector3(r.x + r.w / 2.0, h / 2.0, r.y + r.h / 2.0) * S; add_child(oc)
 				var tuff := Color(r.c).lerp(Color.WHITE, 0.12); tuff.a = 1.0 if r.d > 0.35 else 0.0   # alpha picks the stone
 				wall_cols[n % 2].append(tuff); ledge_cols.append(tuff.lerp(Color.WHITE, 0.45))
 				roofs.append(_box_xf(r.x + r.w / 2.0, h + 0.4, r.y + r.h / 2.0, r.w - 2, 1, r.h - 2))

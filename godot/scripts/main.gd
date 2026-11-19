@@ -207,8 +207,15 @@ func _day_night(dt: float) -> void:
 	for g: BaseMaterial3D in city.lamp_glow: g.emission_energy_multiplier = night * 6.0
 	if city.parts: city.parts.glass_mat.set_shader_parameter("night", night); city.parts.lamp_mat.emission_energy_multiplier = 0.2 + night * 4.0
 	var t := target_pos()
-	var near: Array = city.lamps.duplicate()
-	near.sort_custom(func(p, q): return p.distance_squared_to(t) < q.distance_squared_to(t))
+	_lamp_t -= dt
+	if _lamp_t <= 0 or _near_lamps.is_empty():   # which lamps are nearest: worked out five times a second, not every frame
+		_lamp_t = 0.2
+		_near_lamps = city.lamps.filter(func(p): return absf(p.x - t.x) < 900 and absf(p.y - t.y) < 900)
+		if _near_lamps.size() < lamp_lights.size(): _near_lamps = city.lamps.duplicate()
+		_near_lamps.sort_custom(func(p, q): return p.distance_squared_to(t) < q.distance_squared_to(t))
+		_near_cars = cars.filter(func(c): return c != pcar and c.driver and c.node.visible)
+		_near_cars.sort_custom(func(p, q): return Vector2(p.x, p.y).distance_squared_to(t) < Vector2(q.x, q.y).distance_squared_to(t))
+	var near: Array = _near_lamps
 	for k in lamp_lights.size():
 		var l: OmniLight3D = lamp_lights[k]; l.light_energy = night * (4.0 if hi else 1.2); l.omni_range = 30 if hi else 20; l.omni_attenuation = 1.2 if hi else 1.6
 		l.position = Vector3(near[k].x, city.CURB + 40, near[k].y) * S
@@ -217,8 +224,7 @@ func _day_night(dt: float) -> void:
 	_head_mat.albedo_color = Color(0.85, 0.85, 0.8).lerp(Color(2.4, 2.2, 1.8), night)
 	for om: BaseMaterial3D in car_optics: om.emission_energy_multiplier = night * 2.5
 	if hi:   # the nearest other cars light the road too
-		var others: Array = cars.filter(func(c): return c != pcar and c.driver and c.node.visible)
-		others.sort_custom(func(p, q): return Vector2(p.x, p.y).distance_squared_to(t) < Vector2(q.x, q.y).distance_squared_to(t))
+		var others: Array = _near_cars.filter(func(c): return is_instance_valid(c.node))
 		for k in car_spots.size():
 			var sl: SpotLight3D = car_spots[k]
 			if k >= others.size() or night < 0.05: sl.light_energy = 0; continue
@@ -235,6 +241,9 @@ func _day_night(dt: float) -> void:
 const SKIES := [[4.8, "night", 0.62], [6.4, "dusk_2", 0.583], [8.5, "morning", 0.604], [12.5, "noon", 0.599], [16.2, "late_afternoon", 0.599],
 	[18.3, "sunset", 0.565], [19.3, "dusk_2", 0.583], [20.6, "night", 0.62], [28.8, "night", 0.62]]
 var _sky_tex := {}
+var _lamp_t := 0.0
+var _near_lamps: Array = []
+var _near_cars: Array = []
 func _photo_sky(night: float) -> void:
 	var h := fmod(6 + day_t * 24, 24.0)
 	if h < 4.8: h += 24

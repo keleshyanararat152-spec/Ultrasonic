@@ -12,6 +12,8 @@ var m
 var signs: Array = []     # [Label3D, colour, flicker]
 var lights: Array = []
 var _t := 0.0
+var _sorted := -1.0
+var _last: Array = []
 
 func build(main) -> void:
 	m = main
@@ -50,7 +52,8 @@ func frame(dt: float) -> void:
 		if on and night > 0.3 and lights.size():
 			var d := Vector2(l.global_position.x * 10.0, l.global_position.z * 10.0).distance_squared_to(t)
 			if d < 250000: near.append([d, l, col])
-	near.sort_custom(func(a, b): return a[0] < b[0])
+	if _t - _sorted < 0.25 and _last.size(): near = _last
+	else: near.sort_custom(func(a, b): return a[0] < b[0]); _sorted = _t; _last = near
 	for k in lights.size():
 		var o: OmniLight3D = lights[k]
 		if k < near.size():
