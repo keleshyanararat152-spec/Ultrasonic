@@ -220,12 +220,6 @@ func build() -> void:
 				var tuff := Color(r.c).lerp(Color.WHITE, 0.12); tuff.a = 1.0 if r.d > 0.35 else 0.0   # alpha picks the stone
 				wall_cols[n % 2].append(tuff); ledge_cols.append(tuff.lerp(Color.WHITE, 0.45))
 				roofs.append(_box_xf(r.x + r.w / 2.0, h + 0.4, r.y + r.h / 2.0, r.w - 2, 1, r.h - 2))
-				# on the roof: a stair house and a few air-conditioning boxes
-				var hut := Vector2(rng.randf_range(r.x + 20, r.x + r.w - 40), rng.randf_range(r.y + 20, r.y + r.h - 40))
-				kit.append(_box_xf(hut.x + 12, h + 6, hut.y + 9, 24, 12, 18)); kit_cols.append(Color(r.c).darkened(0.15))
-				for q in rng.randi_range(2, 5):
-					var p := Vector2(rng.randf_range(r.x + 12, r.x + r.w - 12), rng.randf_range(r.y + 12, r.y + r.h - 12))
-					kit.append(_box_xf(p.x, h + 3, p.y, 8, 5, 6)); kit_cols.append(Color("b9bcbf").darkened(rng.randf() * 0.2))
 				ledges.append(_box_xf(r.x + r.w / 2.0, h + 1.6, r.y + r.h / 2.0, r.w + 4.4, 4.2, r.h + 4.4))
 	var paving := _ph_mat("hexagonal_concrete_paving", 2.4, Color(0.86, 0.83, 0.82))
 	_multi(unit, paving, slabs, false)
@@ -276,8 +270,6 @@ func build() -> void:
 		_multi(trunk, _plain(Color("6b4a35")), trunks)
 		var cm := _plain(Color.WHITE, 0.85); cm.vertex_color_use_as_albedo = true; cm.vertex_color_is_srgb = false
 		_multi(_crown_mesh(), cm, crowns, true, crown_cols)
-	var km := _plain(Color.WHITE); km.vertex_color_use_as_albedo = true; km.vertex_color_is_srgb = hi
-	_multi(unit, km, kit, true, kit_cols)
 	var posts := []; var bulbs := []
 	for i in N:
 		for j in N:
