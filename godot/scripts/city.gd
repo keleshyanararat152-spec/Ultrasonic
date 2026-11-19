@@ -411,10 +411,11 @@ func build() -> void:
 		var ground := MeshInstance3D.new(); var pm := PlaneMesh.new(); pm.size = Vector2(g[1] - g[0], WS) * S
 		ground.mesh = pm; ground.material_override = asphalt; ground.position = Vector3((g[0] + g[1]) / 2.0, 0, WS / 2.0) * S
 		add_child(ground)
-	var far := MeshInstance3D.new()   # fields beyond the edge
-	var fm := PlaneMesh.new(); fm.size = Vector2(2400, 2400)
-	far.mesh = fm; far.material_override = _plain(Color("76866a")); far.position = Vector3(WX / 2.0 * S, -0.6, WS / 2.0 * S)
-	add_child(far)
+	var field := _plain(Color("76866a"))
+	for g in [[-1500.0, 3760.0], [4160.0, float(WX) + 1500.0]]:   # fields beyond the edge, either side of the river
+		var far := MeshInstance3D.new(); var fm := PlaneMesh.new(); fm.size = Vector2(g[1] - g[0], WS + 3000) * S
+		far.mesh = fm; far.material_override = field; far.position = Vector3((g[0] + g[1]) / 2.0 * S, -0.06, (WS / 2.0 - 150.0) * S)
+		add_child(far)
 	world = preload("res://scripts/world.gd").new(); add_child(world); world.build(self)
 
 	var slabs := []; var parks := []; var plaza := []

@@ -90,7 +90,7 @@ func _hills(x: float, y: float) -> float:   # rolling hills rising away from the
 	var p := Vector2(x, y) / 900.0
 	var n := _vnoise(p) * 0.55 + _vnoise(p * 2.1 + Vector2(5, 3)) * 0.3 + _vnoise(p * 4.3 + Vector2(1, 9)) * 0.15
 	var rise := smoothstep(3760.0, 5200.0, y)
-	var h := (n * 1300.0 - 150.0) * rise + 380.0 * rise
+	var h := (n * 750.0 - 100.0) * rise + 260.0 * rise
 	var rv := absf(x - (RX0 + RX1) / 2.0)   # the river valley
 	h = lerpf(BED + 20.0, h, smoothstep(220.0, 700.0, rv))
 	return h
@@ -102,7 +102,7 @@ func _build_heights() -> void:
 			var x := T0.x + i * TC; var y := T0.y + j * TC
 			var h := _hills(x, y)
 			var rn := road_near(Vector2(x, y))   # the ground is cut and filled to carry the road
-			h = lerpf(rn[1] - 1.0, h, smoothstep(ROAD_W + 10.0, ROAD_W + 160.0, rn[0]))
+			h = lerpf(rn[1] - 2.5, h, smoothstep(ROAD_W + 30.0, ROAD_W + 320.0, rn[0]))
 			if y < T0.y + 120.0 and not (x > RX0 - 300 and x < RX1 + 300): h = minf(h, lerpf(0.0, h, (y - T0.y) / 120.0))   # meets the city's edge
 			hts[j * (TNX + 1) + i] = h
 
@@ -147,7 +147,7 @@ func _road_mesh() -> void:
 	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var posts := []
 	for k in road.size():
-		var p: Vector2 = road[k][0]; var h: float = road[k][1] + 0.6; var sd: Vector2 = road[k][2]
+		var p: Vector2 = road[k][0]; var h: float = road[k][1] + 0.4; var sd: Vector2 = road[k][2]
 		var l := p - sd * ROAD_W; var r := p + sd * ROAD_W
 		st.set_normal(Vector3.UP); st.add_vertex(Vector3(l.x, h, l.y) * S); st.add_vertex(Vector3(r.x, h, r.y) * S)
 		if k % 3 == 0 and k > 6:   # guard rail posts on both sides
