@@ -74,6 +74,7 @@ func _courtyard(r: Dictionary) -> Array:
 	return out
 
 var courts: Array = []
+var grass_nodes: Array = []   # the park grass, for the quality setting
 var sign_spots: Array = []   # over a shop front: where a neon sign can hang (Godot units, +z out of the wall)   # courtyard middles, game units
 
 ## A roof terrace: railings round the edge; tall buildings get a glass penthouse set back from it.
@@ -354,7 +355,7 @@ func _gardens(rng: RandomNumberGenerator) -> void:
 				var out := false
 				for r: Rect2 in keep_out: if r.grow(15).has_point(q): out = true
 				if not out: fl.shrub.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * rng.randf_range(0.8, 1.2)), Vector3(q.x * S, CURB * S, q.y * S)))
-			var gi := _multi(patch, gm, xs, false, cols)
+			var gi := _multi(patch, gm, xs, false, cols); grass_nodes.append(gi)
 			gi.visibility_range_end = 140.0; gi.visibility_range_end_margin = 20.0; gi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 			for kind in fl:
 				if fl[kind].is_empty(): continue

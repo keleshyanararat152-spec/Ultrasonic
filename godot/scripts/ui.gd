@@ -136,7 +136,7 @@ func talking() -> bool:
 	return talk != null
 
 func busy() -> bool:
-	return talk != null or shop.visible or big.visible
+	return talk != null or shop.visible or big.visible or (main.settings != null and main.settings.visible)
 
 func toggle_map() -> void:
 	if talk != null or shop.visible: return

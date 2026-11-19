@@ -37,6 +37,7 @@ var dancers := []          # [avatar, x, y, face, style, phase, base_y]
 var troupe := []
 var people := []           # [avatar, role, x, y, a]
 var club_lights := []
+var music_level := 0.8      # from the settings
 var ball: Node3D
 var music: AudioStreamPlayer
 var drink_t := 0.0

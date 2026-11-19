@@ -162,4 +162,4 @@ func tick(dt: float) -> void:
 	hum.volume_db = db((0.0 if inside else 0.22 * (1.0 - night * 0.6)) * master)
 	birds.volume_db = db((0.0 if inside else 0.3 * (1.0 - night) * (1.0 - r)) * master)
 	crickets.volume_db = db((0.0 if inside else 0.12 * night * (1.0 - r)) * master)
-	if inside and m.interior.music: m.interior.music.volume_db = -4 + db(master)
+	if m.interior.music: m.interior.music.volume_db = -4 + db(m.interior.music_level)

@@ -56,6 +56,8 @@ var snd
 var square
 var neon
 var cine
+var settings
+var steer_k := 1.0
 var hud_layer: CanvasLayer
 var photo_layer: CanvasLayer
 
@@ -105,6 +107,7 @@ func _ready() -> void:
 	missions = preload("res://scripts/missions.gd").new(); add_child(missions); missions.setup(self)
 	interior = preload("res://scripts/interior.gd").new(); interior.m = self; add_child(interior); interior.build_house()
 	_hud()
+	settings = preload("res://scripts/settings.gd").new(); settings.setup(self, photo_layer)
 	interior.start()
 	toast(missions.start_text(), 4)
 
@@ -451,7 +454,7 @@ func _physics_process(dt: float) -> void:
 	var inp: Dictionary = touch_ui.read_input()
 	if interior.inside != "": interior.step(dt, inp); return   # in the club or at home the city waits too
 	if pcar:
-		var hit := pcar.step(city, inp.thr, inp.steer * 0.8, inp.hand, dt)
+		var hit := pcar.step(city, inp.thr, clampf(inp.steer * 0.8 * steer_k, -1, 1), inp.hand, dt)
 		if hit > 70: _crash(hit); fx.spark(pcar.hit_pt, hit / 300.0)
 		me.x = pcar.x; me.y = pcar.y
 	else:   # walking: forward/back moves, sideways turns
@@ -721,6 +724,8 @@ func _car_near() -> bool:
 	return false
 
 func _unhandled_input(e: InputEvent) -> void:
+	if e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_ESCAPE and not cine.photo and not ui.talking() and not ui.shop.visible and not ui.big.visible:
+		settings.toggle(); return
 	if cine.input(e): return
 	if cine.photo or cine.active: return
 	if e is InputEventKey and e.pressed and not e.echo and (e.keycode == KEY_E or e.keycode == KEY_F): act()
