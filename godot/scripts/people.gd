@@ -46,6 +46,7 @@ class Avatar:
 	var tb := 0.0
 	var fade := 0.0
 	var idle_t := 0.0
+	var acc_dt := 0.0
 	var wt = null                    # { idx: bone indices, stand: [Quaternion], step: [[Quaternion]] }
 
 	func _init(scene: PackedScene) -> void:

@@ -76,21 +76,21 @@ func _ready() -> void:
 	me.x = ic(3) + 120; me.y = ic(3) + 76; me.a = 0
 	var mine := _make_car(ic(3) + 210, ic(3) + 50, 0.0, "mclaren")
 	_fast(mine)
-	for n in 34:
+	for n in (54 if hi else 34):
 		var c := _make_car(0, 0, 0, TRAFFIC.pick_random() if randf() > 0.12 else "taxi")
 		c.driver = true
 		c.next_leg(randi_range(0, 7), randi_range(0, 7))
 		c.x = c.ai.wx; c.y = c.ai.wy; c.a = c.ai.d * PI / 2
 		c.cruise = randf_range(95, 130)
 		if n < 2: c.model = "policesuv" if n == 0 else "police_sedan"; c.kind = "police"; c.max_speed = 300; _rebuild_node(c)
-	for n in 14:   # parked along the kerb
+	for n in (24 if hi else 14):   # parked along the kerb
 		var d := randi_range(0, 3); var I := randi_range(0, 7); var J := randi_range(0, 7)
 		var dv: Vector2i = Car.DV[d]
 		if I + dv.x < 0 or J + dv.y < 0 or I + dv.x > 7 or J + dv.y > 7: continue
 		var r: Vector2i = Car.DV[(d + 1) % 4]; var t := randf_range(150, 370)
 		_make_car(ic(I) + dv.x * t + r.x * 50, ic(J) + dv.y * t + r.y * 50, d * PI / 2, TRAFFIC.pick_random())
 	var lite := OS.has_feature("mobile")
-	for n in (26 if lite else (70 if hi else 40)):
+	for n in (26 if lite else (110 if hi else 40)):
 		var p := People.Ped.new()
 		p.i = randi_range(0, 6); p.j = randi_range(0, 6); p.t = randf_range(0, 1512); p.dir = 1 if randf() < 0.5 else -1; p.sp = randf_range(13, 19)
 		p.umb = randf() < 0.55; p.night_home = randf() < 0.5
@@ -332,6 +332,7 @@ func _rebuild_node(c: Car) -> void:
 	add_child(root)
 	c.node = root
 
+var _pf := 0   # frame count for staggering far people's animation
 var _shone := {}
 var car_optics: Array = []           # head- and tail-light materials that glow at night
 ## Car materials by their names: real glass, metallic paint with a clear coat, matt tyres, chrome, lights that glow.
@@ -577,6 +578,7 @@ func _process(dt: float) -> void:
 		_place(c, dt)
 		for k in c.anim.lights.size():
 			(c.anim.lights[k] as StandardMaterial3D).albedo_color = (Color("ff5a5f") if (k == 0) == flash else Color("4d8dff")) if c.chase else Color("9aa3ad")
+	_pf += 1
 	for p in peds: _place_ped(p, dt)
 	missions.frame(dt)
 	interior.frame(dt)
@@ -653,7 +655,10 @@ func _place_ped(p, dt: float) -> void:
 	else:
 		var sp: float = p.sp * (1.6 if not p.cross.is_empty() else 1.0) * (1.35 if weather.cur.rain > 0.4 and not p.umb else 1.0)
 		rate = sp * S / 1.35
-	p.av.animate(dt, kind, rate); r.position.y += p.av.bob
+	# far away people move their limbs less often: every frame near, every 2nd, then every 4th
+	p.av.acc_dt += dt; var every := 1 if dc < 40 else (2 if dc < 80 else 4)
+	if (_pf + p.i * 7 + p.j) % every == 0: p.av.animate(p.av.acc_dt, kind, rate); p.av.acc_dt = 0.0
+	r.position.y += p.av.bob
 
 # ------------------------------------------------------------------------ HUD ----------
 func _panel() -> PanelContainer:
