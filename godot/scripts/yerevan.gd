@@ -16,7 +16,8 @@ var walk_lines: Array = []    # footpaths as PackedVector2Array, for people to w
 var bounds := Rect2()
 var is_yerevan := true
 var landmarks: Array = []     # [Vector2, name] for the map
-var water_areas: Array = []   # ponds and the singing fountains' pool
+var water_areas: Array = []
+var square_centre := SPAWN   # ponds and the singing fountains' pool
 
 func generate() -> void:
 	data = JSON.parse_string(FileAccess.get_file_as_string("res://assets/yerevan/center.json"))
@@ -164,6 +165,7 @@ func build() -> void:
 		for i in range(0, arr.size() - 2, 2): poly.append(Vector2(arr[i], arr[i + 1]))
 		if poly.size() < 3: continue
 		if a.k in ["park", "garden", "grass", "recreation_ground", "playground", "scrub", "wood"]: _poly_fill(green, poly, 0.03); parks.append(poly)
+		elif a.k == "pedestrian" and String(a.n).contains("Հանրապետ"): _carpet(poly)
 		elif a.k == "pedestrian": _poly_fill(square, poly, 0.025)
 		elif a.k == "water" or a.k == "swimming_pool": water_areas.append(poly)
 		else: _poly_fill(square, poly, 0.022)
@@ -188,6 +190,17 @@ func build() -> void:
 	_trees_and_lamps(rng)
 	_fountains()
 	if hi: _park_grass(parks, rng)
+
+## Republic Square's oval with its stone carpet.
+func _carpet(poly: PackedVector2Array) -> void:
+	var r := Rect2(poly[0], Vector2.ZERO)
+	for q in poly: r = r.expand(q)
+	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES); _poly_fill(st, poly, 0.03)
+	var m := ShaderMaterial.new(); m.shader = load("res://shaders/square_carpet.gdshader")
+	m.set_shader_parameter("centre", r.get_center() * S); m.set_shader_parameter("radius", r.size * S / 2.0)
+	m.set_shader_parameter("stone", load("res://assets/tex/ph/sandstone_blocks_05_diff.jpg"))
+	_add_mesh(st, m, false)
+	square_centre = r.get_center(); landmarks.append([square_centre, "Հանրապետության հրապարակ"])
 
 ## Dashed centre lines on the wider two-way streets.
 func _markings() -> void:
@@ -220,8 +233,16 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 	var walls := {}; var roofs := {}
 	var bands := {}; var band_cols := {}
 	var put := {}   # chunk -> { win: [], bal: [], shop: [], shop_cols: [], door: [], arch: [] }
+	var gov_best := 1e9; var gov = null
 	for e in bpolys:
 		var poly: PackedVector2Array = e[0]; var b: Dictionary = e[2]
+		var on_square: bool = (e[1] as Rect2).get_center().distance_to(square_centre) < 2300 and b.h >= 9 and not b.has("min")
+		if on_square:   # the square's Tamanyan buildings: tall, in pink tuff, on arcades
+			b.h = maxf(b.h, 20.0); b.lv = maxi(b.lv, 5); b["arcade"] = true
+			if not b.has("c"): b["c"] = ["e3a58c", "d98f7a", "e8b48a"][rng.randi() % 3]
+			if String(b.get("n", "")).contains("կառավարություն"):
+				var dg := (e[1] as Rect2).get_center().distance_to(square_centre)
+				if dg < gov_best: gov_best = dg; gov = e
 		var h: float = b.h * 10.0; var h0: float = b.get("min", 0.0) * 10.0
 		var col := _colour(b, rng); var soviet: bool = b.lv >= 9 and col.s < 0.15
 		col.a = 1.0 if rng.randf() < 0.6 else 0.0
@@ -266,8 +287,8 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 			for k in cols:
 				var p := Vector3(a.x * S, 0, a.y * S) + Vector3(d.x, 0, d.y) * (start + k * 3.2) + nrm * 0.01
 				if street and not has_door and k == cols / 2 and L * S > 8: has_door = true; put[ck].door.append(Transform3D(basis, p + Vector3(0, 1.35, 0)))
-				elif street and b.lv <= 12 and tuff_style and b.t != "apartments" and rng.randf() < 0.85:
-					if rng.randf() < 0.25 and b.lv >= 3: put[ck].arch.append(Transform3D(basis, p + Vector3(0, 1.75, 0)))
+				elif street and b.lv <= 12 and tuff_style and (b.t != "apartments" or b.get("arcade", false)) and rng.randf() < 0.85:
+					if (rng.randf() < 0.25 and b.lv >= 3) or b.get("arcade", false): put[ck].arch.append(Transform3D(basis, p + Vector3(0, 1.75, 0)))
 					else:
 						put[ck].shop.append(Transform3D(basis, p + Vector3(0, 1.75, 0))); put[ck].shop_cols.append(awn)
 						if k == 1: sign_spots.append(Transform3D(basis, p + Vector3(0, 4.35, 0) + nrm * 0.12))
@@ -289,6 +310,7 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 				if pc[e[0]].size(): _vis(_multi(kt[e[0]], null, pc[e[0]], e[1], []), 150.0)
 			if pc.shop.size(): _vis(_multi(kt.shop, null, pc.shop, false, pc.shop_cols), 180.0)
 			if pc.arch.size(): _vis(_multi(kt.arch, null, pc.arch, true, []), 180.0)
+	if gov != null: _clock_tower(gov)
 	if hi:   # big buildings hide what is behind them
 		for e in bpolys:
 			var r: Rect2 = e[1]
@@ -296,6 +318,39 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 			var oc := OccluderInstance3D.new(); var bo := BoxOccluder3D.new()
 			bo.size = Vector3(r.size.x * 0.7, e[2].h * 10.0 - 10, r.size.y * 0.7) * S
 			oc.occluder = bo; oc.position = Vector3(r.get_center().x, e[2].h * 5.0, r.get_center().y) * S; add_child(oc)
+
+var clocks: Array = []   # clock face materials, set to the game's time
+## Government House's clock tower: a tall tuff tower on the side towards the square, four clock faces near the top.
+func _clock_tower(e: Array) -> void:
+	var poly: PackedVector2Array = e[0]; var b: Dictionary = e[2]
+	var best := 1e9; var at := poly[0]
+	for i in poly.size():
+		var q := Geometry2D.get_closest_point_to_segment(square_centre, poly[i], poly[(i + 1) % poly.size()])
+		if q.distance_to(square_centre) < best: best = q.distance_to(square_centre); at = q
+	var inward := ((e[1] as Rect2).get_center() - at).normalized()
+	var c := at + inward * 60.0; var base: float = b.h
+	var tuff := _ph_mat("sandstone_blocks_05", 3.6, Color("e3a58c").lerp(Color.WHITE, 0.1))
+	var parts3 := [[9.0, 16.0, base + 8.0], [10.2, 0.8, base + 16.4], [7.6, 6.0, base + 19.8], [8.4, 0.6, base + 23.1], [5.0, 4.0, base + 25.4]]
+	for q in parts3:
+		var mi := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = Vector3(q[0], q[1], q[0]); mi.mesh = bm; mi.material_override = tuff
+		mi.position = Vector3(c.x * S, q[2], c.y * S); add_child(mi)
+	var spire := MeshInstance3D.new(); var cm := CylinderMesh.new(); cm.top_radius = 0.05; cm.bottom_radius = 2.6; cm.height = 5.0; cm.radial_segments = 4
+	spire.mesh = cm; spire.material_override = _plain(Color("6b4a3a"), 0.6); spire.position = Vector3(c.x * S, base + 29.9, c.y * S); spire.rotation.y = PI / 4; add_child(spire)
+	for k in 4:   # the four clock faces
+		var dir := Vector2.from_angle(k * PI / 2)
+		var f := MeshInstance3D.new(); var qm := QuadMesh.new(); qm.size = Vector2(4.2, 4.2); f.mesh = qm
+		var cmat := ShaderMaterial.new(); cmat.shader = load("res://shaders/clock.gdshader"); f.material_override = cmat; clocks.append(cmat)
+		f.position = Vector3(c.x * S + dir.x * 3.85, base + 20.0, c.y * S + dir.y * 3.85); f.rotation.y = -dir.angle() + PI / 2
+		add_child(f)
+	_solid(c, 50); landmarks.append([c, "Կառավարության տուն"])
+
+func _process(_dt: float) -> void:
+	if clocks.is_empty() or get_parent() == null: return
+	var m = get_parent()
+	if not m.has_method("clock_text"): return
+	var hm: float = fmod(6 + m.day_t * 24, 24)
+	for cm: ShaderMaterial in clocks:
+		cm.set_shader_parameter("hour", floor(hm)); cm.set_shader_parameter("minute", fmod(hm * 60.0, 60.0)); cm.set_shader_parameter("night", m.night_k)
 
 func _vis(mi: MultiMeshInstance3D, d: float) -> void:
 	mi.visibility_range_end = d; mi.visibility_range_end_margin = 20; mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
