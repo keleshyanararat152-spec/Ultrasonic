@@ -9,8 +9,8 @@ var main
 var font: Font
 var base: ImageTexture          # the whole city, drawn once
 var WS := float(N * CELL + 120)
-const MO := Vector2(-1400, 0)   # the map covers the city, the river district and the hills: from MO, MW wide and tall
-const MW := 7800.0
+var MO := Vector2(-1400, 0)   # the map covers the city, the river district and the hills: from MO, MW wide and tall
+var MW := 7800.0
 func _mp(p: Vector2) -> Vector2:   # world (game units) -> big map pixels
 	return (p - MO) * (big_draw.size.x / MW)
 
@@ -95,9 +95,14 @@ func _label(fs: int) -> Label:
 	var l := Label.new(); l.add_theme_font_size_override("font_size", fs); return l
 
 func _build_base() -> void:   # the map: streets, pavements, buildings, parks, the square, the river, the hills and their road
+	var city = main.city if main else null
+	if city and city.get("is_yerevan"):   # Yerevan draws itself
+		var bb: Rect2 = city.bounds; MO = bb.position; MW = maxf(bb.size.x, bb.size.y)
+		var R2 := 1536; var k2 := R2 / MW; var im := Image.create(R2, R2, false, Image.FORMAT_RGBA8)
+		city.draw_map(im, func(x: float, y: float) -> Vector2: return Vector2((x - MO.x) * k2, (y - MO.y) * k2), k2)
+		base = ImageTexture.create_from_image(im); return
 	var R := 1024; var k := R / MW; var img := Image.create(R, R, false, Image.FORMAT_RGBA8)
 	img.fill(Color("6d7f5e"))
-	var city = main.city if main else null
 	var px := func(x: float, y: float) -> Vector2i: return Vector2i(int((x - MO.x) * k), int((y - MO.y) * k))
 	var rect := func(x: float, y: float, w: float, h: float, col: Color) -> void:
 		var a: Vector2i = px.call(x, y); img.fill_rect(Rect2i(a, Vector2i(maxi(1, int(w * k) + 1), maxi(1, int(h * k) + 1))), col)

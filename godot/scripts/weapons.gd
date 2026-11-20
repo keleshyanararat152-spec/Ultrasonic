@@ -280,6 +280,7 @@ func _down() -> void:   # wake up at the hospital by the square: a bill, no star
 	for c: Car in m.cars: if c.kind == "police": c.chase = false
 	if m.pcar: m.pcar = null
 	m.me.x = m.ic(3) + 96; m.me.y = m.ic(2) + 76
+	if m.yerevan: m.me.x = m.city.SPAWN.x; m.me.y = m.city.SPAWN.y
 	m.toast("Հիվանդանոցում ես. հաշիվը՝ " + m.missions.money(bill), 4)
 
 func tick(dt: float) -> void:

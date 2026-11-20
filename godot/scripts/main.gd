@@ -64,19 +64,61 @@ var steer_k := 1.0
 var hud_layer: CanvasLayer
 var photo_layer: CanvasLayer
 
+var yerevan := false   # the Yerevan map (yerevan.gd) instead of the made-up city
+
 func _ready() -> void:
 	randomize()
+	yerevan = Engine.get_meta("map", "") == "yerevan" or OS.get_cmdline_user_args().has("--yerevan")
 	_environment()
-	city = preload("res://scripts/city.gd").new()
-	add_child(city)
-	city.generate(); city.keep_out = [preload("res://scripts/interior.gd").house_spot(city).rect]
-	city.build()
+	if yerevan:
+		city = preload("res://scripts/yerevan.gd").new(); add_child(city); city.generate(); city.build()
+	else:
+		city = preload("res://scripts/city.gd").new()
+		add_child(city)
+		city.generate(); city.keep_out = [preload("res://scripts/interior.gd").house_spot(city).rect]
+		city.build()
 	weather = preload("res://scripts/weather.gd").new(); add_child(weather)
-	square = preload("res://scripts/square.gd").new(); add_child(square); square.build(self)
+	if not yerevan: square = preload("res://scripts/square.gd").new(); add_child(square); square.build(self)
 	neon = preload("res://scripts/neon.gd").new(); add_child(neon); neon.build(self)
-	_build_signals()
+	if not yerevan: _build_signals()
 	for name in MODELS: scenes[name] = load("res://assets/cars/%s.glb" % name)
 	for name in People.AVATARS: people_scenes.append(load("res://assets/people/%s.glb" % name))
+	if yerevan: _yerevan_start()
+	else: _city_start()
+	me_av = People.Avatar.new(people_scenes[0]); add_child(me_av.root)
+	cam = Camera3D.new(); cam.fov = 62; cam.near = 0.2; cam.far = 1400 if hi else 600
+	add_child(cam)
+	weather.setup(self)
+	fx = preload("res://scripts/effects.gd").new(); add_child(fx); fx.setup(self)
+	snd = preload("res://scripts/sound.gd").new(); add_child(snd); snd.setup(self)
+	missions = preload("res://scripts/missions.gd").new(); add_child(missions); missions.setup(self)
+	interior = preload("res://scripts/interior.gd").new(); interior.m = self; add_child(interior)
+	if not yerevan: interior.build_house()
+	_hud()
+	cheats = preload("res://scripts/cheats.gd").new(); add_child(cheats); cheats.setup(self)
+	weapons = preload("res://scripts/weapons.gd").new(); add_child(weapons); weapons.setup(self)
+	mods = preload("res://scripts/mods.gd").new(); add_child(mods); mods.setup(self)
+	settings = preload("res://scripts/settings.gd").new(); settings.setup(self, photo_layer)
+	interior.start()
+	toast(missions.start_text(), 4)
+
+## Yerevan: you start in the middle of Republic Square with a car by you; cars parked along the streets,
+## people walking the footpaths.
+func _yerevan_start() -> void:
+	var sp: Vector2 = city.SPAWN
+	me.x = sp.x; me.y = sp.y; me.a = -PI / 2
+	var mine := _make_car(sp.x + 60, sp.y + 30, -PI / 2, "mclaren"); _fast(mine)
+	for n in (60 if hi else 30):
+		var p: Vector2 = city.road_point(); var r: Array = city.near_road(p)
+		var d: Vector2 = r[3]; var side: Vector2 = Vector2(-d.y, d.x) * (r[1] / 2.0 - 14.0) * (1.0 if randf() < 0.5 else -1.0)
+		var q: Vector2 = city.push_out(p + side, 12)
+		_make_car(q.x, q.y, d.angle() + (PI if randf() < 0.5 else 0.0), TRAFFIC.pick_random() if randf() > 0.1 else "taxi")
+	for n in (26 if OS.has_feature("mobile") else (110 if hi else 40)):
+		var p := People.Ped.new(); p.i = n; p.sp = randf_range(13, 19); p.umb = randf() < 0.55; p.night_home = randf() < 0.5
+		city.ped_start(p); _ped_avatar(p); peds.append(p)
+		if p.umb: p.av.root.add_child(People.umbrella())
+
+func _city_start() -> void:
 	# you start on foot by the square, next to a McLaren at the kerb
 	me.x = ic(3) + 120; me.y = ic(3) + 76; me.a = 0
 	var mine := _make_car(ic(3) + 210, ic(3) + 50, 0.0, "mclaren")
@@ -101,21 +143,6 @@ func _ready() -> void:
 		p.umb = randf() < 0.55; p.night_home = randf() < 0.5
 		_ped_avatar(p); peds.append(p)
 		if p.umb: p.av.root.add_child(People.umbrella())
-	me_av = People.Avatar.new(people_scenes[0]); add_child(me_av.root)
-	cam = Camera3D.new(); cam.fov = 62; cam.near = 0.2; cam.far = 1400 if hi else 600
-	add_child(cam)
-	weather.setup(self)
-	fx = preload("res://scripts/effects.gd").new(); add_child(fx); fx.setup(self)
-	snd = preload("res://scripts/sound.gd").new(); add_child(snd); snd.setup(self)
-	missions = preload("res://scripts/missions.gd").new(); add_child(missions); missions.setup(self)
-	interior = preload("res://scripts/interior.gd").new(); interior.m = self; add_child(interior); interior.build_house()
-	_hud()
-	cheats = preload("res://scripts/cheats.gd").new(); add_child(cheats); cheats.setup(self)
-	weapons = preload("res://scripts/weapons.gd").new(); add_child(weapons); weapons.setup(self)
-	mods = preload("res://scripts/mods.gd").new(); add_child(mods); mods.setup(self)
-	settings = preload("res://scripts/settings.gd").new(); settings.setup(self, photo_layer)
-	interior.start()
-	toast(missions.start_text(), 4)
 
 static func ic(i: int) -> float:
 	return i * CELL + 60.0
@@ -544,6 +571,7 @@ func _physics_process(dt: float) -> void:
 		elif p.free_life > 0:
 			p.x += cos(p.a) * 70 * dt; p.y += sin(p.a) * 70 * dt; var q: Vector2 = city.push_out(Vector2(p.x, p.y), 5); p.x = q.x; p.y = q.y
 			p.free_life -= dt
+		elif yerevan: city.ped_step(p, dt)
 		else: People.step(p, self, dt)
 		if pcar and absf(pcar.v) > 110 and p.down <= 0 and p.panic_t <= 0 and absf(p.x - pcar.x) < 120 and absf(p.y - pcar.y) < 120: People.panic(p, Vector2(pcar.x, pcar.y))
 		if p.down <= 0:
@@ -554,7 +582,7 @@ func _physics_process(dt: float) -> void:
 					break
 	# stars: more police the more stars; lose them by staying out of sight; caught when they box you in
 	if heat > 0:
-		if chasing < mini(4, ceili(heat)):
+		if chasing < mini(4, ceili(heat)) and not yerevan:
 			for t in 20:
 				var I := randi_range(0, 7); var J := randi_range(0, 7); var d := Vector2(ic(I), ic(J)).distance_to(tgt)
 				if d > 650 and d < 1500:
@@ -585,6 +613,7 @@ func _busted() -> void:
 	heat = 0; bust_t = 0
 	if pcar: pcar.v = 0; pcar = null
 	me.x = ic(3) + 96; me.y = ic(3) + 76
+	if yerevan: me.x = city.SPAWN.x; me.y = city.SPAWN.y
 	for c: Car in cars: if c.kind == "police": c.chase = false
 	missions.on_busted()
 
@@ -607,7 +636,7 @@ func _process(dt: float) -> void:
 	weather.tick(dt)
 	fx.tick(dt)
 	snd.tick(dt)
-	square.frame(dt)
+	if square: square.frame(dt)
 	neon.frame(dt)
 	_paint_signals()
 	var flash := int(time * 6) % 2 == 0
@@ -817,6 +846,7 @@ func _test_tick() -> void:
 			if a == "--cinetest": _test.cine = true
 			if a == "--cheattest": _test.cheat = true
 			if a == "--guntest": _test.gun = true
+			if a == "--ytest": _test.ytest = true
 			if a == "--gun": _test.aim = true
 	if _test.get("story", false): _story_test(); return
 	if _test.get("jobs", false): _job_test(); return
@@ -824,6 +854,7 @@ func _test_tick() -> void:
 	if _test.get("cine", false): _cine_test(); return
 	if _test.get("cheat", false): _cheat_test(); return
 	if _test.get("gun", false): _gun_test(); return
+	if _test.get("ytest", false): _yerevan_test(); return
 	if not _test.on: return
 	touch_ui.touched = true
 	_frame += 1
@@ -993,3 +1024,18 @@ func _gun_test() -> void:   # buys a pistol, shoots a person and a car, the poli
 	if _frame == 200: print("GUN reloaded ", ws.owned().pistol, " t ", ws.reload_t, " cur ", ws.cur)
 	if _frame == 202: heat = 4; ws.hurt(250); print("GUN after down hp ", ws.hp, " heat ", heat, " cash ", missions.cash)
 	if _frame == 204: print("GUN hud ", ws.hud_text()); get_tree().quit()
+
+func _yerevan_test() -> void:   # Yerevan: the map loaded, you can walk and drive, buildings are solid, people walk
+	_frame += 1
+	if _frame == 2:
+		print("YTEST buildings ", city.bpolys.size(), " roads ", city.roads.size(), " lamps ", city.lamps.size(), " cars ", cars.size(), " peds ", peds.size(), " landmarks ", city.landmarks.size())
+		var b: Array = city.bpolys[0]; var r: Rect2 = b[1]
+		var inside: Vector2 = city.push_out(r.get_center(), 7)
+		print("YTEST pushed out of a building ", inside != r.get_center(), " start ", Vector2(me.x, me.y))
+		touch_ui.stick = Vector2(0, -1)
+	if _frame == 60: print("YTEST walked to ", Vector2(me.x, me.y).round(), " ped0 ", Vector2(peds[0].x, peds[0].y).round())
+	if _frame == 62:
+		touch_ui.stick = Vector2.ZERO; me.x = cars[0].x - 20; me.y = cars[0].y - 40; act(); print("YTEST in car ", pcar != null)
+		touch_ui.pedals = { 99: "gas" }
+	if _frame == 160: print("YTEST drove to ", Vector2(pcar.x, pcar.y).round(), " v ", int(pcar.v), " ped0 ", Vector2(peds[0].x, peds[0].y).round()); ui.toggle_map()
+	if _frame == 164: print("YTEST map ", ui.big.visible, " ", ui.MW); get_tree().quit()

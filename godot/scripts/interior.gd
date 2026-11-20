@@ -593,6 +593,7 @@ func wear(id: String) -> void:
 func start() -> void:
 	var prog: Dictionary = m.missions.prog
 	if prog.outfit != "m07": m.set_outfit(prog.outfit)
+	if m.yerevan: return   # no house or club in Yerevan yet
 	var home = m.missions.place("home"); var dealer = m.missions.place("dealer")
 	if prog.car != null: spawn_owned((home if prog.home else dealer).park)
 	if prog.home: enter_home()

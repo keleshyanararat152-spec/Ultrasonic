@@ -7,7 +7,7 @@ config_version=5
 
 config/name="Վարդագույն քաղաք"
 config/description="Open city of pink tuff: drive, deliver, and keep away from the police."
-run/main_scene="res://main.tscn"
+run/main_scene="res://launcher.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 

@@ -32,6 +32,7 @@ func setup(main, layer: CanvasLayer) -> void:
 	var ml := Label.new(); ml.add_theme_font_size_override("font_size", 15); ml.add_theme_color_override("font_color", Color("a9a59c"))
 	ml.text = "Մոդեր՝ " + (", ".join(m.mods.loaded) if m.mods and m.mods.loaded.size() else "չկան (դիր .gd ֆայլ PinkCity.exe-ի կողքի mods թղթապանակում)")
 	v.add_child(ml)
+	var mapb := Button.new(); mapb.text = "Փոխել քարտեզը (Վարդագույն քաղաք / Երևան)"; mapb.pressed.connect(_change_map); v.add_child(mapb)
 	var close := Button.new(); close.text = "Շարունակել (Esc)"; close.pressed.connect(toggle); v.add_child(close)
 	layer.add_child(self)
 	fps_label = Label.new(); fps_label.add_theme_font_size_override("font_size", 16)
@@ -104,3 +105,6 @@ func _process(_dt: float) -> void:
 	if fps_label:
 		fps_label.visible = cfg.fps
 		if cfg.fps: fps_label.text = "%d FPS" % Engine.get_frames_per_second()
+
+func _change_map() -> void:
+	m.missions.save(); get_tree().change_scene_to_file("res://launcher.tscn")

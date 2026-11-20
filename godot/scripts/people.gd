@@ -476,7 +476,10 @@ class Ped:
 	var act := ""            # standing still for a while: phone, look, wait, talk, angry
 	var act_t := 0.0
 	var umb := false         # carries an umbrella in the rain
-	var hit_dir := Vector2.ZERO   # where the shot that felled them came from
+	var hit_dir := Vector2.ZERO
+	var path := PackedVector2Array()   # Yerevan: the footpath being walked, the segment, how far along it
+	var seg := 0
+	var u := 0.0   # where the shot that felled them came from
 	var night_home := false  # goes home after dark
 	var av: Avatar
 

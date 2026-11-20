@@ -29,7 +29,10 @@ func _dress(mesh: ArrayMesh, mats: Dictionary) -> void:
 		var nm := m.resource_name if m else ""
 		if mats.has(nm): mesh.surface_set_material(k, mats[nm])
 
-func build(city) -> void:
+var kit := {}   # the parts and their materials, for other builders (Yerevan)
+
+## Loads the parts and dresses them; returns them by name.
+func make_kit() -> Dictionary:
 	glass_mat = ShaderMaterial.new(); glass_mat.shader = load("res://shaders/window_glass.gdshader")
 	var frame := StandardMaterial3D.new(); frame.albedo_color = Color(0.93, 0.9, 0.85); frame.roughness = 0.5
 	var trim := StandardMaterial3D.new(); trim.albedo_color = Color(0.86, 0.8, 0.74); trim.roughness = 0.85
@@ -47,6 +50,13 @@ func build(city) -> void:
 	# carved stone: the cornice, bands between floors and corner pilasters in a paler tuff; a dark basalt plinth
 	var carved := _stone_mat(true); var basalt := _stone_mat(false); basalt.albedo_color = Color(0.3, 0.29, 0.3)
 	_dress(arch, { "stone": carved, "glass": glass_mat, "frame": shop_frame })
+	kit = { "win": win, "bal": bal, "shop": shop, "door": door, "arch": arch, "carved": carved, "basalt": basalt }
+	return kit
+
+func build(city) -> void:
+	var kt := make_kit()
+	var win: Mesh = kt.win; var bal: Mesh = kt.bal; var shop: Mesh = kt.shop; var door: Mesh = kt.door; var arch: Mesh = kt.arch
+	var carved: Material = kt.carved; var basalt: Material = kt.basalt
 	var unit := BoxMesh.new()
 	var rng := RandomNumberGenerator.new(); rng.seed = 90210
 	var gy: float = city.CURB * S

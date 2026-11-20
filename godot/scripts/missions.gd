@@ -52,8 +52,14 @@ static func ic(i: int) -> float:
 	return i * CELL + 60.0
 
 # ------------------------------------------------------------------------- setup ----------
+var free := false           # Yerevan: just driving and walking, no jobs or story yet
+
 func setup(main) -> void:
 	m = main
+	if m.yerevan:
+		free = true
+		marker = MeshInstance3D.new(); marker.visible = false; add_child(marker); club_door = Vector2(-1e6, -1e6)
+		_load(); return
 	for ij in [[4, 3], [3, 2], [2, 3], [3, 4], [4, 4], [2, 2], [4, 2]]:   # the club takes the first building near the square
 		var b: Dictionary = m.city.blocks[ij[0]][ij[1]]
 		if b.type == "b": club_rect = b.rects[0]; break
@@ -144,6 +150,7 @@ func new_offer() -> void:
 	job = { "kind": "goods", "stage": "pickup", "p": road_point(), "label": GOODS.pick_random() }
 
 func on_enter_car(c) -> void:
+	if free: return
 	if c.model == "taxi" and not (job and (job.kind == "taxi" or job.stage == "deliver")):
 		new_offer(); m.toast("Դու տաքսիստ ես. վերցրու ուղևորներին")
 
@@ -367,6 +374,7 @@ func spos(at):   # a story spot: a name in sp, or a function giving a spot (or n
 	return p
 
 func start_text() -> String:
+	if free: return "Երևան · Հանրապետության հրապարակ · M՝ քարտեզ"
 	return "Նստիր մեքենան ու գնա դեղին օղակի մոտ" if story_done() else CAST[chs[prog.story].who].nom + " սպասում է քեզ · վարդագույն նշանը քարտեզին"
 
 func _begin_chapter() -> void:
@@ -570,6 +578,11 @@ static func gpos(p) -> Vector2:
 
 func tick(dt: float) -> void:   # from main._physics_process
 	var tg: Vector2 = m.target_pos()
+	if free:
+		if wp != null and tg.distance_to(wp) < 45: wp = null; m.toast("Հասար նշված տեղը")
+		save_t += dt
+		if cash != saved_cash and save_t > 1: save_t = 0; save()
+		return
 	_act_update(dt, tg); _story_idle(dt, tg); _place_check(tg)
 	if wp != null and tg.distance_to(wp) < 45: wp = null; m.toast("Հասար նշված տեղը")
 	_jobs(dt, tg)
@@ -577,6 +590,7 @@ func tick(dt: float) -> void:   # from main._physics_process
 	if cash != saved_cash and save_t > 1: save_t = 0; save()
 
 func frame(dt: float) -> void:   # from main._process: characters, the beam and the goal marker
+	if free: return
 	var seen := {}
 	for it in story_cast():
 		var id: String = it[0]; var p = it[1]
@@ -606,6 +620,7 @@ func frame(dt: float) -> void:   # from main._process: characters, the beam and 
 
 ## The line on the HUD: [text, time left or "", colour]
 func hud_line() -> Array:
+	if free: return ["", "", Color.WHITE]
 	var g = goal()
 	if g == null: return ["", "", Color.WHITE]
 	var del: bool = act != null or g.stage == "deliver"
@@ -624,6 +639,10 @@ func hud_line() -> Array:
 
 ## What the maps show: { kind, p, name, big, n }
 func map_items() -> Array:
+	if free:
+		var o := []
+		if wp != null: o.append({ "kind": "wp", "p": wp, "big": true })
+		return o
 	var out := [{ "kind": "square", "p": Vector2(3 * CELL + 320, 3 * CELL + 320), "name": PLACE_NAME.square }, { "kind": "club", "p": club_door, "name": PLACE_NAME.club }]
 	for pl in places: out.append({ "kind": pl.id, "p": Vector2(pl.x, pl.y), "name": PLACE_NAME[pl.id] })
 	if not story_on() and not story_done(): var ch: Dictionary = chs[prog.story]; out.append({ "kind": "story", "p": spos(ch.at), "name": CAST[ch.who].name, "big": true })
@@ -636,6 +655,7 @@ func map_items() -> Array:
 
 # --------------------------------------------------------------- the waypoint route ----------
 func snap_road(p: Vector2) -> Dictionary:   # the nearest point on a street and the crossroads either side
+	if free: return { "p": p }
 	var fi := func(v: float) -> float: return clampf((v - 60) / CELL, 0, N)
 	var I := roundi(fi.call(p.x)); var J := roundi(fi.call(p.y)); var vert := absf(p.x - ic(I)) < absf(p.y - ic(J))
 	var q := Vector2(ic(I), clampf(p.y, ic(0), ic(N))) if vert else Vector2(clampf(p.x, ic(0), ic(N)), ic(J))
@@ -644,6 +664,7 @@ func snap_road(p: Vector2) -> Dictionary:   # the nearest point on a street and 
 
 func route(from: Vector2) -> Array:
 	if wp == null: return []
+	if free: return [from, wp]
 	var sa := snap_road(from); var sb := snap_road(wp)
 	var D := func(p: Vector2, q: Vector2) -> float: return absf(p.x - q.x) + absf(p.y - q.y)
 	if sa.vert == sb.vert and sa.road == sb.road and sa.nodes[0] == sb.nodes[0]: return [from, sa.p, sb.p, wp]
