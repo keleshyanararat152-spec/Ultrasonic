@@ -61,9 +61,12 @@ def main(srcs, dst):
 			if t.get(key): b[k] = t[key]
 		if t.get("addr:street"): b["st"] = t["addr:street"] + " " + t.get("addr:housenumber", "")
 		out["buildings"].append(b)
+	SPECIAL = {"31624086": "rossia"}   # Rossia Mall (the old Rossia cinema)
 	for w in ways.values():
 		t = tags(w)
 		if "building" in t or "building:part" in t:
+			if w.get("id") in SPECIAL: t = dict(t); t["building"] = SPECIAL[w.get("id")]
+			elif t.get("building") == "theatre" and (num(t.get("height"), 0) > 30 or num(t.get("building:levels"), 0) >= 9): t = dict(t); t["building"] = "opera"   # the Opera house
 			add_building(ring(w), t); continue
 		p = ring(w)
 		if p is None: continue
@@ -110,9 +113,8 @@ def main(srcs, dst):
 	for r in rels.values():
 		t = tags(r)
 		name = t.get("name", "")
-		if t.get("amenity") == "theatre" and ("օպերայի" in name or "Opera" in t.get("name:en", "")) and "building" not in t:
-			t = dict(t); t["building"] = "opera"; t.setdefault("height", "20")   # the Opera house: only its outline is mapped
 		if "building" not in t: continue
+		if t.get("building") == "theatre" and num(t.get("building:levels"), 0) >= 9: t = dict(t); t["building"] = "opera"   # the Opera house
 		rgs = join_outers(r)
 		for rg in rgs: add_building(rg, t)
 	for n in nodes.values():
