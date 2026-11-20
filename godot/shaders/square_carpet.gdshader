@@ -3,6 +3,9 @@ shader_type spatial;
 // a pattern of rays and lozenges between them, like the square's paving.
 uniform vec2 centre = vec2(0.0);      // Godot units
 uniform vec2 radius = vec2(40.0, 40.0);
+uniform vec3 c_light : source_color = vec3(0.86, 0.74, 0.66);
+uniform vec3 c_pink : source_color = vec3(0.78, 0.52, 0.46);
+uniform vec3 c_dark : source_color = vec3(0.16, 0.15, 0.16);
 uniform sampler2D stone : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 global uniform float wetness;
 varying vec3 wp;
@@ -10,7 +13,7 @@ void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
 	vec2 q = (wp.xz - centre) / radius;
 	float r = length(q); float a = atan(q.y, q.x);
-	vec3 light = vec3(0.86, 0.74, 0.66); vec3 pink = vec3(0.78, 0.52, 0.46); vec3 dark = vec3(0.16, 0.15, 0.16);
+	vec3 light = c_light; vec3 pink = c_pink; vec3 dark = c_dark;
 	vec3 c = light;
 	float ring = fract(r * 6.0);
 	if (ring < 0.12) c = dark;                         // basalt rings

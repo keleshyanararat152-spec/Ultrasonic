@@ -282,9 +282,15 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 	var put := {}   # chunk -> { win: [], bal: [], shop: [], shop_cols: [], door: [], arch: [] }
 	var gov_best := 1e9; var gov = null
 	var special: Array = []   # outlines of the landmarks built by hand: anything mapped inside them is left out
+	for e in bpolys:   # Government House: the government building nearest the square
+		if String(e[2].get("n", "")).contains("կառավարություն"):
+			var dg := (e[1] as Rect2).get_center().distance_to(square_centre)
+			if dg < gov_best: gov_best = dg; gov = e
+	if gov != null: gov[2].t = "gov"
 	for e in bpolys:
-		if e[2].t in ["opera", "rossia"]: special.append(e[0])
+		if e[2].t in ["opera", "rossia", "gov"]: special.append(e[0])
 	for e in bpolys:
+		if e[2].t == "gov": continue
 		if not e[2].t in ["opera", "rossia"]:
 			var cc := (e[1] as Rect2).get_center(); var skip := false
 			for sp: PackedVector2Array in special: if _inside(cc, sp): skip = true
@@ -294,9 +300,6 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 		if on_square:   # the square's Tamanyan buildings: tall, in pink tuff, on arcades
 			b.h = maxf(b.h, 20.0); b.lv = maxi(b.lv, 5); b["arcade"] = true
 			if not b.has("c"): b["c"] = ["e3a58c", "d98f7a", "e8b48a"][rng.randi() % 3]
-			if String(b.get("n", "")).contains("կառավարություն"):
-				var dg := (e[1] as Rect2).get_center().distance_to(square_centre)
-				if dg < gov_best: gov_best = dg; gov = e
 		if b.t == "opera": opera = e; continue   # built on their own below
 		if b.t == "rossia": rossia = e; continue
 		var h: float = b.h * 10.0; var h0: float = b.get("min", 0.0) * 10.0
@@ -366,7 +369,7 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 				if pc[e[0]].size(): _vis(_multi(kt[e[0]], null, pc[e[0]], e[1], []), 150.0)
 			if pc.shop.size(): _vis(_multi(kt.shop, null, pc.shop, false, pc.shop_cols), 180.0)
 			if pc.arch.size(): _vis(_multi(kt.arch, null, pc.arch, true, []), 180.0)
-	if gov != null: _clock_tower(gov)
+	if gov != null: _gov_house(gov)
 	if opera != null: _opera(opera)
 	if rossia != null: _rossia(rossia)
 	if hi:   # big buildings hide what is behind them
@@ -379,70 +382,98 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 
 var opera = null
 var rossia = null
-## The Opera house (Tamanyan's Opera and Ballet Theatre) on its real outline from the map: a ring of two-storey
-## arches between pilasters in pale grey-pink tuff, a cornice and an attic with small windows, and the great
-## round hall rising out of the middle in two drums with tall windows, crowned by a parapet; broad steps and
-## the theatre's name on the side facing Freedom Square.
+## The Opera house, as in the photographs: low wings in pale tuff on the mapped outline with arched windows;
+## at the front a half-round rotunda: tall arched windows below, a gallery of paired columns above set back
+## behind them, and a smaller half-round storey on top; behind it the tall flat-topped block of the hall; in
+## front, an oval paved square with two statues on plinths, and the theatre's name.
 func _opera(e: Array) -> void:
 	var poly: PackedVector2Array = e[0]; var r: Rect2 = e[1]
-	var tuff := _ph_mat("sandstone_blocks_05", 3.6, Color("e6d2c2"))
-	var stone := _ph_mat("sandstone_blocks_05", 2.0, Color("efe2d6"))
-	var H := 17.0
-	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var pil := []; var beams := []; var arches := []; var attic := []
+	var tuff := _ph_mat("sandstone_blocks_05", 3.6, Color("ddd2c6"))
+	var stone := _ph_mat("sandstone_blocks_05", 2.0, Color("ece4da"))
+	var roof_m := _plain(Color("a7a29b"), 0.9)
 	var kt: Dictionary = parts.kit if parts else {}
-	for i in poly.size():
+	var H := 12.0
+	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var beams := []; var arches := []
+	for i in poly.size():   # the wings: walls, a cornice, arched windows
 		var a := poly[i]; var c := poly[(i + 1) % poly.size()]; var L := a.distance_to(c)
 		if L < 1: continue
 		var d := (c - a) / L; var n2 := Vector2(d.y, -d.x); var nrm := Vector3(n2.x, 0, n2.y)
-		var v0 := Vector3(a.x * S, 0, a.y * S); var v1 := Vector3(c.x * S, 0, c.y * S); var v2 := v1 + Vector3(0, H, 0); var v3 := v0 + Vector3(0, H, 0)
-		_tri(st, [v0, v2, v1], nrm, [Vector2(0, 0), Vector2(L * S, H), Vector2(L * S, 0)]); _tri(st, [v0, v3, v2], nrm, [Vector2(0, 0), Vector2(0, H), Vector2(L * S, H)])
-		var mid := (a + c) / 2.0; var ang := -d.angle(); var rot := Basis(Vector3.UP, ang)
-		beams.append(Transform3D(rot * Basis.from_scale(Vector3(L * S + 0.5, 0.9, 1.3)), Vector3(mid.x * S, 12.4, mid.y * S) + nrm * 0.5))   # the cornice over the arches
-		beams.append(Transform3D(rot * Basis.from_scale(Vector3(L * S + 0.3, 0.5, 0.9)), Vector3(mid.x * S, H + 0.2, mid.y * S) + nrm * 0.25))   # the top of the attic
-		var n := int(floor(L * S / 6.2))
+		var v0 := Vector3(a.x * S, 0, a.y * S); var v1 := Vector3(c.x * S, 0, c.y * S)
+		_tri(st, [v0, v1 + Vector3(0, H, 0), v1], nrm, [Vector2(0, 0), Vector2(L * S, H), Vector2(L * S, 0)])
+		_tri(st, [v0, v0 + Vector3(0, H, 0), v1 + Vector3(0, H, 0)], nrm, [Vector2(0, 0), Vector2(0, H), Vector2(L * S, H)])
+		var mid := (a + c) / 2.0
+		beams.append(Transform3D(Basis(Vector3.UP, -d.angle()) * Basis.from_scale(Vector3(L * S + 0.4, 0.9, 1.0)), Vector3(mid.x * S, H - 0.3, mid.y * S) + nrm * 0.4))
+		var n := int(floor(L * S / 5.2))
 		var basis := Basis(Vector3(d.x, 0, d.y), Vector3.UP, nrm)
 		for k in n:
-			var t := (k + 0.5) / n; var p := a.lerp(c, t)
-			if kt.has("arch"): arches.append(Transform3D(basis * Basis.from_scale(Vector3(1.7, 2.75, 1.3)), Vector3(p.x * S, 0.0, p.y * S) + nrm * 0.02))
-			if kt.has("win"): attic.append(Transform3D(basis * Basis.from_scale(Vector3(0.8, 0.55, 1.0)), Vector3(p.x * S, 14.6, p.y * S) + nrm * 0.02))
-			var q := a.lerp(c, float(k) / n)
-			pil.append(Transform3D(rot * Basis.from_scale(Vector3(1.0, 12.0, 0.7)), Vector3(q.x * S, 6.0, q.y * S) + nrm * 0.3))
+			var p := a.lerp(c, (k + 0.5) / n)
+			if kt.has("arch"): arches.append(Transform3D(basis * Basis.from_scale(Vector3(1.25, 2.1, 1.0)), Vector3(p.x * S, 0, p.y * S) + nrm * 0.02))
 	_add_mesh(st, tuff)
-	var roof := SurfaceTool.new(); roof.begin(Mesh.PRIMITIVE_TRIANGLES); _poly_roof(roof, poly, H + 0.05); _add_mesh(roof, _plain(Color("9b968f"), 0.9), false)
-	_multi(BoxMesh.new(), stone, pil); _multi(BoxMesh.new(), stone, beams)
-	if arches.size(): _vis(_multi(kt.arch, null, arches, true, []), 400.0)
-	if attic.size(): _vis(_multi(kt.win, null, attic, false, []), 300.0)
-	# the great round hall in the middle: a wide drum, then a narrower one, tall windows round each, parapets
-	var cen := Vector2.ZERO
-	for q in poly: cen += q
-	cen /= poly.size()
-	var rmin := minf(r.size.x, r.size.y) * S
-	for lv in [[rmin * 0.36, H, 9.0], [rmin * 0.24, H + 9.0, 7.0]]:
-		var rad: float = lv[0]; var y0: float = lv[1]; var hh: float = lv[2]
-		var drum := MeshInstance3D.new(); var dm := CylinderMesh.new(); dm.top_radius = rad; dm.bottom_radius = rad; dm.height = hh; dm.radial_segments = 64
-		drum.mesh = dm; drum.material_override = tuff; drum.position = Vector3(cen.x * S, y0 + hh / 2.0, cen.y * S); add_child(drum)
-		var rim := MeshInstance3D.new(); var rm := CylinderMesh.new(); rm.top_radius = rad + 0.7; rm.bottom_radius = rad + 0.5; rm.height = 1.0; rm.radial_segments = 64
-		rim.mesh = rm; rim.material_override = stone; rim.position = Vector3(cen.x * S, y0 + hh + 0.3, cen.y * S); add_child(rim)
-		var cap := MeshInstance3D.new(); var cpm := CylinderMesh.new(); cpm.top_radius = rad - 0.2; cpm.bottom_radius = rad - 0.2; cpm.height = 0.3; cpm.radial_segments = 64
-		cap.mesh = cpm; cap.material_override = _plain(Color("9b968f"), 0.9); cap.position = Vector3(cen.x * S, y0 + hh + 0.05, cen.y * S); add_child(cap)
-		if kt.has("win"):
-			var ring_w := []; var nw := int(TAU * rad / 3.4)
-			for k in nw:
-				var a := k * TAU / nw; var dir := Vector3(cos(a), 0, sin(a))
-				ring_w.append(Transform3D(Basis(dir.cross(Vector3.UP).normalized(), Vector3.UP, dir) * Basis.from_scale(Vector3(0.85, 1.8, 1.0)), Vector3(cen.x * S, y0 + hh * 0.5, cen.y * S) + dir * (rad + 0.02)))
-			_vis(_multi(kt.win, null, ring_w, false, []), 500.0)
-	# the front towards Freedom Square: steps and the name
-	var front := Vector2(cen.x, r.position.y)
-	var best := 1e9
-	for q in poly:
-		if absf(q.x - cen.x) < r.size.x * 0.25 and q.y < best: best = q.y; front = Vector2(cen.x, q.y)
-	var steps := []
-	for k in 4: steps.append(Transform3D(Basis.from_scale(Vector3(36.0, 0.2 * (4 - k), 1.2)), Vector3(front.x * S, 0.1 * (4 - k), front.y * S - 0.6 - k * 1.2)))
-	_multi(BoxMesh.new(), stone, steps)
+	var roof := SurfaceTool.new(); roof.begin(Mesh.PRIMITIVE_TRIANGLES); _poly_roof(roof, poly, H + 0.05); _add_mesh(roof, roof_m, false)
+	_multi(BoxMesh.new(), stone, beams)
+	# the rotunda at the front (north, towards Freedom Square)
+	var cen := r.get_center(); var width := r.size.x * S; var depth := r.size.y * S
+	var R := width * 0.36
+	var fc := Vector3(cen.x * S, 0, r.position.y * S + R * 0.95)   # its centre, so the half-round reaches the front
+	var arc := func(rad: float, y0: float, y1: float, mat: Material) -> void:
+		var sa := SurfaceTool.new(); sa.begin(Mesh.PRIMITIVE_TRIANGLES); var seg := 40
+		for k in seg:
+			var a0 := PI + k * PI / seg; var a1 := PI + (k + 1) * PI / seg
+			var p0 := fc + Vector3(cos(a0), 0, sin(a0)) * rad; var p1 := fc + Vector3(cos(a1), 0, sin(a1)) * rad
+			var nn := Vector3(cos((a0 + a1) / 2), 0, sin((a0 + a1) / 2))
+			var u0 := k * PI * rad / seg; var u1 := (k + 1) * PI * rad / seg
+			_tri(sa, [p0 + Vector3(0, y0, 0), p1 + Vector3(0, y1, 0), p1 + Vector3(0, y0, 0)], nn, [Vector2(u0, y0), Vector2(u1, y1), Vector2(u1, y0)])
+			_tri(sa, [p0 + Vector3(0, y0, 0), p0 + Vector3(0, y1, 0), p1 + Vector3(0, y1, 0)], nn, [Vector2(u0, y0), Vector2(u0, y1), Vector2(u1, y1)])
+		_add_mesh(sa, mat)
+	var disc := func(rad: float, y: float, mat: Material) -> void:   # a half-disc roof over a tier
+		var sd := SurfaceTool.new(); sd.begin(Mesh.PRIMITIVE_TRIANGLES); var seg := 40
+		for k in seg:
+			var a0 := PI + k * PI / seg; var a1 := PI + (k + 1) * PI / seg
+			_tri(sd, [fc + Vector3(0, y, 0), fc + Vector3(cos(a0), 0, sin(a0)) * rad + Vector3(0, y, 0), fc + Vector3(cos(a1), 0, sin(a1)) * rad + Vector3(0, y, 0)], Vector3.UP)
+		_add_mesh(sd, mat, false)
+	arc.call(R, 0.0, 12.5, tuff); disc.call(R + 0.6, 12.5, stone)
+	arc.call(R - 3.2, 12.5, 21.0, tuff); disc.call(R - 0.2, 21.0, stone)
+	arc.call(R * 0.66, 21.0, 25.5, tuff); disc.call(R * 0.66 + 0.4, 25.5, roof_m)
+	var ring := func(rad: float, y: float, h: float) -> void:   # a cornice ring
+		var mi := MeshInstance3D.new(); var cm := CylinderMesh.new(); cm.top_radius = rad; cm.bottom_radius = rad; cm.height = h; cm.radial_segments = 48
+		mi.mesh = cm; mi.material_override = stone; mi.position = fc + Vector3(0, y, 0); add_child(mi)
+	var cols := []; var rw := []
+	var ncol := 18
+	for k in ncol:   # paired columns round the gallery, arched windows below them
+		var a := PI + (k + 0.5) * PI / ncol; var dir := Vector3(cos(a), 0, sin(a)); var tan := Vector3(-sin(a), 0, cos(a))
+		for pp in [-0.55, 0.55]: cols.append(Transform3D(Basis.IDENTITY, fc + dir * (R - 0.9) + tan * pp + Vector3(0, 16.75, 0)))
+		if kt.has("arch"): rw.append(Transform3D(Basis(tan, Vector3.UP, dir) * Basis.from_scale(Vector3(1.0, 2.2, 1.0)), fc + dir * (R + 0.02)))
+	var cm2 := CylinderMesh.new(); cm2.top_radius = 0.42; cm2.bottom_radius = 0.48; cm2.height = 8.5; cm2.radial_segments = 14
+	_multi(cm2, stone, cols)
+	if rw.size(): _vis(_multi(kt.arch, null, rw, true, []), 400.0)
+	# the tall block of the hall behind
+	var hall := MeshInstance3D.new(); var hb := BoxMesh.new(); hb.size = Vector3(width * 0.56, 33.0, depth * 0.42); hall.mesh = hb; hall.material_override = tuff
+	hall.position = Vector3(cen.x * S, 16.5, cen.y * S + depth * 0.12); add_child(hall)
+	var hc := MeshInstance3D.new(); var hcb := BoxMesh.new(); hcb.size = Vector3(width * 0.56 + 1.0, 1.2, depth * 0.42 + 1.0); hc.mesh = hcb; hc.material_override = stone
+	hc.position = hall.position + Vector3(0, 16.3, 0); add_child(hc)
+	# the oval square in front, two statues on plinths
+	var pc := Vector2(cen.x, r.position.y - R * 9.0)
+	var sq := SurfaceTool.new(); sq.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var oval := PackedVector2Array()
+	for k in 48: oval.append(pc + Vector2(cos(k * TAU / 48) * R * 16.0, sin(k * TAU / 48) * R * 9.5))
+	_poly_fill(sq, oval, 0.034)
+	var pm := ShaderMaterial.new(); pm.shader = load("res://shaders/square_carpet.gdshader")
+	pm.set_shader_parameter("centre", pc * S); pm.set_shader_parameter("radius", Vector2(R * 1.6, R * 0.95))
+	pm.set_shader_parameter("c_light", Color(0.62, 0.6, 0.58)); pm.set_shader_parameter("c_pink", Color(0.5, 0.48, 0.47)); pm.set_shader_parameter("c_dark", Color(0.3, 0.29, 0.29))
+	pm.set_shader_parameter("stone", load("res://assets/tex/ph/sandstone_blocks_05_diff.jpg"))
+	_add_mesh(sq, pm, false)
+	for sx in [-1.0, 1.0]:
+		var sp := Vector3(pc.x * S + sx * R * 0.8, 0, pc.y * S + R * 0.15)
+		var pl := MeshInstance3D.new(); var plb := BoxMesh.new(); plb.size = Vector3(3.0, 3.2, 3.0); pl.mesh = plb; pl.material_override = _ph_mat("rough_block_wall", 2.0, Color(0.45, 0.42, 0.42))
+		pl.position = sp + Vector3(0, 1.6, 0); add_child(pl)
+		var fig := MeshInstance3D.new(); var fgm := CapsuleMesh.new(); fgm.radius = 0.5; fgm.height = 2.6; fig.mesh = fgm
+		var bronze := _plain(Color(0.28, 0.24, 0.18), 0.4); bronze.metallic = 0.8; fig.material_override = bronze
+		fig.position = sp + Vector3(0, 4.5, 0); add_child(fig)
+		_solid(Vector2(sp.x / S, sp.z / S), 22)
 	var lab := Label3D.new(); lab.text = "ՕՊԵՐԱՅԻ ԵՎ ԲԱԼԵՏԻ ԱԶԳԱՅԻՆ ԱԿԱԴԵՄԻԱԿԱՆ ԹԱՏՐՈՆ"; lab.font = load("res://fonts/NotoSansArmenian.ttf")
-	lab.font_size = 80; lab.pixel_size = 0.012; lab.modulate = Color("6e5440"); lab.outline_size = 0
-	lab.position = Vector3(front.x * S, 15.4, front.y * S - 0.12); lab.rotation.y = PI; add_child(lab)
+	lab.font_size = 64; lab.pixel_size = 0.012; lab.modulate = Color("6e5440"); lab.outline_size = 0
+	lab.position = fc + Vector3(0, 21.6, -(R - 0.15)); lab.rotation.y = PI; add_child(lab)
 	landmarks.append([cen, "Օպերա"])
 
 ## Rossia Mall, the old Rossia cinema: a glass and tuff podium, and over it the two great halls whose roofs
@@ -501,29 +532,90 @@ func _rossia(e: Array) -> void:
 	landmarks.append([cen, "Ռոսիա Մոլ"])
 
 var clocks: Array = []   # clock face materials, set to the game's time
-## Government House's clock tower: a tall tuff tower on the side towards the square, four clock faces near the top.
-func _clock_tower(e: Array) -> void:
-	var poly: PackedVector2Array = e[0]; var b: Dictionary = e[2]
-	var best := 1e9; var at := poly[0]
+## Government House, as in the photographs: rose tuff on a dark plinth, big arches on the ground floor, rows of
+## arched windows above, a cornice and a red roof; the wing that follows the square's curve carries a colonnade
+## on its upper floors; and the clock tower: a great arched gateway at its foot, the clock high up, an open
+## loggia of columns on top and the flag.
+func _gov_house(e: Array) -> void:
+	var poly: PackedVector2Array = e[0]; var r: Rect2 = e[1]
+	var H := 21.0
+	var rose := _ph_mat("sandstone_blocks_05", 3.6, Color("d4917f"))
+	var pale := _ph_mat("sandstone_blocks_05", 2.0, Color("e7b7a6"))
+	var basalt := _plain(Color(0.2, 0.19, 0.2), 0.8)
+	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var kt: Dictionary = parts.kit if parts else {}
+	var arches := []; var wins := []; var bands := []; var cols := []; var plinth := []
+	for i in poly.size():
+		var a := poly[i]; var c := poly[(i + 1) % poly.size()]; var L := a.distance_to(c)
+		if L < 1: continue
+		var d := (c - a) / L; var n2 := Vector2(d.y, -d.x); var nrm := Vector3(n2.x, 0, n2.y)
+		var v0 := Vector3(a.x * S, 0, a.y * S); var v1 := Vector3(c.x * S, 0, c.y * S)
+		_tri(st, [v0, v1 + Vector3(0, H, 0), v1], nrm, [Vector2(0, 0), Vector2(L * S, H), Vector2(L * S, 0)])
+		_tri(st, [v0, v0 + Vector3(0, H, 0), v1 + Vector3(0, H, 0)], nrm, [Vector2(0, 0), Vector2(0, H), Vector2(L * S, H)])
+		var mid := (a + c) / 2.0; var rot := Basis(Vector3.UP, -d.angle())
+		for y in [[H - 0.6, 1.2, 1.4], [H - 1.6, 0.4, 0.8], [6.4, 0.45, 0.6]]:   # cornice, frieze, the band over the arches
+			bands.append(Transform3D(rot * Basis.from_scale(Vector3(L * S + 0.4, y[1], y[2])), Vector3(mid.x * S, y[0], mid.y * S) + nrm * (y[2] / 2.0)))
+		plinth.append(Transform3D(rot * Basis.from_scale(Vector3(L * S + 0.3, 0.9, 0.5)), Vector3(mid.x * S, 0.45, mid.y * S) + nrm * 0.2))
+		var facing := (square_centre - mid).normalized().dot(n2)
+		var curved := L * S < 14.0 and facing > 0.3   # the short walls round the square's curve
+		var n := int(floor((L * S - 1.0) / 4.4))
+		var basis := Basis(Vector3(d.x, 0, d.y), Vector3.UP, nrm)
+		for k in n:
+			var p := a.lerp(c, (k + 0.5) / n)
+			var p3 := Vector3(p.x * S, 0, p.y * S) + nrm * 0.02
+			if kt.has("arch"): arches.append(Transform3D(basis * Basis.from_scale(Vector3(1.15, 1.35, 1.0)), p3))
+			for f in [8.4, 11.8, 15.2]:
+				if kt.has("win"): wins.append(Transform3D(basis, p3 + Vector3(0, f, 0)))
+			if curved or facing > 0.85:   # columns in front of the upper floors, where the wing follows the square
+				for cc in [-1.1, 1.1]:
+					cols.append(Transform3D(Basis.IDENTITY, p3 + Vector3(d.x, 0, d.y) * cc + Vector3(0, 13.0, 0) + nrm * 1.3))
+	_add_mesh(st, rose)
+	var roof := SurfaceTool.new(); roof.begin(Mesh.PRIMITIVE_TRIANGLES); _poly_roof(roof, poly, H + 0.6)
+	_add_mesh(roof, _plain(Color("a8473a"), 0.7), false)   # the red roof
+	_multi(BoxMesh.new(), pale, bands); _multi(BoxMesh.new(), basalt, plinth)
+	var cm := CylinderMesh.new(); cm.top_radius = 0.38; cm.bottom_radius = 0.42; cm.height = 10.0; cm.radial_segments = 12
+	if cols.size(): _multi(cm, pale, cols)
+	if arches.size(): _vis(_multi(kt.arch, null, arches, true, []), 400.0)
+	if wins.size(): _vis(_multi(kt.win, null, wins, false, []), 300.0)
+	# the tower, standing in the facade nearest the middle of the square
+	var best := 1e9; var at := poly[0]; var out := Vector2.UP
 	for i in poly.size():
 		var q := Geometry2D.get_closest_point_to_segment(square_centre, poly[i], poly[(i + 1) % poly.size()])
-		if q.distance_to(square_centre) < best: best = q.distance_to(square_centre); at = q
-	var inward := ((e[1] as Rect2).get_center() - at).normalized()
-	var c := at + inward * 60.0; var base: float = b.h
-	var tuff := _ph_mat("sandstone_blocks_05", 3.6, Color("e3a58c").lerp(Color.WHITE, 0.1))
-	var parts3 := [[9.0, 16.0, base + 8.0], [10.2, 0.8, base + 16.4], [7.6, 6.0, base + 19.8], [8.4, 0.6, base + 23.1], [5.0, 4.0, base + 25.4]]
-	for q in parts3:
-		var mi := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = Vector3(q[0], q[1], q[0]); mi.mesh = bm; mi.material_override = tuff
-		mi.position = Vector3(c.x * S, q[2], c.y * S); add_child(mi)
-	var spire := MeshInstance3D.new(); var cm := CylinderMesh.new(); cm.top_radius = 0.05; cm.bottom_radius = 2.6; cm.height = 5.0; cm.radial_segments = 4
-	spire.mesh = cm; spire.material_override = _plain(Color("6b4a3a"), 0.6); spire.position = Vector3(c.x * S, base + 29.9, c.y * S); spire.rotation.y = PI / 4; add_child(spire)
-	for k in 4:   # the four clock faces
-		var dir := Vector2.from_angle(k * PI / 2)
-		var f := MeshInstance3D.new(); var qm := QuadMesh.new(); qm.size = Vector2(4.2, 4.2); f.mesh = qm
+		if q.distance_to(square_centre) < best:
+			best = q.distance_to(square_centre); at = q
+			var dd := (poly[(i + 1) % poly.size()] - poly[i]).normalized(); out = Vector2(dd.y, -dd.x)
+	var c := at - out * 30.0; var c3 := Vector3(c.x * S, 0, c.y * S); var o3 := Vector3(out.x, 0, out.y)
+	var tb := Basis(Vector3(-out.y, 0, out.x), Vector3.UP, o3)
+	var W := 12.0
+	var box := func(size: Vector3, y: float, mat: Material) -> void:
+		var mi := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = size; mi.mesh = bm; mi.material_override = mat
+		mi.position = c3 + Vector3(0, y, 0); mi.basis = tb; add_child(mi)
+	box.call(Vector3(W, 30.0, W), 15.0, rose)                 # the shaft
+	box.call(Vector3(W + 0.8, 0.9, W + 0.8), 30.4, pale)      # cornice under the loggia
+	box.call(Vector3(W - 0.6, 0.5, W - 0.6), 31.1, pale)      # the loggia floor
+	box.call(Vector3(W + 0.6, 1.4, W + 0.6), 37.4, pale)      # entablature over it
+	box.call(Vector3(W - 1.6, 1.0, W - 1.6), 38.6, rose)      # attic
+	box.call(Vector3(W - 6.0, 6.0, W - 6.0), 34.2, _plain(Color(0.25, 0.2, 0.18), 0.9))   # the dark room inside the loggia
+	var lcols := []
+	for sx in range(-2, 3):   # five columns a side round the loggia
+		for side in 4:
+			var u := Vector3(sx * (W - 1.2) / 4.0, 0, (W - 1.0) / 2.0).rotated(Vector3.UP, side * PI / 2.0)
+			lcols.append(Transform3D(tb, c3 + tb * u + Vector3(0, 34.4, 0)))
+	var lc := CylinderMesh.new(); lc.top_radius = 0.32; lc.bottom_radius = 0.36; lc.height = 5.6; lc.radial_segments = 12
+	_multi(lc, pale, lcols)
+	if kt.has("arch"):   # the great gateway
+		_multi(kt.arch, null, [Transform3D(tb * Basis.from_scale(Vector3(1.9, 2.6, 1.0)), c3 + o3 * (W / 2.0 + 0.03))], true, [])
+	var pole := MeshInstance3D.new(); var pm := CylinderMesh.new(); pm.top_radius = 0.06; pm.bottom_radius = 0.1; pm.height = 9.0; pole.mesh = pm
+	pole.material_override = _plain(Color(0.8, 0.8, 0.82), 0.3); pole.position = c3 + Vector3(0, 43.6, 0); add_child(pole)
+	var flag := MeshInstance3D.new(); var fq := QuadMesh.new(); fq.size = Vector2(3.6, 1.8); flag.mesh = fq
+	var fm := ShaderMaterial.new(); fm.shader = load("res://shaders/flag.gdshader"); flag.material_override = fm
+	flag.position = c3 + Vector3(1.85, 46.9, 0); add_child(flag)
+	for k in 4:   # the clock faces
+		var dir := Vector3(0, 0, 1).rotated(Vector3.UP, k * PI / 2.0); var dw := tb * dir
+		var f := MeshInstance3D.new(); var qm := QuadMesh.new(); qm.size = Vector2(4.6, 4.6); f.mesh = qm
 		var cmat := ShaderMaterial.new(); cmat.shader = load("res://shaders/clock.gdshader"); f.material_override = cmat; clocks.append(cmat)
-		f.position = Vector3(c.x * S + dir.x * 3.85, base + 20.0, c.y * S + dir.y * 3.85); f.rotation.y = -dir.angle() + PI / 2
-		add_child(f)
-	_solid(c, 50); landmarks.append([c, "Կառավարության տուն"])
+		f.position = c3 + dw * (W / 2.0 + 0.04) + Vector3(0, 24.0, 0); f.basis = Basis(Vector3.UP, atan2(dw.x, dw.z)); add_child(f)
+	_solid(c, W * 5.5); landmarks.append([c, "Կառավարության տուն"])
 
 func _process(_dt: float) -> void:
 	if clocks.is_empty() or get_parent() == null: return

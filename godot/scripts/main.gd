@@ -1032,6 +1032,7 @@ func _yerevan_test() -> void:   # Yerevan: the map loaded, you can walk and driv
 		var b: Array = city.bpolys[0]; var r: Rect2 = b[1]
 		var inside: Vector2 = city.push_out(r.get_center(), 7)
 		print("YTEST pushed out of a building ", inside != r.get_center(), " start ", Vector2(me.x, me.y))
+		for lm in city.landmarks: if String(lm[1]) in ["Կառավարության տուն", "Օպերա", "Ռոսիա Մոլ", "Հանրապետության հրապարակ"]: print("YTEST landmark ", lm[1], " ", (lm[0] as Vector2).round())
 		touch_ui.stick = Vector2(0, -1)
 	if _frame == 60: print("YTEST walked to ", Vector2(me.x, me.y).round(), " ped0 ", Vector2(peds[0].x, peds[0].y).round())
 	if _frame == 62:
