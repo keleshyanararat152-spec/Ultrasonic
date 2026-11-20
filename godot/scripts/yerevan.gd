@@ -94,6 +94,17 @@ func road_point() -> Vector2:
 	var pts: PackedVector2Array = rd[0]; var s := randi() % maxi(1, pts.size() - 1)
 	return pts[s].lerp(pts[mini(s + 1, pts.size() - 1)], randf())
 
+## Is p on the surface of some street other than road k?
+func _in_other_road(p: Vector2, k: int) -> bool:
+	var c := Vector2i(int(floor(p.x / 300)), int(floor(p.y / 300)))
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			for e in rcells.get(c + Vector2i(dx, dy), []):
+				if e[0] == k: continue
+				var rd: Array = roads[e[0]]; var pts: PackedVector2Array = rd[0]
+				if Geometry2D.get_closest_point_to_segment(p, pts[e[1]], pts[e[1] + 1]).distance_to(p) < rd[1] / 2.0 - 2.0: return true
+	return false
+
 ## The nearest road to p: [distance, width, point, direction]
 func near_road(p: Vector2) -> Array:
 	var c := Vector2i(int(floor(p.x / 300)), int(floor(p.y / 300)))
@@ -227,11 +238,15 @@ func _markings() -> void:
 			var a := pts[s2]; var b := pts[s2 + 1]; var L := a.distance_to(b)
 			if L < 1: continue
 			var d := (b - a) / L; var n := Vector2(-d.y, d.x); var mid := (a + b) / 2.0; var ang := -d.angle()
+			var pieces := maxi(1, int(L / 30.0))   # in 3 m pieces, left out where another street crosses
 			for side in [-1.0, 1.0]:
-				var e: Vector2 = mid + n * side * rd[1] / 2.0
-				kerbs.append(Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(L * S, 0.16, 0.3)), Vector3(e.x * S, 0.08, e.y * S)))
-				var e2: Vector2 = mid + n * side * (rd[1] / 2.0 - 6)
-				lines.append(Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(L * S, 0.02, 0.15)), Vector3(e2.x * S, 0.065, e2.y * S)))
+				for pc in pieces:
+					var t0 := float(pc) / pieces; var t1 := float(pc + 1) / pieces; var pm := a.lerp(b, (t0 + t1) / 2.0); var pl := L * (t1 - t0)
+					var e: Vector2 = pm + n * side * rd[1] / 2.0
+					if _in_other_road(e, k): continue
+					kerbs.append(Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(pl * S, 0.12, 0.25)), Vector3(e.x * S, 0.06, e.y * S)))
+					var e2: Vector2 = pm + n * side * (rd[1] / 2.0 - 6)
+					if not _in_other_road(e2, k): lines.append(Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(pl * S, 0.02, 0.15)), Vector3(e2.x * S, 0.065, e2.y * S)))
 			if big:
 				for side in [-1.0, 1.0]:
 					var c: Vector2 = mid + n * side * 1.5
