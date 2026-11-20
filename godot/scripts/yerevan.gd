@@ -111,6 +111,17 @@ func near_road(p: Vector2) -> Array:
 func _chunk(p: Vector2) -> Vector2i:
 	return Vector2i(int(floor(p.x / CH)), int(floor(p.y / CH)))
 
+## One triangle, turned so its front faces along nrm (Godot draws clockwise triangles as front faces).
+static func _tri(st: SurfaceTool, v: Array, nrm: Vector3, uv: Array = [], col = null) -> void:
+	if ((v[1] - v[0]) as Vector3).cross(v[2] - v[0]).dot(nrm) > 0:
+		v = [v[0], v[2], v[1]]
+		if uv.size(): uv = [uv[0], uv[2], uv[1]]
+	for i in 3:
+		st.set_normal(nrm)
+		if col != null: st.set_color(col)
+		if uv.size(): st.set_uv(uv[i])
+		st.add_vertex(v[i])
+
 func _strip(st: SurfaceTool, pts: PackedVector2Array, w: float, y: float) -> void:   # a ribbon w wide along pts
 	if pts.size() < 2: return
 	var L := []; var R := []
@@ -123,14 +134,15 @@ func _strip(st: SurfaceTool, pts: PackedVector2Array, w: float, y: float) -> voi
 		L.append(pts[i] + n * w * 0.5 * minf(k, 2.0)); R.append(pts[i] - n * w * 0.5 * minf(k, 2.0))
 	for i in pts.size() - 1:
 		var a: Vector2 = L[i]; var b: Vector2 = R[i]; var c: Vector2 = L[i + 1]; var e: Vector2 = R[i + 1]
-		for v in [a, c, b, b, c, e]:
-			st.set_normal(Vector3.UP); st.add_vertex(Vector3(v.x * S, y, v.y * S))
+		var V := func(q: Vector2) -> Vector3: return Vector3(q.x * S, y, q.y * S)
+		_tri(st, [V.call(a), V.call(c), V.call(b)], Vector3.UP); _tri(st, [V.call(b), V.call(c), V.call(e)], Vector3.UP)
 
 func _poly_fill(st: SurfaceTool, poly: PackedVector2Array, y: float) -> void:
 	var idx := Geometry2D.triangulate_polygon(poly)
 	for i in range(0, idx.size(), 3):
-		for k in [idx[i], idx[i + 2], idx[i + 1]]:
-			st.set_normal(Vector3.UP); st.add_vertex(Vector3(poly[k].x * S, y, poly[k].y * S))
+		var v := []
+		for k in [idx[i], idx[i + 1], idx[i + 2]]: v.append(Vector3(poly[k].x * S, y, poly[k].y * S))
+		_tri(st, v, Vector3.UP)
 
 func _add_mesh(st: SurfaceTool, mat: Material, shadows := true, vis := 0.0) -> MeshInstance3D:
 	var mi := MeshInstance3D.new(); mi.mesh = st.commit(); mi.material_override = mat
@@ -267,8 +279,8 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 			var v0 := Vector3(a.x * S, h0 * S, a.y * S); var v1 := Vector3(c.x * S, h0 * S, c.y * S)
 			var v2 := Vector3(c.x * S, h * S, c.y * S); var v3 := Vector3(a.x * S, h * S, a.y * S)
 			var u1 := u + L * S
-			for q in [[v0, Vector2(u, h0 * S)], [v2, Vector2(u1, h * S)], [v1, Vector2(u1, h0 * S)], [v0, Vector2(u, h0 * S)], [v3, Vector2(u, h * S)], [v2, Vector2(u1, h * S)]]:
-				st.set_normal(nrm); st.set_color(col); st.set_uv(q[1]); st.add_vertex(q[0])
+			_tri(st, [v0, v2, v1], nrm, [Vector2(u, h0 * S), Vector2(u1, h * S), Vector2(u1, h0 * S)], col)
+			_tri(st, [v0, v3, v2], nrm, [Vector2(u, h0 * S), Vector2(u, h * S), Vector2(u1, h * S)], col)
 			u = u1
 			if b.t == "roof" or h - h0 < 25: continue
 			# a cornice under the roof, and a band at each floor on the old tuff buildings
@@ -358,8 +370,9 @@ func _vis(mi: MultiMeshInstance3D, d: float) -> void:
 func _poly_roof(st: SurfaceTool, poly: PackedVector2Array, y: float) -> void:
 	var idx := Geometry2D.triangulate_polygon(poly)
 	for i in range(0, idx.size(), 3):
-		for k in [idx[i], idx[i + 2], idx[i + 1]]:
-			st.set_normal(Vector3.UP); st.set_uv(poly[k] * S / 12.0); st.add_vertex(Vector3(poly[k].x * S, y, poly[k].y * S))
+		var v := []; var uv := []
+		for k in [idx[i], idx[i + 1], idx[i + 2]]: v.append(Vector3(poly[k].x * S, y, poly[k].y * S)); uv.append(poly[k] * S / 12.0)
+		_tri(st, v, Vector3.UP, uv)
 
 ## The trees on the map, and street lamps along the wider streets.
 func _trees_and_lamps(rng: RandomNumberGenerator) -> void:
