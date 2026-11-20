@@ -1,11 +1,11 @@
 # OpenStreetMap (.osm XML) -> the game's Yerevan data (assets/yerevan/*.json), in game units (0.1 m), north up
 # (game y grows to the south). Origin: the middle of Republic Square, shifted by OFFSET so all is positive.
 # Data © OpenStreetMap contributors, ODbL (https://www.openstreetmap.org/copyright).
-# usage: python3 osm2game.py in.osm out.json
+# usage: python3 osm2game.py out.json in.osm [more.osm ...]   (several downloads of neighbouring areas are merged)
 import sys, json, math, xml.etree.ElementTree as ET
 
 LAT0, LON0 = 40.17765, 44.51265          # Republic Square
-OFFSET = (6000.0, 5500.0)
+OFFSET = (6000.0, 14000.0)
 KX = math.cos(math.radians(LAT0)) * 111320.0 * 10.0
 KY = 110540.0 * 10.0
 ROADS = {"motorway": 18, "trunk": 16, "primary": 14, "secondary": 12, "tertiary": 10, "unclassified": 7, "residential": 7,
@@ -29,10 +29,13 @@ def area2(p):   # signed area of a closed ring (flat list), for orientation
 	for i in range(0, len(p) - 2, 2): a += p[i] * p[i + 3] - p[i + 2] * p[i + 1]
 	return a / 2
 
-def main(src, dst):
-	root = ET.parse(src).getroot()
-	nodes = {n.get("id"): n for n in root.findall("node")}
-	ways = {w.get("id"): w for w in root.findall("way")}
+def main(srcs, dst):
+	nodes = {}; ways = {}; rels = {}
+	for src in srcs:
+		root = ET.parse(src).getroot()
+		for n in root.findall("node"): nodes[n.get("id")] = n
+		for w in root.findall("way"): ways[w.get("id")] = w
+		for r in root.findall("relation"): rels[r.get("id")] = r
 	def ring(w):
 		ids = [nd.get("ref") for nd in w.findall("nd")]
 		if any(i not in nodes for i in ids): return None
@@ -79,13 +82,35 @@ def main(src, dst):
 			out["fountains"].append({"p": p})
 		elif t.get("natural") == "tree_row":
 			for i in range(0, len(p), 2): out["trees"].append(p[i:i + 2])
-	for r in root.findall("relation"):
-		t = tags(r)
-		if "building" not in t and t.get("type") != "multipolygon": continue
-		if "building" not in t: continue
+	def join_outers(r):   # the outer ways of a multipolygon, joined end to end into closed rings
+		segs = []
 		for mb in r.findall("member"):
 			if mb.get("type") == "way" and mb.get("role") == "outer" and mb.get("ref") in ways:
-				add_building(ring(ways[mb.get("ref")]), t)
+				ids = [nd.get("ref") for nd in ways[mb.get("ref")].findall("nd")]
+				if all(i in nodes for i in ids) and len(ids) > 1: segs.append(ids)
+		rings = []
+		while segs:
+			cur = segs.pop(0)
+			changed = True
+			while cur[0] != cur[-1] and changed:
+				changed = False
+				for k, sg in enumerate(segs):
+					if sg[0] == cur[-1]: cur = cur + sg[1:]
+					elif sg[-1] == cur[-1]: cur = cur + sg[::-1][1:]
+					elif sg[-1] == cur[0]: cur = sg + cur[1:]
+					elif sg[0] == cur[0]: cur = sg[::-1] + cur[1:]
+					else: continue
+					segs.pop(k); changed = True; break
+			if cur[0] == cur[-1] and len(cur) > 3: rings.append([c for i in cur for c in pt(nodes[i])])
+		return rings
+	for r in rels.values():
+		t = tags(r)
+		name = t.get("name", "")
+		if t.get("amenity") == "theatre" and ("օպերայի" in name or "Opera" in t.get("name:en", "")) and "building" not in t:
+			t = dict(t); t["building"] = "opera"; t.setdefault("height", "20")   # the Opera house: only its outline is mapped
+		if "building" not in t: continue
+		rgs = join_outers(r)
+		for rg in rgs: add_building(rg, t)
 	for n in nodes.values():
 		t = tags(n)
 		if t.get("natural") == "tree": out["trees"].append(pt(n))
@@ -93,4 +118,4 @@ def main(src, dst):
 	json.dump(out, open(dst, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
 	print("buildings", len(out["buildings"]), "roads", len(out["roads"]), "walks", len(out["walks"]), "areas", len(out["areas"]), "trees", len(out["trees"]), "fountains", len(out["fountains"]))
 
-main(sys.argv[1], sys.argv[2])
+main(sys.argv[2:], sys.argv[1])

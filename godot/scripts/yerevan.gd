@@ -6,7 +6,7 @@ extends "res://scripts/city.gd"
 ## Map data © OpenStreetMap contributors, ODbL.
 
 const CH := 2000.0            # chunk size for meshes (game units): far chunks are skipped by the camera
-const SPAWN := Vector2(6000, 5500)   # the middle of Republic Square
+const SPAWN := Vector2(6000, 14000)   # the middle of Republic Square
 var data := {}
 var bpolys: Array = []        # [PackedVector2Array, Rect2, building dict]
 var bcells := {}              # Vector2i(cell of 300) -> building indices
@@ -255,6 +255,7 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 			if String(b.get("n", "")).contains("կառավարություն"):
 				var dg := (e[1] as Rect2).get_center().distance_to(square_centre)
 				if dg < gov_best: gov_best = dg; gov = e
+		if b.t == "opera": opera = e; continue   # built on its own below
 		var h: float = b.h * 10.0; var h0: float = b.get("min", 0.0) * 10.0
 		var col := _colour(b, rng); var soviet: bool = b.lv >= 9 and col.s < 0.15
 		col.a = 1.0 if rng.randf() < 0.6 else 0.0
@@ -323,6 +324,7 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 			if pc.shop.size(): _vis(_multi(kt.shop, null, pc.shop, false, pc.shop_cols), 180.0)
 			if pc.arch.size(): _vis(_multi(kt.arch, null, pc.arch, true, []), 180.0)
 	if gov != null: _clock_tower(gov)
+	if opera != null: _opera(opera)
 	if hi:   # big buildings hide what is behind them
 		for e in bpolys:
 			var r: Rect2 = e[1]
@@ -330,6 +332,63 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 			var oc := OccluderInstance3D.new(); var bo := BoxOccluder3D.new()
 			bo.size = Vector3(r.size.x * 0.7, e[2].h * 10.0 - 10, r.size.y * 0.7) * S
 			oc.occluder = bo; oc.position = Vector3(r.get_center().x, e[2].h * 5.0, r.get_center().y) * S; add_child(oc)
+
+var opera = null
+## The Opera house (Tamanyan's Opera and Ballet Theatre): its real outline from the map, walled in pale pink
+## tuff behind a colonnade all round, a cornice and attic, and the two round halls rising out of the roof as
+## drums with tall windows and low domes; the theatre's name over the front facing Freedom Square.
+func _opera(e: Array) -> void:
+	var poly: PackedVector2Array = e[0]; var r: Rect2 = e[1]
+	var tuff := _ph_mat("sandstone_blocks_05", 3.6, Color("ecd2bd"))
+	var stone := _ph_mat("sandstone_blocks_05", 2.0, Color("f2e0d0"))
+	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var H := 150.0
+	var cols := []; var beams := []; var wins := []
+	var kt: Dictionary = parts.kit if parts else {}
+	for i in poly.size():
+		var a := poly[i]; var c := poly[(i + 1) % poly.size()]; var L := a.distance_to(c)
+		if L < 1: continue
+		var d := (c - a) / L; var n2 := Vector2(d.y, -d.x); var nrm := Vector3(n2.x, 0, n2.y)
+		var v0 := Vector3(a.x * S, 0, a.y * S); var v1 := Vector3(c.x * S, 0, c.y * S); var v2 := v1 + Vector3(0, H * S, 0); var v3 := v0 + Vector3(0, H * S, 0)
+		_tri(st, [v0, v2, v1], nrm, [Vector2(0, 0), Vector2(L * S, H * S), Vector2(L * S, 0)]); _tri(st, [v0, v3, v2], nrm, [Vector2(0, 0), Vector2(0, H * S), Vector2(L * S, H * S)])
+		var mid := (a + c) / 2.0; var ang := -d.angle()
+		beams.append(Transform3D(Basis(Vector3.UP, ang).scaled(Vector3(L * S + 0.6, 1.1, 3.4)), Vector3(mid.x * S, 13.9, mid.y * S) + nrm * 1.2))   # entablature over the columns
+		beams.append(Transform3D(Basis(Vector3.UP, ang).scaled(Vector3(L * S + 0.2, 1.6, 0.8)), Vector3(mid.x * S, 15.6, mid.y * S) + nrm * 0.2))   # attic
+		var n := int(floor(L * S / 4.2))
+		for k in n:   # columns standing out from the wall, and a tall arched window between each pair
+			var t := (k + 0.5) / n; var p := a.lerp(c, t)
+			cols.append(Transform3D(Basis.IDENTITY.scaled(Vector3(1, 1, 1)), Vector3(p.x * S, 6.7, p.y * S) + nrm * 2.4))
+			if kt.has("arch"): wins.append(Transform3D(Basis(Vector3(d.x, 0, d.y), Vector3.UP, nrm).scaled(Vector3(1.0, 1.9, 1.0)), Vector3(p.x * S, 3.4, p.y * S) + nrm * 0.02))
+	_add_mesh(st, tuff)
+	var roof := SurfaceTool.new(); roof.begin(Mesh.PRIMITIVE_TRIANGLES); _poly_roof(roof, poly, H * S + 1.2); _add_mesh(roof, _plain(Color("8d8a86"), 0.9), false)
+	var col := CylinderMesh.new(); col.top_radius = 0.5; col.bottom_radius = 0.58; col.height = 13.4; col.radial_segments = 16
+	_multi(col, stone, cols)
+	_multi(BoxMesh.new(), stone, beams)
+	if wins.size(): _vis(_multi(kt.arch, null, wins, true, []), 260.0)
+	# the two halls: drums along the long side, each with a ring of tall windows, a cornice and a low dome
+	var long_x := r.size.x >= r.size.y
+	var cen := r.get_center(); var ax := Vector2(1, 0) if long_x else Vector2(0, 1)
+	var rad := minf(r.size.x, r.size.y) * 0.27 * S; var off := maxf(r.size.x, r.size.y) * 0.2
+	for sgn in [-1.0, 1.0]:
+		var c: Vector2 = cen + ax * off * sgn
+		var drum := MeshInstance3D.new(); var dm := CylinderMesh.new(); dm.top_radius = rad; dm.bottom_radius = rad; dm.height = 9.0; dm.radial_segments = 48
+		drum.mesh = dm; drum.material_override = tuff; drum.position = Vector3(c.x * S, H * S + 4.5, c.y * S); add_child(drum)
+		var rim := MeshInstance3D.new(); var rm := CylinderMesh.new(); rm.top_radius = rad + 0.6; rm.bottom_radius = rad + 0.6; rm.height = 0.9; rm.radial_segments = 48
+		rim.mesh = rm; rim.material_override = stone; rim.position = Vector3(c.x * S, H * S + 9.2, c.y * S); add_child(rim)
+		var dome := MeshInstance3D.new(); var sm := SphereMesh.new(); sm.radius = rad; sm.height = rad * 0.7; sm.is_hemisphere = true; sm.radial_segments = 48; sm.rings = 12
+		dome.mesh = sm; dome.material_override = _plain(Color("9a948c"), 0.5); dome.position = Vector3(c.x * S, H * S + 9.6, c.y * S); add_child(dome)
+		var ring_w := []
+		var nw := int(TAU * rad / 3.0)
+		for k in nw:   # tall windows round the drum
+			var a := k * TAU / nw; var dir := Vector3(cos(a), 0, sin(a))
+			ring_w.append(Transform3D(Basis(dir.cross(Vector3.UP).normalized(), Vector3.UP, dir).scaled(Vector3(0.9, 1.6, 1.0)), Vector3(c.x * S, H * S + 4.6, c.y * S) + dir * (rad + 0.02)))
+		if kt.has("win"): _multi(kt.win, null, ring_w, false, [])
+	# the name over the front that faces Freedom Square (north)
+	var front := Vector2(cen.x, r.position.y)
+	var lab := Label3D.new(); lab.text = "ՕՊԵՐԱՅԻ ԵՎ ԲԱԼԵՏԻ ԱԶԳԱՅԻՆ ԱԿԱԴԵՄԻԱԿԱՆ ԹԱՏՐՈՆ"; lab.font = load("res://fonts/NotoSansArmenian.ttf")
+	lab.font_size = 72; lab.pixel_size = 0.012; lab.modulate = Color("8a6a4a"); lab.outline_size = 0
+	lab.position = Vector3(front.x * S, 15.6, front.y * S - 2.0); lab.rotation.y = PI; add_child(lab)
+	landmarks.append([cen, "Օպերա"])
 
 var clocks: Array = []   # clock face materials, set to the game's time
 ## Government House's clock tower: a tall tuff tower on the side towards the square, four clock faces near the top.
