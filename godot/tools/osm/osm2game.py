@@ -73,7 +73,11 @@ def main(srcs, dst):
 			out["roads"].append({"p": p, "k": hw, "w": round(wd, 1), "n": t.get("name", ""), "one": t.get("oneway") == "yes"})
 		elif hw in WALKS:
 			if t.get("area") == "yes": out["areas"].append({"p": p, "k": "pedestrian", "n": t.get("name", "")})
-			else: out["walks"].append({"p": p, "k": hw, "w": num(t.get("width")) or WALKS[hw]})
+			else:
+				wk = {"p": p, "k": hw, "w": num(t.get("width")) or WALKS[hw]}
+				if t.get("footway") == "crossing" or "crossing" in t: wk["cr"] = True   # a zebra across a street
+				if t.get("footway") == "sidewalk": wk["sw"] = True
+				out["walks"].append(wk)
 		elif t.get("leisure") in ("park", "garden", "playground", "pitch", "swimming_pool") or t.get("landuse") in ("grass", "recreation_ground") or t.get("natural") in ("water", "scrub", "wood"):
 			out["areas"].append({"p": p, "k": t.get("leisure") or t.get("landuse") or t.get("natural"), "n": t.get("name", "")})
 		elif t.get("place") == "square" or t.get("area:highway") == "pedestrian":

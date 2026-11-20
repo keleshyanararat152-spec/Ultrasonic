@@ -314,7 +314,7 @@ func _build_signals() -> void:   # one signal on the near right corner of every 
 				var bas := Basis(Vector3.UP, atan2(-f.z, f.x))
 				var base := Vector3(e[2] * S, city.CURB * S, e[3] * S)
 				posts.append(Transform3D(bas, base))
-				for k in 3: lamps.append(Transform3D(bas.scaled(Vector3(0.05, 0.22, 0.22)), base + f * 0.21 + Vector3(0, 3.74 - k * 0.31, 0)))
+				for k in 3: lamps.append(Transform3D(bas * Basis.from_scale(Vector3(0.05, 0.22, 0.22)), base + f * 0.21 + Vector3(0, 3.74 - k * 0.31, 0)))
 				city._solid(Vector2(e[2], e[3]), 2.5)
 	city._multi(city.kit("signal"), null, posts)
 	var mm := MultiMesh.new(); mm.transform_format = MultiMesh.TRANSFORM_3D; mm.use_colors = true

@@ -127,7 +127,7 @@ func _lay(a: Vector3, b: Vector3) -> void:   # one strip of rubber from a to b
 	var d := b - a; d.y = 0; var L := d.length()
 	if L < 0.01 or L > 3.0: return
 	var ang := atan2(-d.z, d.x)
-	var xf := Transform3D(Basis(Vector3.UP, ang).scaled(Vector3(L + 0.05, 1, 0.24)), (a + b) / 2 + Vector3(0, 0.025, 0))
+	var xf := Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(L + 0.05, 1, 0.24)), (a + b) / 2 + Vector3(0, 0.025, 0))
 	marks.set_instance_transform(mark_k, xf); marks.set_instance_color(mark_k, Color(0.02, 0.02, 0.02, 0.55))
 	mark_k = (mark_k + 1) % MARKS
 

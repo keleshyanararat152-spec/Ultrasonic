@@ -30,7 +30,7 @@ func build(main) -> void:
 		l.visibility_range_end = 170.0; l.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(l)
 		var w: float = clampf(word.length() * 0.62 + 0.5, 2.0, 5.6)
-		xs.append(Transform3D(xf.basis.scaled(Vector3(w, 0.95, 0.08)), xf.origin))
+		xs.append(Transform3D(xf.basis * Basis.from_scale(Vector3(w, 0.95, 0.08)), xf.origin))
 		signs.append([l, col, rng.randf() < 0.12])
 	if xs.size(): m.city._multi(bm, board, xs, false)
 	if m.hi:

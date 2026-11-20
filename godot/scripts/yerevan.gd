@@ -192,10 +192,11 @@ func build() -> void:
 		_strip(rs[ck], rd[0], rd[1], y)
 	for ck in rs: _add_mesh(rs[ck], asphalt, false)
 	var ws := SurfaceTool.new(); ws.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for w in data.walks:
+	for w in data.walks:   # footpaths lie under the streets, so a path that crosses a street does not cover it
+		if w.get("cr", false): continue
 		var pts := PackedVector2Array(); var arr: Array = w.p
 		for i in range(0, arr.size(), 2): pts.append(Vector2(arr[i], arr[i + 1]))
-		_strip(ws, pts, float(w.w) * 10.0, 0.06)
+		_strip(ws, pts, float(w.w) * 10.0, 0.032)
 	_add_mesh(ws, _wet_mat("pavement_02", 3.5, Color(0.86, 0.8, 0.74), 1.0, 0.7), false)
 	_markings()
 	_buildings(rng)
@@ -214,19 +215,53 @@ func _carpet(poly: PackedVector2Array) -> void:
 	_add_mesh(st, m, false)
 	square_centre = r.get_center(); landmarks.append([square_centre, "Հանրապետության հրապարակ"])
 
-## Dashed centre lines on the wider two-way streets.
+## Street paint and kerbs: kerbstones along both edges, white edge lines, a dashed centre line on two-way
+## streets (a double solid one on the big avenues), zebra crossings where the map has them.
 func _markings() -> void:
-	var dashes := []
+	var dashes := []; var kerbs := []; var lines := []; var zebra := []
 	for k in roads.size():
 		var rd: Array = roads[k]
-		if rd[1] < 95 or data.roads[k].get("one", false): continue
+		if rd[1] < 50: continue
+		var pts: PackedVector2Array = rd[0]; var big: bool = rd[1] >= 125 and not data.roads[k].get("one", false)
+		for s2 in pts.size() - 1:
+			var a := pts[s2]; var b := pts[s2 + 1]; var L := a.distance_to(b)
+			if L < 1: continue
+			var d := (b - a) / L; var n := Vector2(-d.y, d.x); var mid := (a + b) / 2.0; var ang := -d.angle()
+			for side in [-1.0, 1.0]:
+				var e: Vector2 = mid + n * side * rd[1] / 2.0
+				kerbs.append(Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(L * S, 0.16, 0.3)), Vector3(e.x * S, 0.08, e.y * S)))
+				var e2: Vector2 = mid + n * side * (rd[1] / 2.0 - 6)
+				lines.append(Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(L * S, 0.02, 0.15)), Vector3(e2.x * S, 0.065, e2.y * S)))
+			if big:
+				for side in [-1.0, 1.0]:
+					var c: Vector2 = mid + n * side * 1.5
+					lines.append(Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(L * S, 0.02, 0.12)), Vector3(c.x * S, 0.066, c.y * S)))
+	for w in data.walks:
+		if not w.get("cr", false): continue
+		var arr: Array = w.p
+		for i in range(0, arr.size() - 2, 2):
+			var a := Vector2(arr[i], arr[i + 1]); var b := Vector2(arr[i + 2], arr[i + 3]); var L := a.distance_to(b)
+			if L < 1: continue
+			var d := (b - a) / L; var t := 4.0
+			while t < L - 2:   # stripes along the street, one after another across it
+				var p := a + d * t
+				zebra.append(Transform3D(Basis(Vector3.UP, -d.angle()) * Basis.from_scale(Vector3(0.45, 0.02, 3.0)), Vector3(p.x * S, 0.067, p.y * S)))
+				t += 9.0
+	var stone := _ph_mat("sandstone_blocks_05", 1.5, Color(0.55, 0.53, 0.52))
+	_multi(BoxMesh.new(), stone, kerbs, false)
+	var paint := _plain(Color("e9e7e1"), 0.8)
+	_multi(BoxMesh.new(), paint, lines, false)
+	_multi(BoxMesh.new(), paint, zebra, false)
+	for k in roads.size():
+		var rd: Array = roads[k]
+		if rd[1] < 95 or rd[1] >= 125 or data.roads[k].get("one", false): continue
 		var pts: PackedVector2Array = rd[0]; var carry := 0.0
 		for s in pts.size() - 1:
 			var a := pts[s]; var b := pts[s + 1]; var L := a.distance_to(b); var d := (b - a) / maxf(L, 0.01)
 			var t := carry
 			while t < L:
 				var p := a + d * (t + 9)
-				if t + 18 < L: dashes.append(Transform3D(Basis(Vector3.UP, -d.angle()).scaled(Vector3(1.8, 0.03, 0.15)), Vector3(p.x * S, 0.07, p.y * S)))
+				if t + 18 < L: dashes.append(Transform3D(Basis(Vector3.UP, -d.angle()) * Basis.from_scale(Vector3(1.8, 0.03, 0.15)), Vector3(p.x * S, 0.07, p.y * S)))
 				t += 40
 			carry = t - L
 	_multi(BoxMesh.new(), _plain(Color("e9e7e1"), 0.8), dashes, false)
@@ -287,10 +322,10 @@ func _buildings(rng: RandomNumberGenerator) -> void:
 			# a cornice under the roof, and a band at each floor on the old tuff buildings
 			var mid := (a + c) / 2.0; var ang := -d.angle()
 			if tuff_style:
-				bands[ck].append(Transform3D(Basis(Vector3.UP, ang).scaled(Vector3(L * S + 0.4, 0.45, 0.7)), Vector3(mid.x * S, h * S - 0.4, mid.y * S) + nrm * 0.25)); band_cols[ck].append(pale)
+				bands[ck].append(Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(L * S + 0.4, 0.45, 0.7)), Vector3(mid.x * S, h * S - 0.4, mid.y * S) + nrm * 0.25)); band_cols[ck].append(pale)
 				if b.lv <= 7:
 					for f in range(1, b.lv):
-						bands[ck].append(Transform3D(Basis(Vector3.UP, ang).scaled(Vector3(L * S, 0.22, 0.36)), Vector3(mid.x * S, f * 3.3 + 0.95, mid.y * S) + nrm * 0.1)); band_cols[ck].append(pale)
+						bands[ck].append(Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(L * S, 0.22, 0.36)), Vector3(mid.x * S, f * 3.3 + 0.95, mid.y * S) + nrm * 0.1)); band_cols[ck].append(pale)
 			if not hi or h0 > 0: continue
 			var cols := int(floor((L * S - 1.4) / 3.2))
 			if cols < 1: continue
@@ -352,13 +387,13 @@ func _opera(e: Array) -> void:
 		var v0 := Vector3(a.x * S, 0, a.y * S); var v1 := Vector3(c.x * S, 0, c.y * S); var v2 := v1 + Vector3(0, H * S, 0); var v3 := v0 + Vector3(0, H * S, 0)
 		_tri(st, [v0, v2, v1], nrm, [Vector2(0, 0), Vector2(L * S, H * S), Vector2(L * S, 0)]); _tri(st, [v0, v3, v2], nrm, [Vector2(0, 0), Vector2(0, H * S), Vector2(L * S, H * S)])
 		var mid := (a + c) / 2.0; var ang := -d.angle()
-		beams.append(Transform3D(Basis(Vector3.UP, ang).scaled(Vector3(L * S + 0.6, 1.1, 3.4)), Vector3(mid.x * S, 13.9, mid.y * S) + nrm * 1.2))   # entablature over the columns
-		beams.append(Transform3D(Basis(Vector3.UP, ang).scaled(Vector3(L * S + 0.2, 1.6, 0.8)), Vector3(mid.x * S, 15.6, mid.y * S) + nrm * 0.2))   # attic
+		beams.append(Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(L * S + 0.6, 1.1, 3.4)), Vector3(mid.x * S, 13.9, mid.y * S) + nrm * 1.2))   # entablature over the columns
+		beams.append(Transform3D(Basis(Vector3.UP, ang) * Basis.from_scale(Vector3(L * S + 0.2, 1.6, 0.8)), Vector3(mid.x * S, 15.6, mid.y * S) + nrm * 0.2))   # attic
 		var n := int(floor(L * S / 4.2))
 		for k in n:   # columns standing out from the wall, and a tall arched window between each pair
 			var t := (k + 0.5) / n; var p := a.lerp(c, t)
 			cols.append(Transform3D(Basis.IDENTITY.scaled(Vector3(1, 1, 1)), Vector3(p.x * S, 6.7, p.y * S) + nrm * 2.4))
-			if kt.has("arch"): wins.append(Transform3D(Basis(Vector3(d.x, 0, d.y), Vector3.UP, nrm).scaled(Vector3(1.0, 1.9, 1.0)), Vector3(p.x * S, 3.4, p.y * S) + nrm * 0.02))
+			if kt.has("arch"): wins.append(Transform3D(Basis(Vector3(d.x, 0, d.y), Vector3.UP, nrm) * Basis.from_scale(Vector3(1.0, 1.9, 1.0)), Vector3(p.x * S, 3.4, p.y * S) + nrm * 0.02))
 	_add_mesh(st, tuff)
 	var roof := SurfaceTool.new(); roof.begin(Mesh.PRIMITIVE_TRIANGLES); _poly_roof(roof, poly, H * S + 1.2); _add_mesh(roof, _plain(Color("8d8a86"), 0.9), false)
 	var col := CylinderMesh.new(); col.top_radius = 0.5; col.bottom_radius = 0.58; col.height = 13.4; col.radial_segments = 16
@@ -381,7 +416,7 @@ func _opera(e: Array) -> void:
 		var nw := int(TAU * rad / 3.0)
 		for k in nw:   # tall windows round the drum
 			var a := k * TAU / nw; var dir := Vector3(cos(a), 0, sin(a))
-			ring_w.append(Transform3D(Basis(dir.cross(Vector3.UP).normalized(), Vector3.UP, dir).scaled(Vector3(0.9, 1.6, 1.0)), Vector3(c.x * S, H * S + 4.6, c.y * S) + dir * (rad + 0.02)))
+			ring_w.append(Transform3D(Basis(dir.cross(Vector3.UP).normalized(), Vector3.UP, dir) * Basis.from_scale(Vector3(0.9, 1.6, 1.0)), Vector3(c.x * S, H * S + 4.6, c.y * S) + dir * (rad + 0.02)))
 		if kt.has("win"): _multi(kt.win, null, ring_w, false, [])
 	# the name over the front that faces Freedom Square (north)
 	var front := Vector2(cen.x, r.position.y)
@@ -492,7 +527,7 @@ func _fountains() -> void:
 			_poly_fill(st, poly, 0.35)
 			for i in poly.size():
 				var a := poly[i]; var b := poly[(i + 1) % poly.size()]; var L := a.distance_to(b)
-				rim.append(Transform3D(Basis(Vector3.UP, -(b - a).angle()).scaled(Vector3(L * S + 0.3, 0.55, 0.45)), Vector3((a.x + b.x) / 2 * S, 0.27, (a.y + b.y) / 2 * S)))
+				rim.append(Transform3D(Basis(Vector3.UP, -(b - a).angle()) * Basis.from_scale(Vector3(L * S + 0.3, 0.55, 0.45)), Vector3((a.x + b.x) / 2 * S, 0.27, (a.y + b.y) / 2 * S)))
 			var cen := Vector2.ZERO
 			for q in poly: cen += q
 			cen /= poly.size(); landmarks.append([cen, "Շատրվան"])

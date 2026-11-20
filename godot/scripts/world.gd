@@ -161,7 +161,7 @@ func _road_mesh() -> void:
 	var dash := []   # the centre line
 	for k in range(2, road.size() - 1, 2):
 		var p: Vector2 = road[k][0]; var q: Vector2 = road[k + 1][0]; var d := q - p
-		dash.append(Transform3D(Basis(Vector3.UP, -d.angle()).scaled(Vector3(d.length() * 0.6 * S, 0.03, 0.25)), Vector3((p.x + q.x) / 2 * S, (road[k][1] + 0.75) * S, (p.y + q.y) / 2 * S)))
+		dash.append(Transform3D(Basis(Vector3.UP, -d.angle()) * Basis.from_scale(Vector3(d.length() * 0.6 * S, 0.03, 0.25)), Vector3((p.x + q.x) / 2 * S, (road[k][1] + 0.75) * S, (p.y + q.y) / 2 * S)))
 	city._multi(BoxMesh.new(), city._plain(Color("e9e7e1"), 0.8), dash, false)
 	var iron: StandardMaterial3D = city._plain(Color(0.6, 0.62, 0.64), 0.4); iron.metallic = 0.8
 	city._multi(BoxMesh.new(), iron, posts)
